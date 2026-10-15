@@ -262,6 +262,4 @@ CREATE TABLE mandates_housekeeping.document_metadata_fallback (
 );
 CREATE INDEX document_metadata_fallback_normalized_idx
  ON mandates_housekeeping.document_metadata_fallback (symbol_normalized);
-GRANT SELECT ON mandates_housekeeping.document_metadata_fallback TO mandates_housekeeping_app;
--- Reference data cannot be edited through the app's blanket DML grants.
-REVOKE INSERT, UPDATE, DELETE ON mandates_housekeeping.document_metadata_fallback FROM mandates_housekeeping_app;
+-- Application grants and the DML revocation are defined in app_role.sql.

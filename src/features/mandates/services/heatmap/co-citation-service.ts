@@ -18,7 +18,10 @@ import {
   versionPredicateSqlFor,
   excludePlanOutlineSql,
 } from "@/lib/db/budget-version";
-import { pairKey, type MatrixData } from "@/features/mandates/heatmap/matrix-utils";
+import {
+  pairKey,
+  type MatrixData,
+} from "@/features/mandates/heatmap/matrix-utils";
 
 export { pairKey, type MatrixData };
 
@@ -89,21 +92,26 @@ function projectedEntSymCte(): string {
   )`;
 }
 
-async function runMatrix(entSym: string, version?: BudgetVersion): Promise<MatrixData> {
+async function runMatrix(
+  entSym: string,
+  version?: BudgetVersion,
+): Promise<MatrixData> {
   const pairRows = await query<PairRow>(
     `WITH ${entSym}
      SELECT a.entity AS e1, b.entity AS e2, COUNT(*)::int AS shared
      FROM ent_sym a
      JOIN ent_sym b ON a.symbol = b.symbol AND a.entity < b.entity
      GROUP BY a.entity, b.entity`,
-    [], version,
+    [],
+    version,
   );
   const totalRows = await query<TotalRow>(
     `WITH ${entSym}
      SELECT entity, COUNT(*)::int AS total
      FROM ent_sym
      GROUP BY entity`,
-    [], version,
+    [],
+    version,
   );
 
   const pairs: Record<string, number> = {};
@@ -116,7 +124,9 @@ async function runMatrix(entSym: string, version?: BudgetVersion): Promise<Matri
 }
 
 /** Raw co-citation matrix for a single budget version. */
-export function fetchVersionMatrix(version: BudgetVersion): Promise<MatrixData> {
+export function fetchVersionMatrix(
+  version: BudgetVersion,
+): Promise<MatrixData> {
   return runMatrix(entSymCte(version));
 }
 

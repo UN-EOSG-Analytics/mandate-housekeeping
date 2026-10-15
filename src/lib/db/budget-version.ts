@@ -38,7 +38,6 @@ export function versionPredicateSqlFor(
     throw new Error(`Unknown budget version: ${version}`);
   }
   return membershipPredicate(citationAlias, `'${version}'`);
-
 }
 
 /**
@@ -46,8 +45,10 @@ export function versionPredicateSqlFor(
  * Inline this with `AND` in WHERE clauses.
  */
 export function versionPredicateSql(citationAlias: string): string {
-  return membershipPredicate(citationAlias,
-    "COALESCE(NULLIF(current_setting('app.budget_version', true), ''), 'ppb2026')");
+  return membershipPredicate(
+    citationAlias,
+    "COALESCE(NULLIF(current_setting('app.budget_version', true), ''), 'ppb2026')",
+  );
 }
 
 /**
@@ -72,7 +73,8 @@ export function excludePlanOutlineSql(citationAlias: string): string {
 
 /** Match membership on one citation row. Never inherit the registry default. */
 function membershipPredicate(alias: string, versionSql: string): string {
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(alias)) throw new Error("Invalid SQL alias");
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(alias))
+    throw new Error("Invalid SQL alias");
   return `${alias}.origin_document IN (
     SELECT o.origin_document
     FROM (SELECT DISTINCT origin_document FROM ppb2026.source_document_citations

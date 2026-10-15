@@ -1,6 +1,14 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { Pool, type PoolConfig } from "pg";
 import { getBudgetVersion, isReviewEnabled } from "./review-cycle";
 import { KNOWN_BUDGET_VERSIONS, type BudgetVersion } from "./budget-version";
+
+const readOnlyContext = new AsyncLocalStorage<boolean>();
+
+/** Audit scripts can enforce explicit READ ONLY transactions across all services. */
+export function withReadOnlyDatabase<T>(fn: () => T): T {
+  return readOnlyContext.run(true, fn);
+}
 
 const globalForDb = global as unknown as {
   pool: Pool | undefined;
@@ -13,7 +21,10 @@ const globalForDb = global as unknown as {
  */
 function getConnectionString(): string {
   const url = process.env.DATABASE_URL || "";
-  if (!url) throw new Error("DATABASE_URL is required; local database fallback is disabled");
+  if (!url)
+    throw new Error(
+      "DATABASE_URL is required; local database fallback is disabled",
+    );
   if (url.includes("sslmode=")) return url;
   return url + (url.includes("?") ? "&" : "?") + "sslmode=require";
 }
@@ -84,17 +95,26 @@ export async function transaction<T>(
   fn: (query: TransactionQueryFn) => Promise<T>,
   version?: BudgetVersion,
 ): Promise<T> {
-  const selectedVersion = version ?? await getBudgetVersion();
-  if (!KNOWN_BUDGET_VERSIONS.includes(selectedVersion)) throw new Error("Unknown budget version");
+  const selectedVersion = version ?? (await getBudgetVersion());
+  if (!KNOWN_BUDGET_VERSIONS.includes(selectedVersion))
+    throw new Error("Unknown budget version");
   const client = await pool.connect();
   try {
-    await client.query("BEGIN");
+    await client.query(
+      readOnlyContext.getStore() ? "BEGIN READ ONLY" : "BEGIN",
+    );
     // SET LOCAL is transaction scoped: safe with PgBouncer and pooled connections.
     // RLS scopes every workflow table, including joins, aggregates and ID lookups.
-    await client.query("SELECT set_config('app.budget_version', $1, true)", [selectedVersion]);
+    await client.query("SELECT set_config('app.budget_version', $1, true)", [
+      selectedVersion,
+    ]);
     const txQuery: TransactionQueryFn = async (text, params) => {
-      if (!isReviewEnabled(selectedVersion) &&
-          /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+mandates_housekeeping\.(?:mandate_decisions|mandate_comments|entity_review_mode|review_change_responses|docx_uploads)\b/i.test(text)) {
+      if (
+        !isReviewEnabled(selectedVersion) &&
+        /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+mandates_housekeeping\.(?:mandate_decisions|mandate_comments|entity_review_mode|review_change_responses|docx_uploads)\b/i.test(
+          text,
+        )
+      ) {
         throw new Error("Review is disabled for this budget cycle");
       }
       const result = await client.query(text, params);

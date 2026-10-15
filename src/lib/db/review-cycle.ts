@@ -32,10 +32,14 @@ export function isReviewEnabled(version: BudgetVersion): boolean {
 
 export async function assertReviewEnabled(): Promise<void> {
   if (!isReviewEnabled(await getBudgetVersion())) {
-    throw new Error("PPB 2027 is read-only. Review is not enabled for this cycle.");
+    throw new Error(
+      "PPB 2027 is read-only. Review is not enabled for this cycle.",
+    );
   }
 }
 
 export async function getReviewWriteError(): Promise<string | null> {
-  return isReviewEnabled(await getBudgetVersion()) ? null : "PPB 2027 is read-only. Review is not enabled for this cycle.";
+  return isReviewEnabled(await getBudgetVersion())
+    ? null
+    : "PPB 2027 is read-only. Review is not enabled for this cycle.";
 }

@@ -65,6 +65,12 @@ export async function createCommentAction(params: {
 
   const { documentSymbol, entity, subprogramme, comment } = params;
 
+  if (/^\d+\/\d+$/.test(documentSymbol?.trim())) {
+    return {
+      success: false,
+      error: "An issuer-scoped document identity is required",
+    };
+  }
   if (!documentSymbol || !entity || !comment?.trim()) {
     return { success: false, error: "invalid request" };
   }

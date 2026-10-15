@@ -1,3 +1,4 @@
+import { getBudgetVersion } from "@/lib/db/review-cycle";
 import { NextResponse } from "next/server";
 import { exportEntityToDocx } from "@/features/mandates/services/export/export-docx";
 import {
@@ -41,11 +42,12 @@ export async function GET(
       ext = "csv";
     }
 
+    const budgetVersion = await getBudgetVersion();
     const timestamp = getISOTimestamp();
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": contentType,
-        "Content-Disposition": `attachment; filename="${timestamp}_${entity}_legislative_mandates.${ext}"`,
+        "Content-Disposition": `attachment; filename="${timestamp}_${budgetVersion}_${entity}_legislative_mandates.${ext}"`,
       },
     });
   } catch (error) {

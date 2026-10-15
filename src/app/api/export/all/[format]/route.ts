@@ -1,3 +1,4 @@
+import { getBudgetVersion } from "@/lib/db/review-cycle";
 import { NextResponse } from "next/server";
 import {
   exportToCsv,
@@ -37,11 +38,12 @@ export async function GET(
       contentType = CONTENT_TYPES.csv;
     }
 
+    const budgetVersion = await getBudgetVersion();
     const timestamp = getISOTimestamp();
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": contentType,
-        "Content-Disposition": `attachment; filename="${timestamp}_all_legislative_mandates.${format}"`,
+        "Content-Disposition": `attachment; filename="${timestamp}_${budgetVersion}_all_legislative_mandates.${format}"`,
       },
     });
   } catch (error) {

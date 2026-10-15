@@ -52,7 +52,11 @@ export async function Header({
                 Beta
               </span>
             </div>
-            <p className="text-xs text-gray-500">{SITE_SUBTITLE}</p>
+            <p className="text-xs text-gray-500">
+              {user && version === "ppb2027"
+                ? "PPB 2027 citations · read-only"
+                : SITE_SUBTITLE}
+            </p>
           </div>
         </Link>
         <div className="flex items-center gap-4">
@@ -90,14 +94,27 @@ export async function Header({
               Sign In
             </Link>
           )}
-          {user && <form action={selectReviewCycle} className="flex items-center gap-2 text-sm">
-            <label htmlFor="review-cycle">Budget cycle</label>
-            <select key={version} id="review-cycle" name="version" defaultValue={version} className="rounded border p-1">
-              <option value="ppb2026">PPB 2026 review</option>
-              <option value="ppb2027">PPB 2027 · read-only</option>
-            </select>
-            <button type="submit" className="text-un-blue">View</button>
-          </form>}
+          {user && (
+            <form
+              action={selectReviewCycle}
+              className="flex items-center gap-2 text-sm"
+            >
+              <label htmlFor="review-cycle">Budget cycle</label>
+              <select
+                key={version}
+                id="review-cycle"
+                name="version"
+                defaultValue={version}
+                className="rounded border p-1"
+              >
+                <option value="ppb2026">PPB 2026 review</option>
+                <option value="ppb2027">PPB 2027 · read-only</option>
+              </select>
+              <button type="submit" className="text-un-blue">
+                View
+              </button>
+            </form>
+          )}
           {children}
         </div>
       </div>

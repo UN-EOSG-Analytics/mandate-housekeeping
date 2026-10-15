@@ -322,6 +322,17 @@ export async function createDecisionAction(params: {
     manualMetadata,
   } = params;
 
+  if (
+    [documentSymbol, newSymbol].some(
+      (symbol) => symbol && /^\d+\/\d+$/.test(symbol.trim()),
+    )
+  ) {
+    return {
+      success: false,
+      error:
+        "An issuer-scoped document identity is required; a reference number alone is ambiguous",
+    };
+  }
   if (!documentSymbol || !entity || !decision) {
     return { success: false, error: "invalid request" };
   }

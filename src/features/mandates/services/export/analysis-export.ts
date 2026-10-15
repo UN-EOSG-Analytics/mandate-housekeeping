@@ -28,10 +28,9 @@ const DECISION_TYPES: DecisionType[] = ["add", "retain", "update", "remove"];
 function reasonLabel(decision: string | null, reasonId: string | null): string {
   if (!decision || !reasonId) return "";
   if (!DECISION_TYPES.includes(decision as DecisionType)) return reasonId;
-  return (getReasonLabel(decision as DecisionType, reasonId) ?? reasonId).replace(
-    /\*\*/g,
-    "",
-  );
+  return (
+    getReasonLabel(decision as DecisionType, reasonId) ?? reasonId
+  ).replace(/\*\*/g, "");
 }
 
 function sectionGroup(entity: string): string {
@@ -61,13 +60,16 @@ interface ReconRow {
   decided_at: Date | null;
   approved_by: string | null;
   approved_at: Date | null;
+  review_key_count: number;
+  review_key_conflict: boolean;
+  review_key_candidates: unknown;
 }
 
 export async function exportAnalysisXlsx(): Promise<Buffer> {
   const rows = await query<ReconRow>(
     `WITH src AS (
        SELECT c.entity,
-         REGEXP_REPLACE(c.ppb_full_document_symbol, '(\\d) ([A-Z])$', '\\1\\2') AS symbol,
+         upper(regexp_replace(c.ppb_full_document_symbol, '[[:space:]]', '', 'g')) AS symbol,
          COALESCE(NULLIF(c.sub_programme, 'All Subprogrammes'), c.component, '') AS subprogramme,
          bdv.version_slug AS ver
        FROM ppb2026.source_document_citations c
@@ -88,19 +90,38 @@ export async function exportAnalysisXlsx(): Promise<Buffer> {
          COUNT(*) FILTER (WHERE ver = 'ppb2027')::int AS c27
        FROM src GROUP BY entity, symbol, subprogramme
      ),
+     raw_latest AS (
+       -- Preserve each audit key first, then make generic compatibility explicit.
+       SELECT DISTINCT ON (entity, document_symbol, COALESCE(subprogramme, '')) *
+       FROM mandates_housekeeping.mandate_decisions
+       WHERE entity IS NOT NULL AND entity != 'NA'
+       ORDER BY entity, document_symbol, COALESCE(subprogramme, ''), created_at DESC, id DESC
+     ),
+     normalized AS (
+       SELECT *, upper(regexp_replace(document_symbol, '[[:space:]]', '', 'g')) AS symbol,
+         COALESCE(NULLIF(subprogramme, 'All Subprogrammes'), '') AS comparison_subprogramme
+       FROM raw_latest
+     ),
+     review_key_groups AS (
+       SELECT entity, symbol, comparison_subprogramme,
+         count(*)::int AS review_key_count,
+         count(DISTINCT (decision, new_symbol, decision_reason, other_reason)) > 1 AS review_key_conflict,
+         jsonb_agg(jsonb_build_object('id', id, 'subprogramme', subprogramme,
+           'document_symbol', document_symbol, 'decision', decision, 'new_symbol', new_symbol)
+           ORDER BY created_at DESC, id DESC) AS review_key_candidates
+       FROM normalized GROUP BY entity, symbol, comparison_subprogramme
+     ),
+     ranked AS (
+       SELECT *, row_number() OVER (PARTITION BY entity, symbol, comparison_subprogramme
+         ORDER BY created_at DESC, id DESC) AS rn FROM normalized
+     ),
      latest AS (
-       SELECT entity,
-         REGEXP_REPLACE(document_symbol, '(\\d) ([A-Z])$', '\\1\\2') AS symbol,
-         COALESCE(NULLIF(subprogramme, 'All Subprogrammes'), '') AS subprogramme,
-         decision, decision_reason, other_reason, new_symbol,
-         user_email, created_at, approved_by, approved_at
-       FROM (
-         SELECT *, ROW_NUMBER() OVER (
-           PARTITION BY document_symbol, entity, COALESCE(subprogramme, '')
-           ORDER BY created_at DESC) AS rn
-         FROM mandates_housekeeping.mandate_decisions
-         WHERE entity IS NOT NULL AND entity != 'NA'
-       ) t WHERE rn = 1
+       SELECT r.entity, r.symbol, r.comparison_subprogramme AS subprogramme,
+         r.decision, r.decision_reason, r.other_reason, r.new_symbol,
+         r.user_email, r.created_at, r.approved_by, r.approved_at,
+         g.review_key_count, g.review_key_conflict, g.review_key_candidates
+       FROM ranked r JOIN review_key_groups g USING (entity, symbol, comparison_subprogramme)
+       WHERE r.rn = 1
      ),
      keys AS (
        SELECT entity, symbol, subprogramme FROM agg
@@ -112,13 +133,14 @@ export async function exportAnalysisXlsx(): Promise<Buffer> {
        COALESCE(a.c26, 0) AS c26, COALESCE(a.c27, 0) AS c27,
        d.decision, d.decision_reason, d.other_reason, d.new_symbol,
        d.user_email AS decided_by, d.created_at AS decided_at,
-       d.approved_by, d.approved_at
+       d.approved_by, d.approved_at, d.review_key_count, d.review_key_conflict, d.review_key_candidates
      FROM keys k
      LEFT JOIN agg a USING (entity, symbol, subprogramme)
      LEFT JOIN latest d USING (entity, symbol, subprogramme)
      LEFT JOIN systemchart.entities e ON e.entity = k.entity
      ORDER BY k.entity, k.symbol, k.subprogramme`,
-    [], "ppb2026",
+    [],
+    "ppb2026",
   );
 
   const meta = await fetchDocumentMetadata([
@@ -131,13 +153,16 @@ export async function exportAnalysisXlsx(): Promise<Buffer> {
 
   // Cover
   const cover = workbook.addWorksheet("Cover");
-  cover.getCell("A1").value = "Mandate housekeeping — 2026 vs 2027 analysis data";
+  cover.getCell("A1").value =
+    "Mandate housekeeping — 2026 vs 2027 analysis data";
   cover.getCell("A1").font = { bold: true, size: 16 };
   cover.getCell("A3").value = `Generated: ${new Date().toISOString()}`;
   cover.getCell("A5").value =
     "One row per (entity, mandate symbol, subprogramme) across the 2026 and 2027 source citations plus housekeeping decisions. in_2026 / in_2027 = present in that fascicle (PPB + PKM; Plan Outline excluded). decision_2026 = latest active housekeeping decision (cancelled = none); add decisions appear even when the mandate is in neither fascicle.";
   cover.getCell("A6").value =
     "Pivot decision_2026 against presence to see outcomes: e.g. remove + only_2026 = removal realized; remove + both = still cited in 2027; add + only_2027 = addition realized; add + neither = added but not (yet) in the 2027 fascicle.";
+  cover.getCell("A7").value =
+    "Generic All Subprogrammes and NULL are compared together. decision_2026 uses the latest timestamp, then ID, across compatible raw keys. Multiple raw review keys and contradictory effective decisions are explicitly flagged in review_key_* columns; all original history remains unchanged.";
   cover.getColumn(1).width = 130;
 
   // 2026 vs 2027 reconciliation
@@ -167,21 +192,27 @@ export async function exportAnalysisXlsx(): Promise<Buffer> {
     "decided_at",
     "approved_by",
     "approved_at",
+    "review_key_count",
+    "review_key_conflict",
+    "review_key_candidates",
   ];
   const widths = [
     12, 32, 18, 18, 40, 7, 8, 14, 30, 16, 9, 9, 12, 11, 11, 13, 18, 40, 30, 16,
-    24, 22, 24, 22,
+    24, 22, 24, 22, 12, 18, 60,
   ];
   const headerRow = sheet.addRow(headers);
   headerRow.font = { bold: true };
   widths.forEach((w, i) => (sheet.getColumn(i + 1).width = w));
   sheet.views = [{ state: "frozen", ySplit: 1, xSplit: 1 }];
-  sheet.autoFilter = { from: "A1", to: `${sheet.getColumn(headers.length).letter}1` };
+  sheet.autoFilter = {
+    from: "A1",
+    to: `${sheet.getColumn(headers.length).letter}1`,
+  };
 
   for (const r of rows) {
     const decision = r.decision === "cancel" ? null : r.decision;
     // Skip orphans: no presence in either fascicle and no active decision.
-    if (!r.in26 && !r.in27 && !decision) continue;
+    if (!r.in26 && !r.in27 && !decision && !r.review_key_conflict) continue;
     const presence =
       r.in26 && r.in27
         ? "both"
@@ -208,14 +239,19 @@ export async function exportAnalysisXlsx(): Promise<Buffer> {
       r.c26,
       r.c27,
       decision ?? "",
-      decision ? r.decision_reason ?? "" : "",
+      decision ? (r.decision_reason ?? "") : "",
       decision ? reasonLabel(decision, r.decision_reason) : "",
-      decision ? r.other_reason ?? "" : "",
+      decision ? (r.other_reason ?? "") : "",
       r.new_symbol ?? "",
-      decision ? r.decided_by ?? "" : "",
+      decision ? (r.decided_by ?? "") : "",
       decision ? iso(r.decided_at) : "",
-      decision ? r.approved_by ?? "" : "",
+      decision ? (r.approved_by ?? "") : "",
       decision ? iso(r.approved_at) : "",
+      r.review_key_count ?? 0,
+      r.review_key_conflict ? "yes" : "no",
+      (r.review_key_count ?? 0) > 1
+        ? JSON.stringify(r.review_key_candidates)
+        : "",
     ]);
   }
 
