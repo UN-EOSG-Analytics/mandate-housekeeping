@@ -1,9 +1,9 @@
-/**
- * Service for fetching all versions of a document
- * Based on normalized_title within the same issuing_body
+/** Series candidates for explicit reviewer consideration; never legal supersession.
+ * Collections do not establish a version sequence. Issuer and document type are
+ * part of the series key. Whitespace aliases cannot merge distinct issuers.
  */
-
 import { query } from "@/lib/db/db";
+import { normalizeSymbol, cleanTitle } from "./metadata";
 
 export interface DocumentVersion {
   symbol: string;
@@ -11,63 +11,57 @@ export interface DocumentVersion {
   year: number;
   body: string | null;
 }
-
-interface DocumentVersionRow {
-  symbol: string;
-  proper_title: string | null;
-  date_year: number;
-  issuing_body: string | null;
+export interface SeriesCandidate extends DocumentVersion {
+  currentSymbol: string;
+  currentYear: number;
 }
 
-/**
- * Fetch all versions of a document (all documents with same normalized_title and issuing_body)
- * Returns array sorted by year ascending (oldest first)
- */
+export async function fetchSeriesCandidates(
+  symbols: string[],
+): Promise<SeriesCandidate[]> {
+  if (!symbols.length) return [];
+  return query<SeriesCandidate>(
+    `
+    WITH requested AS (SELECT DISTINCT unnest($1::text[]) AS symbol), matches AS (
+      SELECT r.symbol, s.series_key, s.un_body, s.doc_type, s.year,
+             s.is_collection, s.is_informative
+      FROM requested r
+      JOIN digitallibrary.resolution_series s
+        ON upper(regexp_replace(s.document_symbol, '[[:space:]]', '', 'g')) =
+           upper(regexp_replace(r.symbol, '[[:space:]]', '', 'g'))
+    ), current_docs AS (
+      SELECT symbol, min(series_key) AS series_key, min(un_body) AS un_body,
+             min(doc_type) AS doc_type, min(year) AS year
+      FROM matches
+      GROUP BY symbol
+      HAVING count(DISTINCT (series_key, un_body, doc_type, year)) = 1
+         AND bool_and(NOT is_collection AND is_informative)
+    )
+    SELECT DISTINCT c.symbol AS "currentSymbol", c.year AS "currentYear",
+      s.document_symbol AS symbol, coalesce(d.display_title, d.title) AS title,
+      s.year, s.un_body AS body
+    FROM current_docs c
+    JOIN digitallibrary.resolution_series s
+      ON (s.series_key, s.un_body, s.doc_type) = (c.series_key, c.un_body, c.doc_type)
+    JOIN digitallibrary.documents d ON d.recid = s.recid AND d.deleted_at IS NULL
+    WHERE NOT s.is_collection AND s.is_informative AND s.year > 0
+    ORDER BY "currentSymbol", year, symbol
+  `,
+    [symbols],
+  );
+}
+
 export async function fetchAllVersions(
   symbol: string,
 ): Promise<DocumentVersion[]> {
-  // First, get the normalized_title and issuing_body for the current document
-  const currentDoc = await query<{
-    normalized_title: string;
-    issuing_body: string;
-  }>(
-    `SELECT normalized_title, issuing_body
-     FROM public.documents
-     WHERE symbol = $1
-       AND normalized_title IS NOT NULL
-       AND issuing_body IS NOT NULL
-     LIMIT 1`,
-    [symbol],
-  );
-
-  if (currentDoc.length === 0) {
-    // Document doesn't have normalized_title or issuing_body
-    return [];
-  }
-
-  const { normalized_title, issuing_body } = currentDoc[0];
-
-  // Now find all documents with the same normalized_title and issuing_body
-  const rows = await query<DocumentVersionRow>(
-    `SELECT 
-      symbol,
-      proper_title,
-      date_year,
-      issuing_body
-    FROM public.documents
-    WHERE normalized_title = $1
-      AND issuing_body = $2
-      AND date_year IS NOT NULL
-    ORDER BY date_year ASC, symbol ASC`,
-    [normalized_title, issuing_body],
-  );
-
-  return rows.map(
-    (row): DocumentVersion => ({
+  const rows = await fetchSeriesCandidates([symbol]);
+  const unique = new Map<string, DocumentVersion>();
+  for (const row of rows)
+    unique.set(normalizeSymbol(row.symbol), {
       symbol: row.symbol,
-      title: row.proper_title,
-      year: row.date_year,
-      body: row.issuing_body,
-    }),
-  );
+      title: cleanTitle(row.title),
+      year: row.year,
+      body: row.body,
+    });
+  return [...unique.values()];
 }

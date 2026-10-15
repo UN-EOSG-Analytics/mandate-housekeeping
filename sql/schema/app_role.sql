@@ -33,7 +33,7 @@ grant usage, select on all sequences in schema mandates_housekeeping to mandates
 -- Read-only dependencies
 grant select on all tables in schema ppb2026 to mandates_housekeeping_app;
 grant select on systemchart.entities to mandates_housekeeping_app;
-grant select on public.documents to mandates_housekeeping_app;
+grant select on public.unified_documents to mandates_housekeeping_app;
 grant select on public.issuing_bodies to mandates_housekeeping_app;
 
 -- Future objects created by the role running migrations (i.e. the role
@@ -45,3 +45,13 @@ alter default privileges in schema mandates_housekeeping
     grant usage, select on sequences to mandates_housekeeping_app;
 alter default privileges in schema ppb2026
     grant select on tables to mandates_housekeeping_app;
+
+-- Runtime dependencies only; no legacy mandates.* fulltext reader remains.
+GRANT USAGE ON SCHEMA digitallibrary TO mandates_housekeeping_app;
+GRANT SELECT ON public.unified_documents,
+ digitallibrary.documents, digitallibrary.resolution_series,
+ digitallibrary.document_paragraphs, digitallibrary.document_files,
+ digitallibrary.document_parses TO mandates_housekeeping_app;
+
+-- Compatibility metadata is read-only, including after blanket/default grants.
+REVOKE INSERT, UPDATE, DELETE ON mandates_housekeeping.document_metadata_fallback FROM mandates_housekeeping_app;

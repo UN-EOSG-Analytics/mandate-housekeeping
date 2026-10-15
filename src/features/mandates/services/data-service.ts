@@ -7,6 +7,7 @@ import { query } from "@/lib/db/db";
 import { versionPredicateSql } from "@/lib/db/budget-version";
 import type {
   PPBRecord,
+  EntityData,
   CitationInfo,
   BudgetPartMeta,
   PartData,
@@ -15,17 +16,14 @@ import type {
   NewerVersion,
 } from "@/types";
 import { BUDGET_PARTS_META } from "@/lib/constants";
-import {
-  resolveMetadata,
-  type DocumentMetadataRow,
-} from "./documents/metadata";
+import { fetchDocumentMetadata } from "./documents/metadata";
 
 export interface EntityOption {
   entity: string;
   entity_long: string | null;
 }
 
-interface DBCitationRow extends DocumentMetadataRow {
+interface DBCitationRow {
   ppb_full_document_symbol: string;
   entity: string;
   entity_long: string | null;
@@ -48,8 +46,7 @@ interface DBCitationRow extends DocumentMetadataRow {
 
 /**
  * Fetch all PPB records from database
- * Joins with public.documents for authoritative metadata,
- * falls back to source_documents_metadata_clean, then to ppb_ fields
+ * Resolves current registry metadata with the conserved compatibility floor.
  */
 export async function fetchPPBRecords(): Promise<PPBRecord[]> {
   const rows = await query<DBCitationRow>(`
@@ -68,33 +65,16 @@ export async function fetchPPBRecords(): Promise<PPBRecord[]> {
       c.programme,
       c.programme_title,
       c.component,
-      doc.symbol as doc_symbol,
-      doc.proper_title as doc_proper_title,
-      doc.date_year as doc_date_year,
-      doc.issuing_body as doc_issuing_body,
-      doc.document_type as doc_document_type,
-      m.title as meta_title,
-      m.proper_title as meta_proper_title,
-      m.date_year::integer as meta_date_year,
-      m.issuing_body as meta_issuing_body,
-      m.document_type as meta_document_type,
-      d.ppb_link,
-      d.ppb_description,
-      d.ppb_year,
-      d.ppb_body,
-      d.ppb_type
+      c.ppb_full_document_symbol AS symbol
     FROM ppb2026.source_document_citations c
-    LEFT JOIN systemchart.entities e
-      ON c.entity = e.entity
-    LEFT JOIN public.documents doc 
-      ON REGEXP_REPLACE(c.ppb_full_document_symbol, '(\\d) ([A-Z])$', '\\1\\2') = doc.symbol
-    LEFT JOIN ppb2026.source_documents_metadata_clean m
-      ON c.ppb_full_document_symbol = m.ppb_full_document_symbol
-    LEFT JOIN ppb2026.source_documents d
-      ON c.ppb_full_document_symbol = d.ppb_full_document_symbol
+    LEFT JOIN systemchart.entities e ON c.entity = e.entity
     WHERE ${versionPredicateSql("c")}
     ORDER BY c.ppb_full_document_symbol, c.entity
   `);
+
+  const metadata = await fetchDocumentMetadata([
+    ...new Set(rows.map((r) => r.ppb_full_document_symbol)),
+  ]);
 
   // Group rows by document symbol to build PPBRecord structure
   const recordsMap = new Map<string, PPBRecord>();
@@ -105,26 +85,14 @@ export async function fetchPPBRecords(): Promise<PPBRecord[]> {
 
     if (!recordsMap.has(symbol)) {
       // Use shared metadata resolution utility
-      const resolved = resolveMetadata(
-        {
-          symbol: row.doc_symbol || symbol,
-          doc_proper_title: row.doc_proper_title,
-          doc_date_year: row.doc_date_year,
-          doc_issuing_body: row.doc_issuing_body,
-          doc_document_type: row.doc_document_type,
-          meta_title: row.meta_title,
-          meta_proper_title: row.meta_proper_title,
-          meta_date_year: row.meta_date_year,
-          meta_issuing_body: row.meta_issuing_body,
-          meta_document_type: row.meta_document_type,
-          ppb_description: row.ppb_description,
-          ppb_year: row.ppb_year,
-          ppb_body: row.ppb_body,
-          ppb_type: row.ppb_type,
-          ppb_link: row.ppb_link,
-        },
-        symbol,
-      );
+      const resolved = metadata[symbol] ?? {
+        title: null,
+        year: null,
+        body: null,
+        docType: null,
+        link: null,
+        hasDbMetadata: false,
+      };
 
       recordsMap.set(symbol, {
         full_document_symbol: symbol,
@@ -140,7 +108,7 @@ export async function fetchPPBRecords(): Promise<PPBRecord[]> {
         description: resolved.title,
         type: resolved.docType,
         citation_info: [],
-        document_symbol: row.doc_symbol,
+        document_symbol: symbol,
         uniform_title: null,
         metadata_from_db: resolved.hasDbMetadata,
         recurrence_actions: undefined,
@@ -316,6 +284,11 @@ export function transformPPBData(
       const aiComments = relevance?.ai_comments || {};
 
       const mandate: Mandate = {
+        // Keep each location intact: section/addendum and subprogramme must come
+        // from the same citation row. Review keys remain unchanged.
+        citationLocations: rec.citation_info.filter(location => location.entity === entity
+          && isBackgroundPart(location.part_in_document) === isBackground
+          && (location["sub-programme"] || location.component || null) === subprog),
         symbol,
         title,
         link,
@@ -409,4 +382,26 @@ export function transformPPBData(
     }));
 
   return parts;
+}
+
+/** An entity can occur in multiple budget parts; its review page includes all of them. */
+export function collectEntityData(parts: PartData[], entity: string): {data: EntityData; partName: string} | null {
+  const matches = parts.flatMap(part => part.entities.filter(e => e.entity === entity).map(data => ({data, partName: part.part})));
+  if (!matches.length) return null;
+  const merge = (rows: Mandate[]): Mandate[] => {
+    const bySymbol = new Map<string, Mandate>();
+    for (const row of rows) {
+      const old = bySymbol.get(row.symbol);
+      bySymbol.set(row.symbol, old ? {...old, citationLocations: [...(old.citationLocations ?? []), ...(row.citationLocations ?? [])]} : row);
+    }
+    return [...bySymbol.values()];
+  };
+  const legislative: Record<string, Mandate[]> = {};
+  for (const match of matches) for (const [key, rows] of Object.entries(match.data.legislativeMandates)) {
+    legislative[key] = merge([...(legislative[key] ?? []), ...rows]);
+  }
+  return {data: {...matches[0].data,
+    backgroundMandates: merge(matches.flatMap(m => m.data.backgroundMandates)),
+    legislativeMandates: legislative,
+  }, partName: [...new Set(matches.map(m => m.partName))].join("; ")};
 }

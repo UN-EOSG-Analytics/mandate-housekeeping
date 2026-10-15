@@ -1,54 +1,8 @@
-/**
- * Document metadata service with smart caching
- * Provides unified document metadata fetching with three-tier fallback logic:
- * 1. public.documents (doc_*) - preferred for new/updated documents
- * 2. source_documents_metadata_clean (meta_*) - existing citations
- * 3. source_documents (ppb_*) - final fallback
+/** Current registry metadata with a frozen compatibility floor for legacy review fields.
+ * The compatibility table is seeded once by migration 008; legacy catalogues are
+ * never queried at runtime. Manual review metadata remains an explicit override.
  */
-
-import { unstable_cache } from "next/cache";
 import { query } from "@/lib/db/db";
-
-// ============================================================================
-// Type Definitions
-// ============================================================================
-
-/**
- * Document row structure from database queries
- * Contains data from multiple sources: public.documents, metadata_clean, and source_documents
- */
-export interface DocumentMetadataRow {
-  symbol: string;
-  // public.documents (preferred for new/updated)
-  doc_proper_title: string | null;
-  doc_date_year: number | null;
-  doc_issuing_body: string | null;
-  doc_document_type: string | null;
-  // source_documents_metadata_clean (existing citations)
-  meta_title: string | null;
-  meta_proper_title: string | null;
-  meta_date_year: number | null;
-  meta_issuing_body: string | null;
-  meta_document_type: string | null;
-  // source_documents ppb_ fields (final fallback)
-  ppb_description: string | null;
-  ppb_year: number | null;
-  ppb_body: string | null;
-  ppb_type: string | null;
-  ppb_link?: string | null; // Optional, not always queried
-}
-
-/**
- * Resolved document metadata after applying fallback logic
- */
-export interface ResolvedMetadata {
-  title: string | null;
-  year: number | null;
-  body: string | null;
-  docType: string | null;
-  link: string | null;
-  hasDbMetadata: boolean;
-}
 
 export interface DocumentMetadata {
   title: string | null;
@@ -56,225 +10,75 @@ export interface DocumentMetadata {
   body: string | null;
   docType: string | null;
   link: string | null;
+  hasDbMetadata?: boolean;
+}
+export interface ResolvedMetadata extends DocumentMetadata {
+  hasDbMetadata: boolean;
 }
 
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
-/**
- * Clean title by removing trailing colons and whitespace
- */
 export function cleanTitle(title: string | null): string | null {
   return title?.replace(/\s*:\s*$/, "").trim() || null;
 }
 
-/**
- * Normalize document symbol by removing spaces before part letters
- * E.g., "A/RES/283 B" -> "A/RES/283B"
- */
+/** Whitespace aliases only: never infer an issuer from a numeric tail. */
 export function normalizeSymbol(symbol: string): string {
-  return symbol.replace(/(\d) ([A-Z])$/, "$1$2");
+  return symbol.replace(/\s/g, "").toUpperCase();
 }
 
-/**
- * Build SQL placeholders for parameterized queries
- * @param count Number of parameters
- * @param offset Starting index (default: 1)
- * @returns Comma-separated placeholder string like "$1,$2,$3"
- */
 export function buildPlaceholders(count: number, offset = 1): string {
   return Array.from({ length: count }, (_, i) => `$${i + offset}`).join(",");
 }
 
-/**
- * Apply three-tier fallback logic to extract the best available metadata
- * Priority: public.documents > source_documents_metadata_clean > source_documents (ppb_)
- *
- * @param row Database row containing metadata from multiple sources
- * @param originalSymbol Original document symbol for link construction
- * @returns Resolved metadata with fallback applied
- */
-export function resolveMetadata(
-  row: DocumentMetadataRow,
-  originalSymbol?: string,
-): ResolvedMetadata {
-  // Check if we have DB metadata (from public.documents or metadata_clean)
-  const hasDbMetadata =
-    row.doc_proper_title !== null ||
-    row.meta_title !== null ||
-    row.meta_proper_title !== null;
-
-  // Title: doc.proper_title > meta.title > meta.proper_title > ppb_description
-  const title =
-    cleanTitle(row.doc_proper_title) ||
-    row.meta_title ||
-    row.meta_proper_title ||
-    row.ppb_description ||
-    null;
-
-  // Year: doc_date_year > meta_date_year > ppb_year
-  const year = row.doc_date_year ?? row.meta_date_year ?? row.ppb_year ?? null;
-
-  // Body: doc_issuing_body > meta_issuing_body > ppb_body
-  const body =
-    row.doc_issuing_body || row.meta_issuing_body || row.ppb_body || null;
-
-  // Type: doc_document_type > meta_document_type > ppb_type
-  const docType =
-    row.doc_document_type || row.meta_document_type || row.ppb_type || null;
-
-  // Link construction with fallback
-  let link: string | null = null;
-  const symbolForLink = originalSymbol || row.symbol;
-
-  if (row.doc_proper_title !== null) {
-    // Document is in public.documents - construct link
-    link = `https://docs.un.org/en/${symbolForLink.toUpperCase()}`;
-  } else if (row.meta_title !== null || row.meta_proper_title !== null) {
-    // Document is in metadata_clean - construct link
-    link = `https://docs.un.org/en/${symbolForLink.toUpperCase()}`;
-  } else if (row.ppb_link) {
-    // Fall back to original ppb_link if available
-    link = row.ppb_link;
-  }
-
-  return {
-    title,
-    year,
-    body,
-    docType,
-    link,
-    hasDbMetadata,
-  };
+export async function fetchDocumentMetadata(
+  symbols: string[],
+): Promise<Record<string, DocumentMetadata | null>> {
+  if (!symbols.length) return {};
+  const rows = await query<ResolvedMetadata & { symbol: string }>(
+    `
+    WITH requested AS (SELECT DISTINCT unnest($1::text[]) AS symbol)
+    SELECT r.symbol,
+      COALESCE(NULLIF(trim(u.display_title), ''), NULLIF(trim(u.ppb_description), ''), f.title) AS title,
+      COALESCE(u.ppb_year, f.year) AS year,
+      COALESCE(NULLIF(u.ppb_body, ''), f.body) AS body,
+      COALESCE(NULLIF(u.ppb_type, ''), f.doc_type) AS "docType",
+      COALESCE(NULLIF(u.ppb_link, ''), f.link,
+        CASE WHEN u.is_catalog_pattern THEN 'https://docs.un.org/en/' || r.symbol END) AS link,
+      (u.ppb_full_document_symbol IS NOT NULL OR COALESCE(f.has_db_metadata, false)) AS "hasDbMetadata"
+    FROM requested r
+    LEFT JOIN LATERAL (
+      SELECT candidates.* FROM (
+        SELECT d.*, count(*) OVER () AS matches
+        FROM public.unified_documents d
+        WHERE upper(regexp_replace(d.ppb_full_document_symbol, '[[:space:]]', '', 'g')) =
+              upper(regexp_replace(r.symbol, '[[:space:]]', '', 'g'))
+      ) candidates
+      WHERE candidates.ppb_full_document_symbol = r.symbol OR candidates.matches = 1
+      ORDER BY (candidates.ppb_full_document_symbol = r.symbol) DESC
+      LIMIT 1
+    ) u ON true
+    LEFT JOIN LATERAL (
+      SELECT candidates.* FROM (
+        SELECT d.*, count(*) OVER () AS matches
+        FROM mandates_housekeeping.document_metadata_fallback d
+        WHERE d.symbol_normalized = upper(regexp_replace(r.symbol, '[[:space:]]', '', 'g'))
+      ) candidates
+      WHERE candidates.symbol = r.symbol OR candidates.matches = 1
+      ORDER BY (candidates.symbol = r.symbol) DESC
+      LIMIT 1
+    ) f ON true
+  `,
+    [symbols],
+  );
+  return Object.fromEntries(
+    rows.map((row) => [
+      row.symbol,
+      row.title !== null ||
+      row.year !== null ||
+      row.body !== null ||
+      row.docType !== null ||
+      row.link !== null
+        ? row
+        : null,
+    ]),
+  );
 }
-
-// ============================================================================
-// Metadata Service
-// ============================================================================
-
-/**
- * Fetch document metadata from database with three-tier fallback:
- * 1. public.documents (doc_*) - preferred for new/updated documents
- * 2. source_documents_metadata_clean (meta_*) - existing citations
- * 3. source_documents (ppb_*) - final fallback
- *
- * Uses Next.js unstable_cache for smart caching with 1-hour TTL
- */
-export const fetchDocumentMetadata = unstable_cache(
-  async (
-    symbols: string[],
-  ): Promise<Record<string, DocumentMetadata | null>> => {
-    if (symbols.length === 0) {
-      return {};
-    }
-
-    // Build map of normalized -> original symbols
-    const normalizedMap: Record<string, string> = {};
-    const allSymbols: string[] = [];
-    for (const sym of symbols) {
-      const norm = normalizeSymbol(sym);
-      normalizedMap[sym] = sym;
-      normalizedMap[norm] = sym;
-      allSymbols.push(sym);
-      if (norm !== sym) allSymbols.push(norm);
-    }
-    const uniqueSymbols = [...new Set(allSymbols)];
-
-    const placeholders1 = buildPlaceholders(uniqueSymbols.length, 1);
-    const placeholders2 = buildPlaceholders(
-      uniqueSymbols.length,
-      uniqueSymbols.length + 1,
-    );
-    const placeholders3 = buildPlaceholders(
-      uniqueSymbols.length,
-      uniqueSymbols.length * 2 + 1,
-    );
-
-    // Query both source_documents and public.documents to handle:
-    // 1. Documents in PPB source data (with optional metadata enrichment)
-    // 2. Documents only in public.documents (new resolutions not yet in PPB)
-    const rows = await query<DocumentMetadataRow>(
-      `SELECT 
-         COALESCE(doc.symbol, sd.ppb_full_document_symbol) as symbol,
-         -- public.documents (preferred for new/updated)
-         doc.proper_title as doc_proper_title,
-         doc.date_year as doc_date_year,
-         doc.issuing_body as doc_issuing_body,
-         doc.document_type as doc_document_type,
-         -- source_documents_metadata_clean (existing citations)
-         m.title as meta_title,
-         m.proper_title as meta_proper_title,
-         m.date_year::integer as meta_date_year,
-         m.issuing_body as meta_issuing_body,
-         m.document_type as meta_document_type,
-         -- source_documents ppb_ fields (final fallback)
-         sd.ppb_description,
-         sd.ppb_year,
-         sd.ppb_body,
-         sd.ppb_type
-       FROM ppb2026.source_documents sd
-       LEFT JOIN public.documents doc 
-         ON REGEXP_REPLACE(sd.ppb_full_document_symbol, '(\\d) ([A-Z])$', '\\1\\2') = doc.symbol
-       LEFT JOIN ppb2026.source_documents_metadata_clean m
-         ON sd.ppb_full_document_symbol = m.ppb_full_document_symbol
-       WHERE sd.ppb_full_document_symbol IN (${placeholders1})
-          OR doc.symbol IN (${placeholders2})
-       
-       UNION ALL
-       
-       -- Also query public.documents directly for documents not in source_documents
-       SELECT 
-         doc.symbol,
-         doc.proper_title as doc_proper_title,
-         doc.date_year as doc_date_year,
-         doc.issuing_body as doc_issuing_body,
-         doc.document_type as doc_document_type,
-         NULL as meta_title,
-         NULL as meta_proper_title,
-         NULL as meta_date_year,
-         NULL as meta_issuing_body,
-         NULL as meta_document_type,
-         NULL as ppb_description,
-         NULL as ppb_year,
-         NULL as ppb_body,
-         NULL as ppb_type
-       FROM public.documents doc
-       WHERE doc.symbol IN (${placeholders3})
-         AND NOT EXISTS (
-           SELECT 1 FROM ppb2026.source_documents sd 
-           WHERE REGEXP_REPLACE(sd.ppb_full_document_symbol, '(\\d) ([A-Z])$', '\\1\\2') = doc.symbol
-         )`,
-      [...uniqueSymbols, ...uniqueSymbols, ...uniqueSymbols],
-    );
-
-    const result: Record<string, DocumentMetadata | null> = {};
-    for (const row of rows) {
-      const originalSymbol = normalizedMap[row.symbol];
-      if (originalSymbol && !(originalSymbol in result)) {
-        const resolved = resolveMetadata(row, originalSymbol);
-        result[originalSymbol] = {
-          title: resolved.title,
-          year: resolved.year,
-          body: resolved.body,
-          docType: resolved.docType,
-          link: resolved.link,
-        };
-      }
-    }
-
-    // Add null entries for symbols not found
-    for (const symbol of symbols) {
-      if (!(symbol in result)) {
-        result[symbol] = null;
-      }
-    }
-
-    return result;
-  },
-  ["document-metadata"], // Cache key base
-  {
-    revalidate: 3600, // 1 hour cache
-    tags: ["document-metadata"], // Tag for selective invalidation
-  },
-);

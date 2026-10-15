@@ -4,13 +4,13 @@ import { FooterFootnote } from "@/components/core/FooterFootnote";
 import { Header } from "@/components/core/Header";
 import { getCurrentUser } from "@/features/auth/auth";
 import {
+  collectEntityData,
   fetchEntities,
   fetchPPBRecords,
   getBudgetPartsMeta,
   transformPPBData,
 } from "@/features/mandates/services/data-service";
 import { fetchNewerVersions } from "@/features/mandates/services/documents/newer-versions";
-import type { EntityData } from "@/types";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -44,22 +44,9 @@ export default async function EntityPage({ params }: PageProps) {
     fetchEntities(),
   ]);
 
-  // Find the entity across all parts
-  let entityData: EntityData | null = null;
-  let partName: string | null = null;
-
-  for (const part of parts) {
-    const found = part.entities.find((e) => e.entity === entityCode);
-    if (found) {
-      entityData = found;
-      partName = part.part;
-      break;
-    }
-  }
-
-  if (!entityData) {
-    notFound();
-  }
+  const match = collectEntityData(parts, entityCode);
+  if (!match) notFound();
+  const {data: entityData, partName} = match;
 
   return (
     <>

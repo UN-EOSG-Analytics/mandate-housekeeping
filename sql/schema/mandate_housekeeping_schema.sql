@@ -246,3 +246,22 @@ DROP INDEX mandates_housekeeping.idx_review_change_responses_unique;
 CREATE UNIQUE INDEX idx_review_change_responses_unique ON mandates_housekeeping.review_change_responses
   (budget_version, entity, document_symbol, COALESCE(subprogramme, ''), review_session_id);
 
+-- Immutable compatibility floor: resolved legacy fields and DGACM bracket titles.
+-- No review history or provenance is rewritten. Refreshing registry metadata never
+-- erases a field the original review could resolve. This is not an add-search catalogue.
+CREATE TABLE mandates_housekeeping.document_metadata_fallback (
+ symbol text PRIMARY KEY,
+ symbol_normalized text NOT NULL,
+ title text,
+ year integer,
+ body text,
+ doc_type text,
+ link text,
+ has_db_metadata boolean NOT NULL,
+ export_bracket_title text
+);
+CREATE INDEX document_metadata_fallback_normalized_idx
+ ON mandates_housekeeping.document_metadata_fallback (symbol_normalized);
+GRANT SELECT ON mandates_housekeeping.document_metadata_fallback TO mandates_housekeeping_app;
+-- Reference data cannot be edited through the app's blanket DML grants.
+REVOKE INSERT, UPDATE, DELETE ON mandates_housekeeping.document_metadata_fallback FROM mandates_housekeeping_app;

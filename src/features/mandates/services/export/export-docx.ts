@@ -92,9 +92,9 @@ async function fetchBodyFullNames(): Promise<Record<string, string>> {
 // Returns symbol → bracket text, e.g. "S/RES/1325(2000)" → "[on women and peace and security]"
 async function fetchBracketDescriptions(): Promise<Record<string, string>> {
   const rows = await query<{ symbol: string; title: string }>(
-    `SELECT ppb_full_document_symbol AS symbol, title
-     FROM ppb2026.source_documents_metadata_clean
-     WHERE title LIKE '%[%]%'`,
+    `SELECT symbol, export_bracket_title AS title
+     FROM mandates_housekeeping.document_metadata_fallback
+     WHERE export_bracket_title LIKE '%[%]%'`,
   );
   const map: Record<string, string> = {};
   for (const row of rows) {

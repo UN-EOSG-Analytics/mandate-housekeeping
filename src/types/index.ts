@@ -25,12 +25,61 @@ export interface EntityRelevance {
 }
 
 export interface Paragraph {
+  /** Source footnote boundaries measured in UTF-16 code units into text. */
+  note_references?: { note_id: number; offset: number }[];
+  note_ids?: number[];
+  footnotes?: Paragraph[];
+  /** Document-level quality flag; internal issue details stay on the server. */
+  extraction_quality_warning?: boolean;
+  subtype?: string;
+  parser_version?: string;
+  source?: "digitallibrary";
+  source_symbol?: string;
+  part_letter?: string;
+  /** UUID from mandates.paragraphs */
+  id?: string;
+  /** 0-based position within the document */
+  position?: number;
   text: string;
-  type: string | null;
+  type: string; // "title", "paragraph", "heading", etc.
   heading_level: number | null;
+  paragraph_type: string | null; // "preambular", "operative", etc.
   paragraph_level: number | null;
-  paragraph_type: string | null;
-  prefix: string | null;
+  prefix: string | null; // "1.", "(a)", "(i)", etc.
+  /** Links from mandates.paragraph_links: [linked_symbol, linked_url] pairs */
+  links: [string, string][] | [];
+  mandates?: {
+    action_verb: string;
+    action_verb_normalized?: string;
+    action_verb_type: string;
+    assignees: {
+      assignee: string;
+      assignee_normalized: string;
+      assignee_type: string;
+    }[];
+    mentioned_entities: {
+      mentioned_entity: string;
+      mentioned_entity_normalized: string;
+      mentioned_entity_type: string;
+    }[];
+    deliverables: {
+      deliverable: string;
+      deliverable_normalized: string;
+      deliverable_type: string;
+    }[];
+  }[];
+  /** NLP highlight annotations (from text_with_highlights column) */
+  textWithHighlights?: string;
+  /** Uncertainty annotations from the extraction pipeline */
+  uncertainties?: string;
+  /**
+   * Structural metadata from the Digital Library semantic fulltext layer
+   * (digitallibrary.document_paragraphs). Undefined for mandates.paragraphs rows.
+   * Not consumed by the UI yet — reserved for future annex/omnibus rendering.
+   */
+  section?: string;
+  annex_index?: number;
+  text_index?: number;
 }
 
 export interface PPBRecord {
@@ -75,6 +124,7 @@ export interface NewerVersion {
 }
 
 export interface Mandate {
+  citationLocations?: CitationInfo[];
   symbol: string;
   title: string;
   link: string | null;

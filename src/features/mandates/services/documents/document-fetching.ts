@@ -149,17 +149,21 @@ export async function searchDocumentsAction(
     issuing_body: string | null;
   }
 
+  // Add-search deliberately includes the registry catalogue AND PPB-only documents.
+  // Entity review membership is still restricted by the selected cycle citations.
   // Search by symbol first (exact prefix match), then by title
   const rows = await query<DocumentRow>(
-    `SELECT symbol, proper_title, document_type, date_year, issuing_body
-     FROM public.documents
-     WHERE symbol ILIKE $1 || '%'
-        OR proper_title ILIKE '%' || $1 || '%'
+    `SELECT ppb_full_document_symbol AS symbol, display_title AS proper_title,
+       ppb_type AS document_type, ppb_year AS date_year, ppb_body AS issuing_body
+     FROM public.unified_documents
+     WHERE (ppb_full_document_symbol ILIKE $1 || '%'
+        OR display_title ILIKE '%' || $1 || '%')
+       AND ppb_full_document_symbol !~ '^[0-9]+/[0-9]+$'
      ORDER BY 
-       CASE WHEN UPPER(symbol) = UPPER($1) THEN 0 ELSE 1 END,
-       CASE WHEN symbol ILIKE $1 || '%' THEN 0 ELSE 1 END,
-       LENGTH(symbol),
-       date_year DESC NULLS LAST
+       CASE WHEN UPPER(ppb_full_document_symbol) = UPPER($1) THEN 0 ELSE 1 END,
+       CASE WHEN ppb_full_document_symbol ILIKE $1 || '%' THEN 0 ELSE 1 END,
+       LENGTH(ppb_full_document_symbol),
+       ppb_year DESC NULLS LAST
      LIMIT 20`,
     [q],
   );
