@@ -24,6 +24,8 @@ export interface EntityOption {
 }
 
 interface DBCitationRow {
+  id: number;
+  sub_programme_number: number | null;
   ppb_full_document_symbol: string;
   entity: string;
   entity_long: string | null;
@@ -51,6 +53,8 @@ interface DBCitationRow {
 export async function fetchPPBRecords(): Promise<PPBRecord[]> {
   const rows = await query<DBCitationRow>(`
     SELECT 
+      c.id,
+      c.sub_programme_number,
       c.ppb_full_document_symbol,
       c.entity,
       e.entity_long,
@@ -122,6 +126,8 @@ export async function fetchPPBRecords(): Promise<PPBRecord[]> {
 
     // Build CitationInfo for this row
     const citationInfo: CitationInfo = {
+      id: row.id,
+      subprogramme_number: row.sub_programme_number,
       origin_document: row.origin_document || "",
       budget_part: row.budget_part,
       section: row.section,
@@ -286,9 +292,13 @@ export function transformPPBData(
       const mandate: Mandate = {
         // Keep each location intact: section/addendum and subprogramme must come
         // from the same citation row. Review keys remain unchanged.
-        citationLocations: rec.citation_info.filter(location => location.entity === entity
-          && isBackgroundPart(location.part_in_document) === isBackground
-          && (location["sub-programme"] || location.component || null) === subprog),
+        citationLocations: rec.citation_info.filter(
+          (location) =>
+            location.entity === entity &&
+            isBackgroundPart(location.part_in_document) === isBackground &&
+            (location["sub-programme"] || location.component || null) ===
+              subprog,
+        ),
         symbol,
         title,
         link,
@@ -385,23 +395,48 @@ export function transformPPBData(
 }
 
 /** An entity can occur in multiple budget parts; its review page includes all of them. */
-export function collectEntityData(parts: PartData[], entity: string): {data: EntityData; partName: string} | null {
-  const matches = parts.flatMap(part => part.entities.filter(e => e.entity === entity).map(data => ({data, partName: part.part})));
+export function collectEntityData(
+  parts: PartData[],
+  entity: string,
+): { data: EntityData; partName: string } | null {
+  const matches = parts.flatMap((part) =>
+    part.entities
+      .filter((e) => e.entity === entity)
+      .map((data) => ({ data, partName: part.part })),
+  );
   if (!matches.length) return null;
   const merge = (rows: Mandate[]): Mandate[] => {
     const bySymbol = new Map<string, Mandate>();
     for (const row of rows) {
       const old = bySymbol.get(row.symbol);
-      bySymbol.set(row.symbol, old ? {...old, citationLocations: [...(old.citationLocations ?? []), ...(row.citationLocations ?? [])]} : row);
+      bySymbol.set(
+        row.symbol,
+        old
+          ? {
+              ...old,
+              citationLocations: [
+                ...(old.citationLocations ?? []),
+                ...(row.citationLocations ?? []),
+              ],
+            }
+          : row,
+      );
     }
     return [...bySymbol.values()];
   };
   const legislative: Record<string, Mandate[]> = {};
-  for (const match of matches) for (const [key, rows] of Object.entries(match.data.legislativeMandates)) {
-    legislative[key] = merge([...(legislative[key] ?? []), ...rows]);
-  }
-  return {data: {...matches[0].data,
-    backgroundMandates: merge(matches.flatMap(m => m.data.backgroundMandates)),
-    legislativeMandates: legislative,
-  }, partName: [...new Set(matches.map(m => m.partName))].join("; ")};
+  for (const match of matches)
+    for (const [key, rows] of Object.entries(match.data.legislativeMandates)) {
+      legislative[key] = merge([...(legislative[key] ?? []), ...rows]);
+    }
+  return {
+    data: {
+      ...matches[0].data,
+      backgroundMandates: merge(
+        matches.flatMap((m) => m.data.backgroundMandates),
+      ),
+      legislativeMandates: legislative,
+    },
+    partName: [...new Set(matches.map((m) => m.partName))].join("; "),
+  };
 }

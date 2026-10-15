@@ -114,7 +114,10 @@ interface Props {
 
 // Transform subprogramme name for display
 function formatSubprogrammeName(subprog: string): string {
-  if (subprog === "Legislative mandates" || subprog.toLowerCase().includes("all subprogramme")) {
+  if (
+    subprog === "Legislative mandates" ||
+    subprog.toLowerCase().includes("all subprogramme")
+  ) {
     return "PROGRAMME LEVEL";
   }
   return subprog;
@@ -1062,6 +1065,8 @@ function MandateRow({
         {/* Sidebar (reuse DocumentSymbol for full sidebar) */}
         <div onClick={(e) => e.stopPropagation()}>
           <DocumentSymbol
+            readOnly={readOnly}
+            citationLocations={mandate.citationLocations}
             symbol={mandate.symbol}
             link={mandate.link}
             title={mandate.title}
@@ -1103,6 +1108,8 @@ function MandateRow({
           {/* Sidebar for replacement document */}
           {hasCompletedUpdate && newMandate && (
             <DocumentSymbol
+              readOnly={readOnly}
+              citationLocations={mandate.citationLocations}
               symbol={newMandate.symbol}
               link={newMandate.link}
               title={newMandate.title}
@@ -1916,7 +1923,9 @@ export function EntityDetail({
       .then((result) => {
         if (result.success && result.data) {
           setIsReviewer(!cycleReadOnly && (result.data.isReviewer ?? false));
-          setCanReviewAnyEntity(!cycleReadOnly && (result.data.canReviewAnyEntity ?? false));
+          setCanReviewAnyEntity(
+            !cycleReadOnly && (result.data.canReviewAnyEntity ?? false),
+          );
           setUserEmail(result.data.email);
           setUserEntity(result.data.entity ?? null);
         }
@@ -1960,7 +1969,7 @@ export function EntityDetail({
       })
       .catch(() => {})
       .finally(() => setReviewModeLoaded(true));
-  }, [entity]);
+  }, [entity, cycleReadOnly]);
 
   // Handle real-time changes from other users (via polling)
   const handleRemoteChange = useCallback(
@@ -2911,7 +2920,12 @@ export function EntityDetail({
         </div>
       )}
 
-      {cycleReadOnly && <p className="rounded border border-blue-200 bg-blue-50 p-3 text-sm">Actual imported PPB 2027 citations. Review is read-only; these are separate from PPB 2026 after decisions.</p>}
+      {cycleReadOnly && (
+        <p className="rounded border border-blue-200 bg-blue-50 p-3 text-sm">
+          Actual imported PPB 2027 citations. Review is read-only; these are
+          separate from PPB 2026 after decisions.
+        </p>
+      )}
       {/* Read-only notice */}
       {!cycleReadOnly && !isOwnEntity && userEntity && !canReviewAnyEntity && (
         <ReadOnlyNoticeBanner viewingEntity={entity} userEntity={userEntity} />
@@ -2938,7 +2952,9 @@ export function EntityDetail({
         totalUniqueDocuments={totalUniqueDocuments}
         canReviewAnyEntity={canReviewAnyEntity}
         isUnderReview={isUnderReview}
-        onStartReview={!cycleReadOnly && reviewModeLoaded ? handleStartReview : undefined}
+        onStartReview={
+          !cycleReadOnly && reviewModeLoaded ? handleStartReview : undefined
+        }
         onClearAll={
           !cycleReadOnly && reviewModeLoaded && canReviewAnyEntity
             ? () => setShowClearAllDialog(true)

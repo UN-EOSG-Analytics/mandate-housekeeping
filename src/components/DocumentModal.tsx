@@ -2,6 +2,12 @@
 "use client";
 
 import React from "react";
+import {
+  isContentElement,
+  resolveVisibilityTier,
+  isMainPreambular,
+  shouldCollapsePreamble,
+} from "@/features/mandates/services/documents/paragraph-presentation";
 import { getAgeIndicator } from "@/features/mandates/services/age-indicator";
 import { fetchParagraphs } from "@/features/mandates/services/documents/client-data-service";
 import {
@@ -14,6 +20,7 @@ import type { DocumentVersion } from "@/features/mandates/services/documents/doc
 import { DiffModal } from "./DiffModal";
 import { UN_BLUE, DECISION_THEME } from "@/lib/theme";
 import type {
+  CitationInfo,
   Decision,
   EntityRelevance,
   MandateComment,
@@ -51,6 +58,8 @@ import {
 import type { DecisionType } from "@/features/mandates/services/decision-reasons";
 
 interface Props {
+  readOnly?: boolean;
+  citationLocations?: CitationInfo[];
   symbol: string;
   link: string | null;
   title?: string;
@@ -220,6 +229,14 @@ function ParaBox({
           <p className="flex-1 text-sm leading-relaxed text-gray-700">
             {highlightSearchAndEntity(p.text, searchQuery, entity, entityLong)}
           </p>
+          {p.mandates?.[0] && (
+            <span
+              className="text-xs text-gray-500"
+              title="Automatic action annotation"
+            >
+              {p.mandates[0].action_verb}
+            </span>
+          )}
           {aiComment && (
             <Tooltip content={aiComment}>
               <Sparkles className="h-3.5 w-3.5 shrink-0 cursor-help text-amber-500" />
@@ -227,6 +244,28 @@ function ParaBox({
           )}
         </div>
       </div>
+      {p.links?.length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-2 text-xs">
+          {p.links
+            .filter(([, url]) => /^https?:\/\//i.test(url))
+            .map(([label, url], i) => (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-un-blue underline"
+              >
+                {label}
+              </a>
+            ))}
+        </div>
+      )}
+      {p.note_references?.length ? (
+        <p className="mt-1 text-xs text-gray-500">
+          Footnotes: {p.note_references.map((n) => n.note_id).join(", ")}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -288,16 +327,20 @@ function FilteredParagraphTree({
 
   const contentIndices = paragraphs
     .map((p, i) => ({ p, origIdx: i }))
-    .filter(({ p }) => p.type !== "frontmatter" && p.text?.trim());
+    .filter(({ p }) => isContentElement(p, resolveVisibilityTier(paragraphs)));
 
   const isRelevant = (origIdx: number) => relevantIndices.has(origIdx);
 
   const preamble = contentIndices.filter(
     ({ p }) =>
-      p.paragraph_type === "preambular" && matchesSearch(p.text, searchQuery),
+      isMainPreambular(p) &&
+      shouldCollapsePreamble(paragraphs, !!searchQuery?.trim()) &&
+      matchesSearch(p.text, searchQuery),
   );
   const operative = contentIndices.filter(
-    ({ p }) => p.paragraph_type !== "preambular",
+    ({ p }) =>
+      !isMainPreambular(p) ||
+      !shouldCollapsePreamble(paragraphs, !!searchQuery?.trim()),
   );
 
   type Segment = {
@@ -514,21 +557,26 @@ function FullParagraphTree({
 }) {
   const [showPreamble, setShowPreamble] = useState(false);
 
-  const content = paragraphs.filter(
-    (p) => p.type !== "frontmatter" && p.text?.trim(),
+  const content = paragraphs.filter((p) =>
+    isContentElement(p, resolveVisibilityTier(paragraphs)),
   );
   const preamble = content.filter(
     (p) =>
-      p.paragraph_type === "preambular" && matchesSearch(p.text, searchQuery),
+      isMainPreambular(p) &&
+      shouldCollapsePreamble(paragraphs, !!searchQuery?.trim()) &&
+      matchesSearch(p.text, searchQuery),
   );
-  const operative = content.filter((p) => p.paragraph_type !== "preambular");
+  const operative = content.filter(
+    (p) =>
+      !isMainPreambular(p) ||
+      !shouldCollapsePreamble(paragraphs, !!searchQuery?.trim()),
+  );
   const filteredOperative = operative.filter(
     (p) => p.type === "heading" || matchesSearch(p.text, searchQuery),
   );
 
   const hasResults =
-    preamble.length > 0 ||
-    filteredOperative.some((p) => p.type === "paragraph");
+    preamble.length > 0 || filteredOperative.some((p) => p.type !== "heading");
   const hasSearchQuery = searchQuery && searchQuery.trim();
 
   return (
@@ -591,7 +639,7 @@ function FullParagraphTree({
             </div>
           );
         }
-        if (p.type === "paragraph") {
+        if (isContentElement(p, resolveVisibilityTier(paragraphs))) {
           return (
             <ParaBox
               key={`op-${i}`}
@@ -608,6 +656,8 @@ function FullParagraphTree({
 }
 
 export function DocumentSymbol({
+  readOnly = false,
+  citationLocations = [],
   symbol,
   link,
   title,
@@ -623,17 +673,24 @@ export function DocumentSymbol({
   isOpen: controlledOpen,
   onOpenChange,
   state,
-  isReviewer,
-  canReviewAnyEntity,
+  isReviewer: isReviewerProp,
+  canReviewAnyEntity: canReviewAnyEntityProp,
   userEmail,
-  userEntity,
+  userEntity: userEntityProp,
   isFoundational,
-  onDecision,
-  onApprove,
-  onComment,
-  onUpdateClick,
+  onDecision: onDecisionProp,
+  onApprove: onApproveProp,
+  onComment: onCommentProp,
+  onUpdateClick: onUpdateClickProp,
   initialTab,
 }: Props) {
+  const isReviewer = readOnly ? false : isReviewerProp;
+  const canReviewAnyEntity = readOnly ? false : canReviewAnyEntityProp;
+  const userEntity = readOnly ? undefined : userEntityProp;
+  const onDecision = readOnly ? undefined : onDecisionProp;
+  const onApprove = readOnly ? undefined : onApproveProp;
+  const onComment = readOnly ? undefined : onCommentProp;
+  const onUpdateClick = readOnly ? undefined : onUpdateClickProp;
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
@@ -644,6 +701,7 @@ export function DocumentSymbol({
   const [activityFilterType, setActivityFilterType] = useState<
     "all" | "comments"
   >("all");
+  const [fulltextError, setFulltextError] = useState(false);
   const [paragraphs, setParagraphs] = useState<Paragraph[] | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -706,9 +764,13 @@ export function DocumentSymbol({
     lastFetchedSymbolRef.current = symbol;
 
     setLoading(true);
+    setFulltextError(false);
 
     Promise.all([
-      fetchParagraphs(symbol),
+      fetchParagraphs(symbol).catch(() => {
+        setFulltextError(true);
+        return [];
+      }),
       getDocumentVersionsAction(symbol).catch(() => ({
         success: false as const,
         error: "Failed to load",
@@ -2036,6 +2098,28 @@ export function DocumentSymbol({
               )}
 
               {/* Paragraphs Tab */}
+              {citationLocations.length > 0 && activeTab === "info" && (
+                <div
+                  className="mb-4 space-y-1 text-xs text-gray-600"
+                  aria-label="Budget citation locations"
+                >
+                  {citationLocations.map((location, index) => (
+                    <p key={index}>
+                      {[
+                        location.origin_document,
+                        location.budget_part,
+                        location.section ? `Section ${location.section}` : null,
+                        location["sub-programme"] === "All Subprogrammes"
+                          ? null
+                          : location["sub-programme"],
+                        location.component,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  ))}
+                </div>
+              )}
               {activeTab === "paragraphs" && (
                 <div className="space-y-4">
                   {/* Search Box */}
@@ -2108,6 +2192,19 @@ export function DocumentSymbol({
                     </div>
                   )}
                   <div className="rounded-xl bg-white p-5 shadow-sm">
+                    {paragraphs?.some((p) => p.extraction_quality_warning) && (
+                      <p className="mb-3 text-sm text-amber-800">
+                        Extraction warning: check this text against the original
+                        document.
+                      </p>
+                    )}
+                    {paragraphs?.some((p) => p.part_letter) && (
+                      <p className="mb-3 text-xs text-gray-500">
+                        Showing printed part{" "}
+                        {paragraphs.find((p) => p.part_letter)?.part_letter}{" "}
+                        only.
+                      </p>
+                    )}
                     {loading ? (
                       <div className="flex items-center justify-center py-12">
                         <Loader2 className="h-8 w-8 animate-spin text-gray-300" />
@@ -2134,7 +2231,9 @@ export function DocumentSymbol({
                           <AlertTriangle className="h-6 w-6 text-gray-400" />
                         </div>
                         <p className="text-sm font-medium text-gray-600">
-                          No fulltext available
+                          {fulltextError
+                            ? "Fulltext could not be loaded"
+                            : "No readable fulltext available"}
                         </p>
                         <p className="mt-1 text-xs text-gray-400">
                           The parsed document text is not available in our
