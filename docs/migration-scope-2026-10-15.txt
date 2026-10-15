@@ -1,0 +1,173 @@
+Mandate housekeeping implementation handoff — 15 October 2026
+
+User authorization
+Implement the agreed housekeeping migration, via a new chat in the codebox
+mandate-housekeeping project, in an isolated git worktree. The user explicitly
+removed implementation info from the plan. This scope supersedes that part of
+all earlier planning.
+
+OUT OF SCOPE
+No implementation-info feature, implementation/evidence links or tables, paragraph
+or clause evidence anchors, public-registry evidence display/read grants, link
+checking or associated workflow. Do not implement those as foundations for later.
+No app merge, no new shared-package extraction. Do not expand into agenda,
+clustering, budget resources or SG report-linking features. Existing report context
+or sidebar styling is optional only where needed for the migration, not a new
+feature workstream.
+
+Required outcome
+Keep housekeeping separate; replace legacy metadata and frozen fulltexts with
+current registry data contracts; isolate review cycles; expose actual imported
+PPB2027 as read-only while preserving the existing PPB2026 review. Prepare all
+needed migrations and matching canonical schema changes for the human to apply.
+Implement and verify autonomously within this scope, with small coherent local
+commits in the worktree. Never push, open a PR or merge into main/master.
+
+Codebox repositories
+- /home/agent/mandate-housekeeping: target project; inspect current instructions,
+  git status, branches and worktrees before edits. Use the newly created task
+  worktree, not the primary checkout.
+- /home/agent/mandates: current reference implementation. During investigation its
+  committed main was 1612513756183db8058e9bfdb309f94308e6a348. It had nine dirty
+  files for metrics sorting and a No citing entity filter; do not alter those.
+  Recheck current state. Read committed reference code separately from unfinished
+  changes. A checkout is not proof of deployed production behavior.
+- Read the available strategy/global instructions for cross-project context.
+  Original Mac strategy path was /Users/david/UN/strategy/AGENTS.md; locate its
+  codebox counterpart if present. Do not assume Mac paths work on codebox.
+
+Non-negotiable working rules from the user
+- Worktree isolation, commit as you go; hand off branch and worktree path.
+- No remote pushes, PRs, or merges into main/master.
+- Never apply database changes: no DDL, migrations or data writes. Write migration
+  files AND matching canonical schema updates. The human applies them.
+- Read-only DB queries are authorized. Load the intended app .env, verify the
+  actual Azure database/role, and use explicit READ ONLY transactions. Never let
+  an unset DATABASE_URL fall back to local Postgres. Never reveal credentials.
+- Never stop, kill or restart existing dev servers. Before starting one, inspect
+  existing listeners; use an existing server, or a distinct port for your own
+  instance. Stop only an instance you personally started.
+- Never overwrite or delete preexisting files/assets without asking. In
+  particular retain static fulltext assets until the coverage report and cleanup
+  are explicitly reviewed. Normal necessary tracked code edits are authorized by
+  the request to implement; do not treat this as permission to remove assets.
+- No Playwright or browser tests unless requested. Use focused checks/typecheck;
+  at most one final production build per affected repository unless a concrete
+  failure requires another. No persistent UI tests by default.
+- All locale catalogues change together for user-visible string edits. Avoid AI
+  as a product label; say automatic where appropriate.
+- Prefer total checks with deliberate negative controls. A fresh context must
+  try to disprove the output; do not grade your own construction. End with an
+  honest PASS/FAIL verdict and enumerated unexplained residue.
+
+Revised technical plan
+
+1. Capture a fresh before-state and build total reconciliation checks first.
+Record every citation ID, decision ID (including new_symbol), comment, review
+session and upload; record effective old-cycle decisions and exports. Preserve
+original provenance/history. Matching row counts alone is insufficient: compare
+sets and keys. Record unavailable fields and unresolved mappings explicitly.
+
+2. Make identity compatibility explicit before exposing another cycle.
+The registry's October extractor resolves identities BEFORE import using local
+issuer headings/provenance. Examples of 4/6: UNEP/EA.4/RES.6, A/HRC/RES/4/6, UNCAC
+COSP Outcome 4/6. The last is a scoped label, not an official symbol. Never map a
+numeric tail globally. Inspect docs/issues/29-symbol-identities.md and migration
+042 in mandates. Existing review records were outside that migration's scope;
+reconcile document_symbol/new_symbol, manual additions, comments, responses and
+exports against repaired identities without rewriting audit provenance or
+silently merging issuers. Ambiguities stay explicitly unresolved. Identity
+validity and Digital Library catalogue coverage are different checks.
+
+3. Isolate the entire review workflow by budget version.
+Version decisions, comments, review sessions/locks, review responses, uploads and
+worker/ingestion jobs that create decisions. Include latest-decision grouping,
+realtime cursors, baselines, approvals, cancellations, caches, analytics and
+exports. Existing review stays ppb2026; shared registry default ppb2027 must not
+reinterpret it. PPB2027 review writes must fail server-side while disabled, through
+all entry points. Keep actual imported PPB2027 distinct from PPB2026 after review
+decisions. Use current mandate-membership.ts/version semantics; preserve exact
+sections/addenda and generic-subprogramme normalization. Hierarchy predicates
+must match the same citation row. Do not broaden entity review to the whole
+registry catalogue. Handle shared Plan Outline membership explicitly.
+
+4. Prepare grants and migrate metadata, then series matching separately.
+Retire frozen public.documents and metadata_clean reads in favor of
+public.unified_documents (still in public), preserving PPB-only/non-ODS/manual
+fallbacks and current document-type/HRC mandating-body attribution. Preserve
+DGACM DOCX export title rules. Define the add-search universe deliberately.
+The current fulltext path needs SELECT on digitallibrary.document_paragraphs,
+document_files and document_parses; metadata/series need unified_documents,
+digitallibrary.documents and resolution_series, plus schema USAGE. Inspect actual
+queries and grant precisely what is needed. Do not add legacy mandates.* grants
+without a remaining runtime reader. Prepare migrations and canonical schema edits,
+never run them. If grants are not yet applied, continue all verifiable local work
+and report exactly what remains blocked rather than substituting an admin role.
+Series membership is (series_key, un_body, doc_type). Collections are related
+documents, not versions; a newer version is a review candidate, not a legal
+supersession finding. Normalize aliases safely rather than copying raw-symbol
+joins blindly. Retain explicit reviewer action.
+
+5. Port the current fulltext contract and supporting presentation helpers.
+Use the current mandates website/src/lib/data/paragraphs.ts, fulltext-annotations,
+fulltext-quality and paragraph-presentation behavior as reference, not July's
+mandates.paragraphs + DL two-arm fallback. Only successful English DL parses are
+readable: document_files.status='parsed' and a matching document_parses ledger.
+Never expose stale semantic rows from a failed/unfinished parse. Preserve main,
+annex/appendix, text_index, nesting, prefixes, headings, hyperlinks and footnotes.
+Use deterministic action annotations and safe quality-warning booleans; do not
+expose raw diagnostics/source paths or restore held-back paragraph-entity claims.
+For bracket-part references, the CURRENT registry validates unique printed-letter
+blocks in parent fallback but returns directly stored rows before that check.
+The target contract must validate both direct bracket aliases and parent fallback:
+no whole-parent substitute and no ambiguous/composite part presented as exact.
+The existing renderer must distinguish substantive neutral/annex content from
+masthead/boilerplate; show honest unavailable/extraction-warning states.
+Reconcile every one of the static fulltext files with this actual reader and
+visibility behavior. July's accepted 22 misses were for the old mixed reader and
+are not blanket approval for losses with the new one. List all new residue;
+retain the legacy directory and make any deletion a separate cleanup decision.
+
+Live measurements from 15 October — refresh, do not hardcode as targets
+- All citation rows: 9,975; decision history rows: 13,878; comments: 345.
+- Bare numeric citation keys across all origins: zero. Constraint
+  source_documents_no_bare_numeric_key exists, NOT VALID for legacy source rows.
+  Do not assume the historical 80/221 alias is still an unresolved citation.
+- No budget_version columns on the five checked housekeeping workflow tables.
+- Housekeeping role lacks SELECT on all six DL/unified objects above and lacks
+  DL schema access. Registry role lacks access to housekeeping schema.
+- Exact PPB2026 legislative citations: 5,161, of which 872 unlinked to DL;
+  3,721 distinct symbols, 854 unlinked.
+- Exact PPB2027 legislative citations: 3,567, of which 747 unlinked to DL;
+  2,467 distinct symbols, 737 unlinked.
+  These are exact origins, not wider PPB+peacekeeping+Plan Outline version groups.
+- Across 4,959 distinct legislative symbols: 3,274 catalogue matches in both
+  legacy and DL, 179 DL-only gains, zero legacy-only losses, 1,506 neither.
+  This is catalogue membership, not proof of field/fulltext conservation.
+- Static fulltext files: 3,064. Direct successful DL parse matches: 2,582/3,721
+  PPB2026 symbols, 1,552/2,467 PPB2027. These omit parent-part fallback and visible
+  readability; NOT final renderer coverage. Parse ledger includes sem-v5 and
+  sem-v11; do not assume one parser revision.
+
+Acceptance bars
+- Every preexisting review row/ID and effective old-cycle decision accounted for;
+  zero unexplained lost records, rewritten provenance or orphan review keys.
+- Zero cross-cycle reads; zero accepted PPB2027 review writes while disabled,
+  including uploads/workers/realtime and alternate action paths.
+- Zero newly NULL metadata fields where the old path resolved a value; all
+  changed labels/fields classified, not just headline row totals compared.
+- Every static file classified under the actual reader as equivalent, changed,
+  unavailable or ambiguous; unknown losses = zero. Any losses beyond the old
+  accepted list are explicit and remain for human review before cleanup.
+- Permission behavior verified as app roles where grants exist; missing applied
+  grants/migrations explicitly reported. Do not claim deployment readiness from
+  admin-role success or mocks.
+- Negative controls prove the checks fail when records are removed, versions
+  swapped, metadata resolution broken, or bracket ownership made ambiguous.
+
+Completion
+Persist until implementation, focused validation, independent adversarial review
+and coherent local commits are complete within the permitted boundary. No pushes,
+PRs, deployment or database application. Report branch, worktree path, commit(s),
+checks with exact results, migration files for manual application and remaining
+blocked runtime checks. Do not reintroduce implementation info into the scope.

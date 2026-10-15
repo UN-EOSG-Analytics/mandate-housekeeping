@@ -12,6 +12,7 @@
  * Each decision represents an entity's proposed action on a specific mandate citation.
  */
 
+import { getReviewWriteError } from "@/lib/db/review-cycle";
 import { getCurrentUser } from "@/features/auth/auth";
 import { query } from "@/lib/db/db";
 import type { MandateComment, MandateDecision, MandateState } from "@/types";
@@ -304,6 +305,9 @@ export async function createDecisionAction(params: {
   newSymbol?: string | null;
   manualMetadata?: ManualMetadata | null;
 }): Promise<ActionResult<MandateDecision>> {
+  const cycleError = await getReviewWriteError();
+  if (cycleError) return { success: false, error: cycleError };
+
   const user = await getCurrentUser();
   if (!user) {
     return { success: false, error: "unauthorized" };
@@ -408,6 +412,9 @@ export async function approveDecisionAction(
     approvedAt: string | null;
   }>
 > {
+  const cycleError = await getReviewWriteError();
+  if (cycleError) return { success: false, error: cycleError };
+
   const user = await getCurrentUser();
   if (!user) {
     return { success: false, error: "unauthorized" };
@@ -463,6 +470,9 @@ export async function updateDecisionReasonAction(params: {
   decisionReason: string | null;
   otherReason: string | null;
 }): Promise<ActionResult<MandateDecision>> {
+  const cycleError = await getReviewWriteError();
+  if (cycleError) return { success: false, error: cycleError };
+
   const user = await getCurrentUser();
   if (!user) {
     return { success: false, error: "unauthorized" };
@@ -553,6 +563,9 @@ export async function clearAllEntityDecisionsAction(
 ): Promise<
   ActionResult<{ deletedDecisions: number; deletedComments: number }>
 > {
+  const cycleError = await getReviewWriteError();
+  if (cycleError) return { success: false, error: cycleError };
+
   const user = await getCurrentUser();
   if (!user) {
     return { success: false, error: "unauthorized" };

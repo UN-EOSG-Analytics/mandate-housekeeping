@@ -89,19 +89,21 @@ function projectedEntSymCte(): string {
   )`;
 }
 
-async function runMatrix(entSym: string): Promise<MatrixData> {
+async function runMatrix(entSym: string, version?: BudgetVersion): Promise<MatrixData> {
   const pairRows = await query<PairRow>(
     `WITH ${entSym}
      SELECT a.entity AS e1, b.entity AS e2, COUNT(*)::int AS shared
      FROM ent_sym a
      JOIN ent_sym b ON a.symbol = b.symbol AND a.entity < b.entity
      GROUP BY a.entity, b.entity`,
+    [], version,
   );
   const totalRows = await query<TotalRow>(
     `WITH ${entSym}
      SELECT entity, COUNT(*)::int AS total
      FROM ent_sym
      GROUP BY entity`,
+    [], version,
   );
 
   const pairs: Record<string, number> = {};
@@ -120,7 +122,7 @@ export function fetchVersionMatrix(version: BudgetVersion): Promise<MatrixData> 
 
 /** ppb2026 matrix after applying the latest housekeeping decisions. */
 export function fetchProjectedMatrix(): Promise<MatrixData> {
-  return runMatrix(projectedEntSymCte());
+  return runMatrix(projectedEntSymCte(), "ppb2026");
 }
 
 /**

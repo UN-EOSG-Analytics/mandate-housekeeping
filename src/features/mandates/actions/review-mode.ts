@@ -1,5 +1,6 @@
 "use server";
 
+import { getReviewWriteError } from "@/lib/db/review-cycle";
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db/db";
 import { getCurrentUser } from "@/features/auth/auth";
@@ -80,6 +81,9 @@ export async function getReviewModeStatusAction(
 export async function startReviewModeAction(
   entity: string,
 ): Promise<ActionResult<ReviewModeStatus>> {
+  const cycleError = await getReviewWriteError();
+  if (cycleError) return { success: false, error: cycleError };
+
   const user = await getCurrentUser();
   if (!user) {
     return { success: false, error: "unauthorized" };
@@ -144,6 +148,9 @@ export async function startReviewModeAction(
 export async function endReviewModeAction(
   entity: string,
 ): Promise<ActionResult<ReviewModeStatus>> {
+  const cycleError = await getReviewWriteError();
+  if (cycleError) return { success: false, error: cycleError };
+
   const user = await getCurrentUser();
   if (!user) {
     return { success: false, error: "unauthorized" };

@@ -1,3 +1,4 @@
+import { getReviewWriteError } from "@/lib/db/review-cycle";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/features/auth/auth";
 import { query } from "@/lib/db/db";
@@ -28,6 +29,9 @@ export async function POST(req: NextRequest) {
         { status: 403 },
       );
     }
+
+    const cycleError = await getReviewWriteError();
+    if (cycleError) return NextResponse.json({error: cycleError}, {status: 403});
 
     // Parse form data
     const formData = await req.formData();
@@ -100,6 +104,7 @@ export async function POST(req: NextRequest) {
         subprogramme || null,
         user.email,
         JSON.stringify({
+          budgetVersion: "ppb2026",
           uploadedAt: new Date().toISOString(),
           userAgent: req.headers.get("user-agent") || null,
         }),

@@ -6,6 +6,7 @@
  * Comments are allowed even during review mode (unlike decisions).
  */
 
+import { getReviewWriteError } from "@/lib/db/review-cycle";
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db/db";
 import { getCurrentUser } from "@/features/auth/auth";
@@ -54,6 +55,9 @@ export async function createCommentAction(params: {
   subprogramme: string | null;
   comment: string;
 }): Promise<ActionResult<MandateComment>> {
+  const cycleError = await getReviewWriteError();
+  if (cycleError) return { success: false, error: cycleError };
+
   const user = await getCurrentUser();
   if (!user) {
     return { success: false, error: "unauthorized" };
@@ -105,6 +109,9 @@ export async function resolveCommentAction(
   commentId: string,
   resolved: boolean,
 ): Promise<ActionResult<MandateComment>> {
+  const cycleError = await getReviewWriteError();
+  if (cycleError) return { success: false, error: cycleError };
+
   const user = await getCurrentUser();
   if (!user) {
     return { success: false, error: "unauthorized" };

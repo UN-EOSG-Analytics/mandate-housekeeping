@@ -12,6 +12,7 @@
  * - Change: Difference between baseline and in-review decision
  */
 
+import { getReviewWriteError } from "@/lib/db/review-cycle";
 import { getCurrentUser } from "@/features/auth/auth";
 import { query } from "@/lib/db/db";
 import type {
@@ -318,6 +319,9 @@ export async function acceptReviewChangeAction(params: {
   reviewSessionId: string;
   comment?: string;
 }): Promise<ActionResult<ReviewChangeResponse>> {
+  const cycleError = await getReviewWriteError();
+  if (cycleError) return { success: false, error: cycleError };
+
   const user = await getCurrentUser();
   if (!user) {
     return { success: false, error: "unauthorized" };
@@ -335,7 +339,7 @@ export async function acceptReviewChangeAction(params: {
     `INSERT INTO mandates_housekeeping.review_change_responses 
        (entity, document_symbol, subprogramme, review_session_id, response_type, responded_by, comment)
      VALUES ($1, $2, $3, $4, 'accept', $5, $6)
-     ON CONFLICT (entity, document_symbol, COALESCE(subprogramme, ''), review_session_id) 
+     ON CONFLICT (budget_version, entity, document_symbol, COALESCE(subprogramme, ''), review_session_id) 
      DO UPDATE SET 
        response_type = 'accept',
        responded_by = EXCLUDED.responded_by,
@@ -368,6 +372,9 @@ export async function revertReviewChangeAction(params: {
   reviewSessionId: string;
   comment?: string;
 }): Promise<ActionResult<ReviewChangeResponse>> {
+  const cycleError = await getReviewWriteError();
+  if (cycleError) return { success: false, error: cycleError };
+
   const user = await getCurrentUser();
   if (!user) {
     return { success: false, error: "unauthorized" };
@@ -458,7 +465,7 @@ export async function revertReviewChangeAction(params: {
        (entity, document_symbol, subprogramme, review_session_id, response_type, 
         responded_by, comment, revert_decision_id)
      VALUES ($1, $2, $3, $4, 'revert', $5, $6, $7)
-     ON CONFLICT (entity, document_symbol, COALESCE(subprogramme, ''), review_session_id) 
+     ON CONFLICT (budget_version, entity, document_symbol, COALESCE(subprogramme, ''), review_session_id) 
      DO UPDATE SET 
        response_type = 'revert',
        responded_by = EXCLUDED.responded_by,

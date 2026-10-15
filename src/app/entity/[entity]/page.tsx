@@ -1,3 +1,4 @@
+import { getBudgetVersion, isReviewEnabled } from "@/lib/db/review-cycle";
 import { EntityDetail } from "@/components/EntityDetail";
 import { FooterFootnote } from "@/components/core/FooterFootnote";
 import { Header } from "@/components/core/Header";
@@ -35,6 +36,7 @@ async function getData() {
 
 export default async function EntityPage({ params }: PageProps) {
   const { entity: entityParam } = await params;
+  const budgetVersion = await getBudgetVersion();
   const entityCode = decodeURIComponent(entityParam);
   const [parts, user, entities] = await Promise.all([
     getData(),
@@ -71,6 +73,8 @@ export default async function EntityPage({ params }: PageProps) {
           <span>Back to all entities</span>
         </Link>
         <EntityDetail
+          key={`${budgetVersion}:${entityData.entity}`}
+          cycleReadOnly={!isReviewEnabled(budgetVersion)}
           entity={entityData.entity}
           entityLong={entityData.entityLong}
           partName={partName}

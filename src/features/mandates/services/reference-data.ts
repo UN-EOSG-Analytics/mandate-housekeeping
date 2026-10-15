@@ -24,6 +24,7 @@ export const getIssuingBodies = unstable_cache(
        FROM public.issuing_bodies 
        WHERE is_active = true 
        ORDER BY display_order NULLS LAST, name`,
+      [], "ppb2026",
     );
     return rows.map((r) => r.name);
   },

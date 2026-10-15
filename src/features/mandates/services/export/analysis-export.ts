@@ -68,7 +68,7 @@ export async function exportAnalysisXlsx(): Promise<Buffer> {
     `WITH src AS (
        SELECT c.entity,
          REGEXP_REPLACE(c.ppb_full_document_symbol, '(\\d) ([A-Z])$', '\\1\\2') AS symbol,
-         COALESCE(c.sub_programme, '') AS subprogramme,
+         COALESCE(NULLIF(c.sub_programme, 'All Subprogrammes'), c.component, '') AS subprogramme,
          bdv.version_slug AS ver
        FROM ppb2026.source_document_citations c
        JOIN ppb2026.budget_documents bd ON c.origin_document ~ bd.match_pattern
@@ -91,7 +91,7 @@ export async function exportAnalysisXlsx(): Promise<Buffer> {
      latest AS (
        SELECT entity,
          REGEXP_REPLACE(document_symbol, '(\\d) ([A-Z])$', '\\1\\2') AS symbol,
-         COALESCE(subprogramme, '') AS subprogramme,
+         COALESCE(NULLIF(subprogramme, 'All Subprogrammes'), '') AS subprogramme,
          decision, decision_reason, other_reason, new_symbol,
          user_email, created_at, approved_by, approved_at
        FROM (
@@ -118,6 +118,7 @@ export async function exportAnalysisXlsx(): Promise<Buffer> {
      LEFT JOIN latest d USING (entity, symbol, subprogramme)
      LEFT JOIN systemchart.entities e ON e.entity = k.entity
      ORDER BY k.entity, k.symbol, k.subprogramme`,
+    [], "ppb2026",
   );
 
   const meta = await fetchDocumentMetadata([

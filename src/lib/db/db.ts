@@ -1,4 +1,6 @@
 import { Pool, type PoolConfig } from "pg";
+import { getBudgetVersion, isReviewEnabled } from "./review-cycle";
+import { KNOWN_BUDGET_VERSIONS, type BudgetVersion } from "./budget-version";
 
 const globalForDb = global as unknown as {
   pool: Pool | undefined;
@@ -11,7 +13,7 @@ const globalForDb = global as unknown as {
  */
 function getConnectionString(): string {
   const url = process.env.DATABASE_URL || "";
-  if (!url) return url;
+  if (!url) throw new Error("DATABASE_URL is required; local database fallback is disabled");
   if (url.includes("sslmode=")) return url;
   return url + (url.includes("?") ? "&" : "?") + "sslmode=require";
 }
@@ -61,14 +63,9 @@ if (process.env.NODE_ENV !== "production") {
 export async function query<T = Record<string, unknown>>(
   text: string,
   params?: unknown[],
+  version?: BudgetVersion,
 ): Promise<T[]> {
-  const client = await pool.connect();
-  try {
-    const result = await client.query(text, params);
-    return result.rows;
-  } finally {
-    client.release();
-  }
+  return transaction((tx) => tx<T>(text, params), version);
 }
 
 /**
@@ -85,11 +82,21 @@ type TransactionQueryFn = <R = Record<string, unknown>>(
  */
 export async function transaction<T>(
   fn: (query: TransactionQueryFn) => Promise<T>,
+  version?: BudgetVersion,
 ): Promise<T> {
+  const selectedVersion = version ?? await getBudgetVersion();
+  if (!KNOWN_BUDGET_VERSIONS.includes(selectedVersion)) throw new Error("Unknown budget version");
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // SET LOCAL is transaction scoped: safe with PgBouncer and pooled connections.
+    // RLS scopes every workflow table, including joins, aggregates and ID lookups.
+    await client.query("SELECT set_config('app.budget_version', $1, true)", [selectedVersion]);
     const txQuery: TransactionQueryFn = async (text, params) => {
+      if (!isReviewEnabled(selectedVersion) &&
+          /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+mandates_housekeeping\.(?:mandate_decisions|mandate_comments|entity_review_mode|review_change_responses|docx_uploads)\b/i.test(text)) {
+        throw new Error("Review is disabled for this budget cycle");
+      }
       const result = await client.query(text, params);
       return result.rows;
     };

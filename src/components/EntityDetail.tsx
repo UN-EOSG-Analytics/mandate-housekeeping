@@ -104,6 +104,7 @@ import {
 } from "@/features/mandates/services/decision-reasons";
 
 interface Props {
+  cycleReadOnly?: boolean;
   entity: string;
   entityLong: string | null;
   partName: string | null;
@@ -113,7 +114,7 @@ interface Props {
 
 // Transform subprogramme name for display
 function formatSubprogrammeName(subprog: string): string {
-  if (subprog.toLowerCase().includes("all subprogramme")) {
+  if (subprog === "Legislative mandates" || subprog.toLowerCase().includes("all subprogramme")) {
     return "PROGRAMME LEVEL";
   }
   return subprog;
@@ -1089,7 +1090,7 @@ function MandateRow({
             isFoundational={isFoundational}
             onDecision={onDecision}
             onApprove={onApprove}
-            onComment={onComment}
+            onComment={readOnly ? undefined : onComment}
             onUpdateClick={(prefillSymbol) => {
               setSidebarOpen(false);
               setUpdatePrefillSymbol(prefillSymbol);
@@ -1126,7 +1127,7 @@ function MandateRow({
               userEntity={userEntity}
               onDecision={onDecision}
               onApprove={onApprove}
-              onComment={onComment}
+              onComment={readOnly ? undefined : onComment}
               metadataFromDb={newMandate.metadataFromDb}
               docType={newMandate.docType}
             />
@@ -1824,6 +1825,7 @@ function MandateSection({
 }
 
 export function EntityDetail({
+  cycleReadOnly = false,
   entity,
   entityLong,
   partName,
@@ -1886,8 +1888,8 @@ export function EntityDetail({
 
   // Check if user owns this entity (can edit) or can review any entity (DMSPC)
   const isOwnEntity = useMemo(() => {
-    return userEntity === entity || canReviewAnyEntity;
-  }, [userEntity, entity, canReviewAnyEntity]);
+    return !cycleReadOnly && (userEntity === entity || canReviewAnyEntity);
+  }, [userEntity, entity, canReviewAnyEntity, cycleReadOnly]);
 
   // Set of background mandate symbols (for foundational highlighting in legislative sections)
   const foundationalSymbols = useMemo(
@@ -1913,8 +1915,8 @@ export function EntityDetail({
     getUserRoleAction()
       .then((result) => {
         if (result.success && result.data) {
-          setIsReviewer(result.data.isReviewer ?? false);
-          setCanReviewAnyEntity(result.data.canReviewAnyEntity ?? false);
+          setIsReviewer(!cycleReadOnly && (result.data.isReviewer ?? false));
+          setCanReviewAnyEntity(!cycleReadOnly && (result.data.canReviewAnyEntity ?? false));
           setUserEmail(result.data.email);
           setUserEntity(result.data.entity ?? null);
         }
@@ -2909,8 +2911,9 @@ export function EntityDetail({
         </div>
       )}
 
+      {cycleReadOnly && <p className="rounded border border-blue-200 bg-blue-50 p-3 text-sm">Actual imported PPB 2027 citations. Review is read-only; these are separate from PPB 2026 after decisions.</p>}
       {/* Read-only notice */}
-      {!isOwnEntity && userEntity && !canReviewAnyEntity && (
+      {!cycleReadOnly && !isOwnEntity && userEntity && !canReviewAnyEntity && (
         <ReadOnlyNoticeBanner viewingEntity={entity} userEntity={userEntity} />
       )}
       {canReviewAnyEntity && userEntity !== entity && (
@@ -2935,9 +2938,9 @@ export function EntityDetail({
         totalUniqueDocuments={totalUniqueDocuments}
         canReviewAnyEntity={canReviewAnyEntity}
         isUnderReview={isUnderReview}
-        onStartReview={reviewModeLoaded ? handleStartReview : undefined}
+        onStartReview={!cycleReadOnly && reviewModeLoaded ? handleStartReview : undefined}
         onClearAll={
-          reviewModeLoaded && canReviewAnyEntity
+          !cycleReadOnly && reviewModeLoaded && canReviewAnyEntity
             ? () => setShowClearAllDialog(true)
             : undefined
         }

@@ -1,3 +1,5 @@
+import { getBudgetVersion } from "@/lib/db/review-cycle";
+import { selectReviewCycle } from "@/features/mandates/actions/review-cycle";
 import Image from "next/image";
 import Link from "next/link";
 import { UserMenu } from "./UserMenu";
@@ -14,13 +16,14 @@ interface Props {
 export const SITE_TITLE = "Mandate Housekeeping Platform";
 export const SITE_SUBTITLE = "PPB 2027 Mandate Submissions";
 
-export function Header({
+export async function Header({
   user,
   children,
   entities = [],
   maxWidth = "7xl",
   hideAbout = false,
 }: Props) {
+  const version = user ? await getBudgetVersion() : "ppb2026";
   const isLoggedIn = !!user;
   const widthClass = maxWidth === "6xl" ? "max-w-6xl" : "max-w-7xl";
 
@@ -87,6 +90,14 @@ export function Header({
               Sign In
             </Link>
           )}
+          {user && <form action={selectReviewCycle} className="flex items-center gap-2 text-sm">
+            <label htmlFor="review-cycle">Budget cycle</label>
+            <select key={version} id="review-cycle" name="version" defaultValue={version} className="rounded border p-1">
+              <option value="ppb2026">PPB 2026 review</option>
+              <option value="ppb2027">PPB 2027 · read-only</option>
+            </select>
+            <button type="submit" className="text-un-blue">View</button>
+          </form>}
           {children}
         </div>
       </div>
