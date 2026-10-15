@@ -24,7 +24,7 @@ export interface EntityOption {
 }
 
 interface DBCitationRow {
-  id: number;
+  id: string;
   sub_programme_number: number | null;
   ppb_full_document_symbol: string;
   entity: string;
@@ -295,6 +295,7 @@ export function transformPPBData(
         citationLocations: rec.citation_info.filter(
           (location) =>
             location.entity === entity &&
+            location.budget_part === ci.budget_part &&
             isBackgroundPart(location.part_in_document) === isBackground &&
             (location["sub-programme"] || location.component || null) ===
               subprog,

@@ -1,0 +1,74 @@
+{
+  "scope": "Offline total checks; live reader validation is blocked until migrations/grants are manually applied",
+  "counts": {
+    "citations": 9975,
+    "decisions": 13878,
+    "comments": 345,
+    "sessions": 47,
+    "responses": 3,
+    "uploads": 1,
+    "effective_decisions": 6063
+  },
+  "resolvedRecords": 3962,
+  "appliedExportRows": 3564,
+  "staticAssets": 3064,
+  "staticAssetsWithUnresolvedFilename": 1,
+  "grants": {
+    "digitallibrary.documents": false,
+    "public.unified_documents": false,
+    "digitallibrary.document_files": false,
+    "digitallibrary.document_parses": false,
+    "digitallibrary.resolution_series": false,
+    "digitallibrary.document_paragraphs": false
+  },
+  "negativeControls": [
+    "remove historical record",
+    "swap a historical cycle",
+    "rewrite replacement symbol",
+    "lose an old metadata field",
+    "lose a type-only record",
+    "omit workflow RLS",
+    "ambiguous printed part accepted as exact",
+    "unallowlisted budget version",
+    "alter exact citation section",
+    "remove one citation while retaining its document"
+  ],
+  "gatedActions": [
+    "createDecisionAction",
+    "approveDecisionAction",
+    "updateDecisionReasonAction",
+    "clearAllEntityDecisionsAction",
+    "createCommentAction",
+    "resolveCommentAction",
+    "startReviewModeAction",
+    "endReviewModeAction",
+    "acceptReviewChangeAction",
+    "revertReviewChangeAction"
+  ],
+  "disabledCycleActionsRejectedWithoutDatabase": 10,
+  "unresolvedReviewKeys": 405,
+  "ambiguousNumericHistoryReferences": 2,
+  "offlineVerdict": "PASS",
+  "runtimeVerdict": "BLOCKED",
+  "comparison_preview": {
+    "rows": 7959,
+    "conflicting_review_keys": 81,
+    "multiple_review_keys": 139,
+    "duplicate_join_keys": 0
+  },
+  "baseline_sha256": {
+    "before.json": "47ea4cb76981a90286ac03277ee864e65b0aa1021a826d3c0d59493a067c50e5",
+    "exports-before.json": "c32c7953ba28c5eebcb61f236f2a65cbb05834bf3a767c1dc766a175f056d584",
+    "reference-before.json": "0bec9988af77ee5b4b4324b94bc500caeada7b6f04707b5e71f109a262b73da8",
+    "catalogue-before.json": "831a04db0da5a6b54792a3cc4482a7e3a3b2373bd76eaacdfbb48535553f02fd"
+  },
+  "local_checks": {
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "sql_parse_only": "PASS",
+    "worker_controls": "5/5 PASS",
+    "independent_adversarial_review": "PASS local; BLOCKED runtime",
+    "multipart_exact_location_fixture": "PASS after detecting and fixing duplicate locations",
+    "production_build": "PASS: final Next.js 16.2.9 Turbopack build after hierarchy fix"
+  }
+}

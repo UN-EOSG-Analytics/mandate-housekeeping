@@ -1,0 +1,127 @@
+Housekeeping migration — local handoff, 15 October 2026
+
+Worktree: /home/agent/.codex/worktrees/7796/mandate-housekeeping
+Branch: codex/housekeeping-migration
+Base: 61f2a41 (the primary main checkout remains ahead of origin/main by one).
+Reference: mandates committed 1612513756183db8058e9bfdb309f94308e6a348.
+Its nine existing dirty files were preserved. No remote operations or database
+changes were performed. No browser tests or dev servers were started/stopped.
+All 3,064 preexisting static fulltext assets remain unchanged.
+
+Scope implemented
+- Explicit PPB2026 default, selected-cycle cookie, current imported PPB2027
+  read-only view. The registry default cannot reinterpret existing reviews.
+- Transaction-local context and FORCE RLS on decisions, comments, sessions,
+  responses and uploads; cycle-compatible session/decision foreign keys.
+  All ten review mutation actions reject disabled cycles before database access.
+  Uploads reject before parsing or Azure writes; jobs require an explicit cycle.
+- Registry unified metadata, PPB-only/non-ODS/manual compatibility, current HRC
+  body/type attribution. A one-time legacy field floor preserves resolved fields
+  and DGACM bracket descriptions without legacy runtime catalogue reads.
+- Series candidates keyed by series_key, un_body and doc_type; collections are
+  excluded. Candidates require reviewer action and do not assert supersession.
+- Successful English DL parses only, matched to document_files and document_parses.
+  Exact printed-letter ownership is validated for direct bracket aliases and
+  parent fallback; composite/ambiguous parts fail closed. Structural content,
+  annotations, links, notes and safe quality flags reach the renderer.
+- Comparison exports explicitly use PPB2026 decisions and distinguish actual
+  PPB2027. Generic subprogramme aliases are compared together with competing
+  raw keys/conflicts shown explicitly. Review audit keys are not rewritten.
+- Entity pages collect all matching budget parts and retain exact citation
+  sections/addenda. Original citation IDs and complete locations are checked.
+- No implementation links, evidence tables, clause anchors or registry evidence
+  integration were added.
+
+Manual database work — NOT APPLIED
+Apply these as the migration owner before deploying this branch, in order:
+  sql/migrations/006_review_cycle_isolation.sql
+  sql/migrations/007_registry_read_grants.sql
+  sql/migrations/008_preserve_metadata_floor.sql
+Migration 006 verifies complete review-row conservation in both directions in
+its transaction. Existing rows are assigned ppb2026, without changing original
+IDs, symbols, replacement symbols, comments, timestamps or provenance.
+Migration 008 snapshots legacy resolved metadata once; do not drop that floor.
+Matching canonical DDL is in sql/schema/mandate_housekeeping_schema.sql and
+sql/schema/app_role.sql. On a new installation create canonical tables before
+running app_role.sql; canonical schema does not require the app role to exist.
+This task has not applied any migration, grants, DDL or data writes.
+
+Fresh baseline and total checks
+Private baseline files remain in .migration-baseline/ (gitignored because they
+contain review text and user information). The committed JSON report stores
+counts and SHA256 fingerprints, not private review content.
+  9,975 citations; 13,878 decisions; 345 comments; 47 sessions; 3 responses;
+  1 upload; 6,063 effective decisions; 3,962 resolved PPB2026 document records;
+  3,564 applied export rows; 3,064 fulltext asset hashes.
+Offline checks cover every captured row, complete per-version citation IDs and
+locations, full export keys/fields, all workflow policies, every static file,
+all ten real disabled-cycle server actions, and ten deliberate negative controls.
+These projected/offline checks do NOT prove the unapplied migration on live data.
+The five worker controls reject missing/unknown/disabled versions and never
+report successful unimplemented ingestion.
+
+The actual comparison SQL was executed as mandates_housekeeping_app in BEGIN
+READ ONLY against all existing records: 7,959 rows, zero duplicate join keys,
+139 groups with multiple raw review keys, 81 explicitly flagged conflicts.
+Fresh-context adversarial review found and drove fixes for upsert keys, cached
+request APIs, ambient-cycle comparison reads, type-only metadata, generic-key
+collisions, incomplete citation reconciliation and stale/fulltext snapshot checks.
+Its final verdict: local implementation PASS; live acceptance BLOCKED.
+
+Re-run local checks:
+  pnpm typecheck
+  pnpm lint
+  pnpm exec tsx scripts/verify-migration.ts
+Do not use the main app URL as a silent fallback for an absent audit URL.
+For an authorized app-role runtime audit after manual application, explicitly
+load the intended config into DATABASE_URL_CLAUDE, then:
+  pnpm exec tsx scripts/capture-migration-runtime.ts .migration-baseline/runtime-after.json
+  pnpm exec tsx scripts/verify-migration.ts .migration-baseline/runtime-after.json
+Capture enforces the Azure app role and explicit READ ONLY transactions across
+all services, creates a new output file only, and makes no writes to the database.
+Run the offline verifier first to create its static asset identity inventory.
+
+Enumerated residue and exact blocked checks
+1. All six required runtime SELECT grants, plus digitallibrary schema USAGE,
+   are absent for the app role: public.unified_documents; digitallibrary.documents,
+   resolution_series, document_paragraphs, document_files and document_parses.
+   The live new-reader attempt stops at the absent
+   mandates_housekeeping.document_metadata_fallback table. It cannot currently
+   complete metadata field conservation, series behavior, app-role fulltext
+   visibility/coverage, exact post-migration row equality, cycle RLS reads,
+   foreign-key behavior, or deployed API/upload write rejection checks.
+2. Every static file is inventoried, but all 3,064 actual-reader comparisons
+   remain blocked by those grants. No old accepted-loss list is used as a waiver.
+   One filename has distinct competing identities: UNEP_EA.5_RES.5.json maps to
+   UNEP/EA.5/RES.5 and historical UNEP_EA.5_RES.5. Ownership is marked ambiguous;
+   no issuer or normalized symbol is guessed. See the complete private inventory.
+3. 405 historical review references fall outside captured source/catalogue keys:
+   319 preserve manual metadata; 84 further external/non-ODS references need
+   catalogue/issuer checking; 2 numeric references preserve the literal '68/261 '
+   (trailing space), decision IDs 5e52e246-1ebe-41e3-af56-e60b4130a430 and
+   f9def3e9-fecc-461c-adc2-038d8b7ae1d5. They are not globally mapped to an issuer.
+   The complete per-ID/field/symbol enumeration is
+   .migration-baseline/review-identity-residue.json. Validity and catalogue
+   coverage remain separate questions. No review provenance was rewritten.
+4. 81 conflicting effective decisions across compatible generic review keys
+   remain human review items. The comparison spreadsheet exposes raw candidate
+   IDs/symbols/subprogrammes and the deterministic latest-key selection.
+5. This implementation intentionally leaves DOCX parsing/ingestion unimplemented,
+   as it was before; the worker now returns an honest not_implemented result.
+
+Full acceptance verdict: FAIL until the explicitly blocked live conservation,
+permission and cycle checks can be completed after human database application.
+Local implementation/review results are reported separately in the JSON report.
+
+Final local results
+PASS: pnpm typecheck, pnpm lint, pnpm build (Next.js 16.2.9 Turbopack),
+SQL parse-only validation, total offline checks, 10/10 disabled actions rejected
+without any database acquisition, and 5/5 worker controls. The initial build
+attempt failed because a task-created dependency symlink escaped Turbopack's
+root; a frozen worktree-local dependency install fixed it. The justified retry
+passed. The package lock was unchanged. No application server was started.
+
+A final two-part entity fixture exposed duplicated citation locations. Restricting
+each part's location list to the same source citation budget_part fixed the
+observed 4-vs-2 duplication while preserving section 3 and section 3/Add.1.
+The demonstrated failure justified a final build after that production-code fix.

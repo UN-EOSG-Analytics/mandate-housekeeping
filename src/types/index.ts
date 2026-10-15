@@ -1,5 +1,5 @@
 export interface CitationInfo {
-  id?: number;
+  id?: string;
   subprogramme_number?: number | null;
   origin_document: string;
   budget_part: string | null;
