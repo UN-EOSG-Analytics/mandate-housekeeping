@@ -1,6 +1,12 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code, Codex, and other AI agents when working with code in this repository.
+
+## Related work
+
+The data from this app eventually feeds the mandate registry (mandates.un.org, github.com/united-nations/mandates), though currently via an indirect path where the data is first published via DOCX documents, and these DOCX documents are then parsed in turn. This is because DGACM is also making minor changes in the workflow when working with the overall budget documents, which happens in DOCX and of which only a small part is covered by this tool, namely andate citations.
+
+It is also related to the UN Digital Lbrary mirror (github.com/united-nations/documents), from where it can fetch up-to-date metadata on documents via the Postgres DB.
 
 ## What this app does
 
