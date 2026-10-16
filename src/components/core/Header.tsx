@@ -1,5 +1,5 @@
 import { getBudgetVersion } from "@/lib/db/review-cycle";
-import { selectReviewCycle } from "@/features/mandates/actions/review-cycle";
+import { SUBMISSION_CYCLES } from "@/lib/db/budget-version";
 import Image from "next/image";
 import Link from "next/link";
 import { UserMenu } from "./UserMenu";
@@ -14,7 +14,7 @@ interface Props {
 }
 
 export const SITE_TITLE = "Mandate Housekeeping Platform";
-export const SITE_SUBTITLE = "PPB 2027 Mandate Submissions";
+export const SITE_SUBTITLE = "Mandate submissions";
 
 export async function Header({
   user,
@@ -53,9 +53,7 @@ export async function Header({
               </span>
             </div>
             <p className="text-xs text-gray-500">
-              {user && version === "ppb2027"
-                ? "PPB 2027 citations · read-only"
-                : SITE_SUBTITLE}
+              {user ? SUBMISSION_CYCLES[version].label : SITE_SUBTITLE}
             </p>
           </div>
         </Link>
@@ -93,27 +91,6 @@ export async function Header({
             >
               Sign In
             </Link>
-          )}
-          {user && (
-            <form
-              action={selectReviewCycle}
-              className="flex items-center gap-2 text-sm"
-            >
-              <label htmlFor="review-cycle">Budget cycle</label>
-              <select
-                key={version}
-                id="review-cycle"
-                name="version"
-                defaultValue={version}
-                className="rounded border p-1"
-              >
-                <option value="ppb2026">PPB 2026 review</option>
-                <option value="ppb2027">PPB 2027 · read-only</option>
-              </select>
-              <button type="submit" className="text-un-blue">
-                View
-              </button>
-            </form>
           )}
           {children}
         </div>

@@ -1,6 +1,10 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { cookies } from "next/headers";
-import { type BudgetVersion, KNOWN_BUDGET_VERSIONS } from "./budget-version";
+import {
+  type BudgetVersion,
+  KNOWN_BUDGET_VERSIONS,
+  DISABLED_REVIEW_MESSAGE,
+} from "./budget-version";
 
 const cycleContext = new AsyncLocalStorage<BudgetVersion>();
 
@@ -32,14 +36,12 @@ export function isReviewEnabled(version: BudgetVersion): boolean {
 
 export async function assertReviewEnabled(): Promise<void> {
   if (!isReviewEnabled(await getBudgetVersion())) {
-    throw new Error(
-      "PPB 2027 is read-only. Review is not enabled for this cycle.",
-    );
+    throw new Error(DISABLED_REVIEW_MESSAGE);
   }
 }
 
 export async function getReviewWriteError(): Promise<string | null> {
   return isReviewEnabled(await getBudgetVersion())
     ? null
-    : "PPB 2027 is read-only. Review is not enabled for this cycle.";
+    : DISABLED_REVIEW_MESSAGE;
 }

@@ -1,3 +1,4 @@
+import { SubmissionCycleControl } from "@/features/mandates/ui/SubmissionCycleControl";
 import { getBudgetVersion, isReviewEnabled } from "@/lib/db/review-cycle";
 import { EntityDetail } from "@/components/EntityDetail";
 import { FooterFootnote } from "@/components/core/FooterFootnote";
@@ -46,12 +47,13 @@ export default async function EntityPage({ params }: PageProps) {
 
   const match = collectEntityData(parts, entityCode);
   if (!match) notFound();
-  const {data: entityData, partName} = match;
+  const { data: entityData, partName } = match;
 
   return (
     <>
       <Header user={user} entities={entities} />
       <main className="mx-auto max-w-7xl px-3 py-8 sm:px-4">
+        <SubmissionCycleControl />
         <Link
           href="/"
           className="mb-6 inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-un-blue"

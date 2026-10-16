@@ -1,3 +1,4 @@
+import { SUBMISSION_CYCLES } from "@/lib/db/budget-version";
 import { getBudgetVersion } from "@/lib/db/review-cycle";
 import { NextResponse } from "next/server";
 import { exportEntityToDocx } from "@/features/mandates/services/export/export-docx";
@@ -47,7 +48,7 @@ export async function GET(
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": contentType,
-        "Content-Disposition": `attachment; filename="${timestamp}_${budgetVersion}_${entity}_legislative_mandates.${ext}"`,
+        "Content-Disposition": `attachment; filename="${timestamp}_submissions_ppb${SUBMISSION_CYCLES[budgetVersion].year}_${entity}_legislative_mandates.${ext}"`,
       },
     });
   } catch (error) {

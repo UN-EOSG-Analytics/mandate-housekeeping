@@ -1,3 +1,4 @@
+import { SubmissionCycleControl } from "@/features/mandates/ui/SubmissionCycleControl";
 import { redirect } from "next/navigation";
 import { Download } from "lucide-react";
 import { Header } from "@/components/core/Header";
@@ -29,6 +30,7 @@ export default async function AnalysisPage() {
     <>
       <Header user={user} entities={entities} />
       <main className="mx-auto w-full max-w-7xl px-3 py-8 sm:px-4">
+        <SubmissionCycleControl />
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-medium text-un-blue">Analytics</p>

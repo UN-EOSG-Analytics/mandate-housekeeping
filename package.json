@@ -32,6 +32,7 @@
     "@remotion/eslint-config": "^4.0.482",
     "@remotion/google-fonts": "^4.0.482",
     "@remotion/media-utils": "^4.0.482",
+    "@un-eosg/ui": "github:UN-EOSG-Analytics/ui#c050bb6e6bf18c4058bd481e738458558484b12f",
     "axios": "^1.18.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

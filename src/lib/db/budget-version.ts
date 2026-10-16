@@ -22,6 +22,14 @@ export const COMPARISON_BUDGET_VERSION = "ppb2027";
 export const KNOWN_BUDGET_VERSIONS = ["ppb2026", "ppb2027"] as const;
 export type BudgetVersion = (typeof KNOWN_BUDGET_VERSIONS)[number];
 
+/** The selected review's submission year differs from its source budget year. */
+export const SUBMISSION_CYCLES = {
+  ppb2026: { year: 2027, label: "Submissions for PPB 2027" },
+  ppb2027: { year: 2028, label: "Submissions for PPB 2028" },
+} as const;
+
+export const DISABLED_REVIEW_MESSAGE = `${SUBMISSION_CYCLES.ppb2027.label} are read-only. Review is not enabled for this cycle.`;
+
 /**
  * EXISTS predicate restricting a citation row (`alias.origin_document`) to a
  * specific budget version. Inline this with `AND` in WHERE clauses.

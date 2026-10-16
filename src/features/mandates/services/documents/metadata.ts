@@ -43,7 +43,11 @@ export async function fetchDocumentMetadata(
       SELECT d.*, upper(regexp_replace(d.ppb_full_document_symbol, '[[:space:]]', '', 'g')) AS normalized_key
       FROM public.unified_documents d
     ), catalogue AS MATERIALIZED (
-      SELECT d.*, count(*) OVER (PARTITION BY normalized_key) AS matches
+      SELECT d.*, count(*) OVER (PARTITION BY normalized_key) AS matches,
+        row_number() OVER (PARTITION BY ppb_full_document_symbol ORDER BY
+          is_ppb DESC, display_title NULLS LAST, ppb_description NULLS LAST,
+          ppb_year DESC NULLS LAST, ppb_body NULLS LAST, ppb_type NULLS LAST,
+          ppb_link NULLS LAST) AS exact_rank
       FROM catalogue_keys d
       WHERE normalized_key IN (SELECT normalized_key FROM requested)
     ), fallback AS MATERIALIZED (
@@ -60,7 +64,7 @@ export async function fetchDocumentMetadata(
         CASE WHEN u.is_catalog_pattern THEN 'https://docs.un.org/en/' || r.symbol END) AS link,
       (u.ppb_full_document_symbol IS NOT NULL OR COALESCE(f.has_db_metadata, false)) AS "hasDbMetadata"
     FROM requested r
-    LEFT JOIN catalogue u ON u.normalized_key = r.normalized_key
+    LEFT JOIN catalogue u ON u.normalized_key = r.normalized_key AND u.exact_rank = 1
       AND (u.ppb_full_document_symbol = r.symbol OR u.matches = 1)
     LEFT JOIN fallback f ON f.symbol_normalized = r.normalized_key
       AND (f.symbol = r.symbol OR f.matches = 1)

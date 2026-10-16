@@ -8,6 +8,8 @@
 
 /* Import Tailwind CSS v4 - provides all utility classes and base styles */
 @import "tailwindcss";
+@import "@un-eosg/ui/theme.css";
+@source "../../node_modules/@un-eosg/ui/components";
 @import "tw-animate-css";
 
 /**
@@ -44,7 +46,6 @@
   --color-foreground: var(--foreground);
 
   /* UN Custom Brand Colors */
-  --color-un-blue: #009edb;
   --color-trout: #495057;
   --color-shuttle-gray: #5a6c7d;
   --color-camouflage-green: #7d8471;

@@ -1,0 +1,35 @@
+diff --git a/components/hierarchical-single-select.tsx b/components/hierarchical-single-select.tsx
+index b0ffe1812d05659ebd1705cab3e61a676d5168a3..09819ec112c02ef6adca4804f55abe4538b554ce 100644
+--- a/components/hierarchical-single-select.tsx
++++ b/components/hierarchical-single-select.tsx
+@@ -182,10 +182,19 @@ export function HierarchicalSingleSelect({
+                         "flex w-full items-center gap-2 px-3 py-2 transition-colors cursor-pointer",
+                         isGroupSelected ? "bg-secondary" : "hover:bg-muted",
+                       )}
++                      role={hasChildren ? undefined : "button"}
++                      tabIndex={hasChildren ? undefined : 0}
++                      aria-pressed={hasChildren ? undefined : isGroupSelected}
++                      onKeyDown={(event) => {
++                        if (!hasChildren && (event.key === "Enter" || event.key === " ")) {
++                          event.preventDefault();
++                          selectItem(group.id);
++                        }
++                      }}
+                       onClick={() => selectItem(group.id)}
+                     >
+-                      {/* Expand/collapse chevron */}
+-                      <button
++                      {/* Flat choices have no empty focusable expand button. */}
++                      {hasChildren && <button
+                         type="button"
+                         className="flex-shrink-0 w-4"
+                         onClick={(e) => {
+@@ -201,7 +210,7 @@ export function HierarchicalSingleSelect({
+                             )}
+                           />
+                         )}
+-                      </button>
++                      </button>}
+ 
+                       {/* Color indicator */}
+                       {group.color && (

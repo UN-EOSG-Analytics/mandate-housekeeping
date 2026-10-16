@@ -1,3 +1,4 @@
+import { SubmissionCycleControl } from "@/features/mandates/ui/SubmissionCycleControl";
 import { EntityOverview } from "@/components/EntityOverview";
 import { FooterFootnote } from "@/components/core/FooterFootnote";
 import { Header } from "@/components/core/Header";
@@ -36,6 +37,7 @@ export default async function Home() {
     <>
       <Header user={user} entities={entities} />
       <main className="mx-auto w-full max-w-7xl px-3 py-8 sm:px-4">
+        <SubmissionCycleControl />
         <EntityOverview parts={parts} userEntity={user?.entity} />
       </main>
       <FooterFootnote />

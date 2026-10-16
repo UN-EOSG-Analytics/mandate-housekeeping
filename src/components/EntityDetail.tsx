@@ -1,5 +1,7 @@
 "use client";
 
+import { SUBMISSION_CYCLES } from "@/lib/db/budget-version";
+
 import {
   Dialog,
   DialogContent,
@@ -2922,8 +2924,7 @@ export function EntityDetail({
 
       {cycleReadOnly && (
         <p className="rounded border border-blue-200 bg-blue-50 p-3 text-sm">
-          Actual imported PPB 2027 citations. Review is read-only; these are
-          separate from PPB 2026 after decisions.
+          {SUBMISSION_CYCLES.ppb2027.label} are read-only.
         </p>
       )}
       {/* Read-only notice */}

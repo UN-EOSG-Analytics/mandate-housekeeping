@@ -1,3 +1,4 @@
+import { SUBMISSION_CYCLES } from "@/lib/db/budget-version";
 import { getBudgetVersion } from "@/lib/db/review-cycle";
 import { NextResponse } from "next/server";
 import {
@@ -43,7 +44,7 @@ export async function GET(
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": contentType,
-        "Content-Disposition": `attachment; filename="${timestamp}_${budgetVersion}_all_legislative_mandates.${format}"`,
+        "Content-Disposition": `attachment; filename="${timestamp}_submissions_ppb${SUBMISSION_CYCLES[budgetVersion].year}_all_legislative_mandates.${format}"`,
       },
     });
   } catch (error) {
