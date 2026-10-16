@@ -35,7 +35,22 @@ export async function fetchDocumentMetadata(
   if (!symbols.length) return {};
   const rows = await query<ResolvedMetadata & { symbol: string }>(
     `
-    WITH requested AS (SELECT DISTINCT unnest($1::text[]) AS symbol)
+    WITH requested AS MATERIALIZED (
+      SELECT DISTINCT symbol, upper(regexp_replace(symbol, '[[:space:]]', '', 'g')) AS normalized_key
+      FROM unnest($1::text[]) AS symbol
+    ), catalogue_keys AS MATERIALIZED (
+      -- Normalize once for the entire catalogue, never once per requested symbol.
+      SELECT d.*, upper(regexp_replace(d.ppb_full_document_symbol, '[[:space:]]', '', 'g')) AS normalized_key
+      FROM public.unified_documents d
+    ), catalogue AS MATERIALIZED (
+      SELECT d.*, count(*) OVER (PARTITION BY normalized_key) AS matches
+      FROM catalogue_keys d
+      WHERE normalized_key IN (SELECT normalized_key FROM requested)
+    ), fallback AS MATERIALIZED (
+      SELECT d.*, count(*) OVER (PARTITION BY symbol_normalized) AS matches
+      FROM mandates_housekeeping.document_metadata_fallback d
+      WHERE symbol_normalized IN (SELECT normalized_key FROM requested)
+    )
     SELECT r.symbol,
       COALESCE(NULLIF(trim(u.display_title), ''), NULLIF(trim(u.ppb_description), ''), f.title) AS title,
       COALESCE(u.ppb_year, f.year) AS year,
@@ -45,27 +60,10 @@ export async function fetchDocumentMetadata(
         CASE WHEN u.is_catalog_pattern THEN 'https://docs.un.org/en/' || r.symbol END) AS link,
       (u.ppb_full_document_symbol IS NOT NULL OR COALESCE(f.has_db_metadata, false)) AS "hasDbMetadata"
     FROM requested r
-    LEFT JOIN LATERAL (
-      SELECT candidates.* FROM (
-        SELECT d.*, count(*) OVER () AS matches
-        FROM public.unified_documents d
-        WHERE upper(regexp_replace(d.ppb_full_document_symbol, '[[:space:]]', '', 'g')) =
-              upper(regexp_replace(r.symbol, '[[:space:]]', '', 'g'))
-      ) candidates
-      WHERE candidates.ppb_full_document_symbol = r.symbol OR candidates.matches = 1
-      ORDER BY (candidates.ppb_full_document_symbol = r.symbol) DESC
-      LIMIT 1
-    ) u ON true
-    LEFT JOIN LATERAL (
-      SELECT candidates.* FROM (
-        SELECT d.*, count(*) OVER () AS matches
-        FROM mandates_housekeeping.document_metadata_fallback d
-        WHERE d.symbol_normalized = upper(regexp_replace(r.symbol, '[[:space:]]', '', 'g'))
-      ) candidates
-      WHERE candidates.symbol = r.symbol OR candidates.matches = 1
-      ORDER BY (candidates.symbol = r.symbol) DESC
-      LIMIT 1
-    ) f ON true
+    LEFT JOIN catalogue u ON u.normalized_key = r.normalized_key
+      AND (u.ppb_full_document_symbol = r.symbol OR u.matches = 1)
+    LEFT JOIN fallback f ON f.symbol_normalized = r.normalized_key
+      AND (f.symbol = r.symbol OR f.matches = 1)
   `,
     [symbols],
   );
