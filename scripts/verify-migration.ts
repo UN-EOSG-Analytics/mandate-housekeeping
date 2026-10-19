@@ -276,11 +276,11 @@ async function main() {
           )
         ) {
           assert(
-            body.includes("getReviewWriteError()"),
+            body.includes("getReviewWriteError(expectedBudgetVersion)"),
             `Ungated action: ${node.name?.text}`,
           );
           assert(
-            body.indexOf("getReviewWriteError()") <
+            body.indexOf("getReviewWriteError(expectedBudgetVersion)") <
               body.indexOf("getCurrentUser()"),
             "Gate must precede all side effects",
           );
@@ -497,7 +497,8 @@ async function main() {
   // every entry point must reject before auth queries or a mutation can run.
   process.env.DATABASE_URL ||=
     "postgresql://offline.invalid/disabled_review_check?sslmode=require";
-  const { withBudgetVersion } = await import("../src/lib/db/review-cycle");
+  const { withBudgetVersion, getReviewWriteError, getBudgetVersion } =
+    await import("../src/lib/db/review-cycle");
   const { pool } = await import("../src/lib/db/db");
   const decisions = await import("../src/features/mandates/actions/decisions");
   const comments = await import("../src/features/mandates/actions/comments");
@@ -580,12 +581,26 @@ async function main() {
   ];
   try {
     for (const call of calls) {
-      const result = await withBudgetVersion("ppb2027", call);
+      const result = await withBudgetVersion("ppb2026", call);
       assert(
         !result.success && /read-only/.test(result.error),
         "Disabled-cycle action was accepted",
       );
     }
+    // Old bundles omit the originating cycle. They must never write into the
+    // newly active review after a cookie reset or an existing-tab cycle switch.
+    for (const call of calls) {
+      const result = await withBudgetVersion("ppb2027", call);
+      assert(
+        !result.success && /Reload this page/.test(result.error),
+        "Stale-page action was accepted",
+      );
+    }
+    await withBudgetVersion("ppb2027", async () => {
+      assert.equal(await getBudgetVersion(), "ppb2027");
+      assert.equal(await getReviewWriteError("ppb2027"), null);
+      assert.match((await getReviewWriteError("ppb2026"))!, /Reload this page/);
+    });
   } finally {
     pool.connect = originalConnect;
     await pool.end();
@@ -611,6 +626,7 @@ async function main() {
     negativeControls,
     gatedActions,
     disabledCycleActionsRejectedWithoutDatabase: calls.length,
+    stalePageActionsRejectedWithoutDatabase: calls.length,
     unresolvedReviewKeys: unresolvedReviewKeys.length,
     ambiguousNumericHistoryReferences: unresolvedReviewKeys.filter(
       (r) => r.classification === "ambiguous_numeric_issuer_preserved",

@@ -1,5 +1,8 @@
 import { getBudgetVersion } from "@/lib/db/review-cycle";
-import { SUBMISSION_CYCLES } from "@/lib/db/budget-version";
+import {
+  CURRENT_BUDGET_VERSION,
+  SUBMISSION_CYCLES,
+} from "@/lib/db/budget-version";
 import Image from "next/image";
 import Link from "next/link";
 import { UserMenu } from "./UserMenu";
@@ -23,7 +26,7 @@ export async function Header({
   maxWidth = "7xl",
   hideAbout = false,
 }: Props) {
-  const version = user ? await getBudgetVersion() : "ppb2026";
+  const version = user ? await getBudgetVersion() : CURRENT_BUDGET_VERSION;
   const isLoggedIn = !!user;
   const widthClass = maxWidth === "6xl" ? "max-w-6xl" : "max-w-7xl";
 

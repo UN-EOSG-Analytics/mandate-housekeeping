@@ -31,12 +31,14 @@ export async function POST(req: NextRequest) {
     }
 
     const budgetVersion = await getBudgetVersion();
-    const cycleError = await getReviewWriteError();
+    const formData = await req.formData();
+    const cycleError = await getReviewWriteError(
+      formData.get("budgetVersion")?.toString(),
+    );
     if (cycleError)
       return NextResponse.json({ error: cycleError }, { status: 403 });
 
-    // Parse form data
-    const formData = await req.formData();
+    // Parse submission details
     const file = formData.get("file") as File | null;
     const entity = formData.get("entity") as string | null;
     const subprogramme = formData.get("subprogramme") as string | null;

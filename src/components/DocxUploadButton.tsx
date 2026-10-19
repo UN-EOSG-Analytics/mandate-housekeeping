@@ -1,5 +1,7 @@
 "use client";
 
+import { CURRENT_BUDGET_VERSION } from "@/lib/db/budget-version";
+
 import {
   Popover,
   PopoverContent,
@@ -107,6 +109,7 @@ export function DocxUploadButton({ entity, subprogramme }: Props) {
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("budgetVersion", CURRENT_BUDGET_VERSION);
       formData.append("entity", entity);
       if (subprogramme) {
         formData.append("subprogramme", subprogramme);

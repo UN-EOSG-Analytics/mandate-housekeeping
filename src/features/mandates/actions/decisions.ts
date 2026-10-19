@@ -297,15 +297,18 @@ export async function getDocumentDecisionsAction(
 /**
  * Create a new mandate decision
  */
-export async function createDecisionAction(params: {
-  documentSymbol: string;
-  entity: string;
-  subprogramme: string | null;
-  decision: string;
-  newSymbol?: string | null;
-  manualMetadata?: ManualMetadata | null;
-}): Promise<ActionResult<MandateDecision>> {
-  const cycleError = await getReviewWriteError();
+export async function createDecisionAction(
+  params: {
+    documentSymbol: string;
+    entity: string;
+    subprogramme: string | null;
+    decision: string;
+    newSymbol?: string | null;
+    manualMetadata?: ManualMetadata | null;
+  },
+  expectedBudgetVersion?: string,
+): Promise<ActionResult<MandateDecision>> {
+  const cycleError = await getReviewWriteError(expectedBudgetVersion);
   if (cycleError) return { success: false, error: cycleError };
 
   const user = await getCurrentUser();
@@ -416,6 +419,7 @@ export async function createDecisionAction(params: {
 export async function approveDecisionAction(
   decisionId: string,
   approved: boolean,
+  expectedBudgetVersion?: string,
 ): Promise<
   ActionResult<{
     id: string;
@@ -423,7 +427,7 @@ export async function approveDecisionAction(
     approvedAt: string | null;
   }>
 > {
-  const cycleError = await getReviewWriteError();
+  const cycleError = await getReviewWriteError(expectedBudgetVersion);
   if (cycleError) return { success: false, error: cycleError };
 
   const user = await getCurrentUser();
@@ -476,12 +480,15 @@ export async function approveDecisionAction(
 /**
  * Update the reason for an existing decision
  */
-export async function updateDecisionReasonAction(params: {
-  decisionId: string;
-  decisionReason: string | null;
-  otherReason: string | null;
-}): Promise<ActionResult<MandateDecision>> {
-  const cycleError = await getReviewWriteError();
+export async function updateDecisionReasonAction(
+  params: {
+    decisionId: string;
+    decisionReason: string | null;
+    otherReason: string | null;
+  },
+  expectedBudgetVersion?: string,
+): Promise<ActionResult<MandateDecision>> {
+  const cycleError = await getReviewWriteError(expectedBudgetVersion);
   if (cycleError) return { success: false, error: cycleError };
 
   const user = await getCurrentUser();
@@ -571,10 +578,11 @@ export async function updateDecisionReasonAction(params: {
  */
 export async function clearAllEntityDecisionsAction(
   entity: string,
+  expectedBudgetVersion?: string,
 ): Promise<
   ActionResult<{ deletedDecisions: number; deletedComments: number }>
 > {
-  const cycleError = await getReviewWriteError();
+  const cycleError = await getReviewWriteError(expectedBudgetVersion);
   if (cycleError) return { success: false, error: cycleError };
 
   const user = await getCurrentUser();

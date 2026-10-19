@@ -80,8 +80,9 @@ export async function getReviewModeStatusAction(
  */
 export async function startReviewModeAction(
   entity: string,
+  expectedBudgetVersion?: string,
 ): Promise<ActionResult<ReviewModeStatus>> {
-  const cycleError = await getReviewWriteError();
+  const cycleError = await getReviewWriteError(expectedBudgetVersion);
   if (cycleError) return { success: false, error: cycleError };
 
   const user = await getCurrentUser();
@@ -147,8 +148,9 @@ export async function startReviewModeAction(
  */
 export async function endReviewModeAction(
   entity: string,
+  expectedBudgetVersion?: string,
 ): Promise<ActionResult<ReviewModeStatus>> {
-  const cycleError = await getReviewWriteError();
+  const cycleError = await getReviewWriteError(expectedBudgetVersion);
   if (cycleError) return { success: false, error: cycleError };
 
   const user = await getCurrentUser();

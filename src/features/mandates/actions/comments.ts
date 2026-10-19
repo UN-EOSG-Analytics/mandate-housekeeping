@@ -49,13 +49,16 @@ const toComment = (row: CommentRow): MandateComment => ({
  * Permissions: Users can comment on their own entity, reviewers can comment on any entity
  * Note: Comments allowed during review mode (unlike decisions)
  */
-export async function createCommentAction(params: {
-  documentSymbol: string;
-  entity: string;
-  subprogramme: string | null;
-  comment: string;
-}): Promise<ActionResult<MandateComment>> {
-  const cycleError = await getReviewWriteError();
+export async function createCommentAction(
+  params: {
+    documentSymbol: string;
+    entity: string;
+    subprogramme: string | null;
+    comment: string;
+  },
+  expectedBudgetVersion?: string,
+): Promise<ActionResult<MandateComment>> {
+  const cycleError = await getReviewWriteError(expectedBudgetVersion);
   if (cycleError) return { success: false, error: cycleError };
 
   const user = await getCurrentUser();
@@ -114,8 +117,9 @@ export async function createCommentAction(params: {
 export async function resolveCommentAction(
   commentId: string,
   resolved: boolean,
+  expectedBudgetVersion?: string,
 ): Promise<ActionResult<MandateComment>> {
-  const cycleError = await getReviewWriteError();
+  const cycleError = await getReviewWriteError(expectedBudgetVersion);
   if (cycleError) return { success: false, error: cycleError };
 
   const user = await getCurrentUser();

@@ -1,6 +1,8 @@
 // Modal is client-side
 "use client";
 
+import { CURRENT_BUDGET_VERSION } from "@/lib/db/budget-version";
+
 import React from "react";
 import {
   isContentElement,
@@ -1484,6 +1486,7 @@ export function DocumentSymbol({
                                                         ? otherReason
                                                         : null,
                                                   },
+                                                  CURRENT_BUDGET_VERSION,
                                                 );
                                               if (
                                                 result.success &&
@@ -2003,6 +2006,7 @@ export function DocumentSymbol({
                                             await resolveCommentAction(
                                               comment.id,
                                               true,
+                                              CURRENT_BUDGET_VERSION,
                                             );
                                           if (result.success && result.data) {
                                             // Update the comment in local state
@@ -2038,6 +2042,7 @@ export function DocumentSymbol({
                                               await resolveCommentAction(
                                                 comment.id,
                                                 false,
+                                                CURRENT_BUDGET_VERSION,
                                               );
                                             if (result.success && result.data) {
                                               setAllComments((prev) =>

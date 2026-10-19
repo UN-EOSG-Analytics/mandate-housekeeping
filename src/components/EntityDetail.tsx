@@ -1,6 +1,9 @@
 "use client";
 
-import { SUBMISSION_CYCLES } from "@/lib/db/budget-version";
+import {
+  CURRENT_BUDGET_VERSION,
+  DISABLED_REVIEW_MESSAGE,
+} from "@/lib/db/budget-version";
 
 import {
   Dialog,
@@ -2146,13 +2149,16 @@ export function EntityDetail({
         },
       }));
 
-      const result = await createDecisionAction({
-        documentSymbol: symbol,
-        entity,
-        subprogramme,
-        decision,
-        newSymbol,
-      });
+      const result = await createDecisionAction(
+        {
+          documentSymbol: symbol,
+          entity,
+          subprogramme,
+          decision,
+          newSymbol,
+        },
+        CURRENT_BUDGET_VERSION,
+      );
       if (result.success && result.data) {
         const updated = result.data;
         setStates((prev) => ({
@@ -2234,11 +2240,14 @@ export function EntityDetail({
         },
       }));
 
-      const result = await updateDecisionReasonAction({
-        decisionId,
-        decisionReason,
-        otherReason: decisionReason === "other" ? otherReason : null,
-      });
+      const result = await updateDecisionReasonAction(
+        {
+          decisionId,
+          decisionReason,
+          otherReason: decisionReason === "other" ? otherReason : null,
+        },
+        CURRENT_BUDGET_VERSION,
+      );
 
       if (result.success && result.data) {
         const updated = result.data;
@@ -2326,14 +2335,17 @@ export function EntityDetail({
         },
       }));
 
-      const result = await createDecisionAction({
-        documentSymbol: symbol,
-        entity,
-        subprogramme,
-        decision: "update",
-        newSymbol,
-        manualMetadata,
-      });
+      const result = await createDecisionAction(
+        {
+          documentSymbol: symbol,
+          entity,
+          subprogramme,
+          decision: "update",
+          newSymbol,
+          manualMetadata,
+        },
+        CURRENT_BUDGET_VERSION,
+      );
       if (result.success && result.data) {
         const updated = result.data;
         setStates((prev) => ({
@@ -2424,13 +2436,16 @@ export function EntityDetail({
         },
       }));
 
-      const result = await createDecisionAction({
-        documentSymbol: data.symbol,
-        entity,
-        subprogramme,
-        decision: "add",
-        manualMetadata,
-      });
+      const result = await createDecisionAction(
+        {
+          documentSymbol: data.symbol,
+          entity,
+          subprogramme,
+          decision: "add",
+          manualMetadata,
+        },
+        CURRENT_BUDGET_VERSION,
+      );
       if (result.success && result.data) {
         const updated = result.data;
         setStates((prev) => ({
@@ -2533,14 +2548,17 @@ export function EntityDetail({
       }
 
       // Save to server
-      const result = await createDecisionAction({
-        documentSymbol: symbol,
-        entity,
-        subprogramme,
-        decision: currentDecision.decision,
-        newSymbol: currentDecision.newSymbol || undefined,
-        manualMetadata,
-      });
+      const result = await createDecisionAction(
+        {
+          documentSymbol: symbol,
+          entity,
+          subprogramme,
+          decision: currentDecision.decision,
+          newSymbol: currentDecision.newSymbol || undefined,
+          manualMetadata,
+        },
+        CURRENT_BUDGET_VERSION,
+      );
 
       if (result.success && result.data) {
         const updated = result.data;
@@ -2613,12 +2631,15 @@ export function EntityDetail({
         [symbol]: (prev[symbol] || 0) + 1,
       }));
 
-      const result = await createCommentAction({
-        documentSymbol: symbol,
-        entity,
-        subprogramme,
-        comment,
-      });
+      const result = await createCommentAction(
+        {
+          documentSymbol: symbol,
+          entity,
+          subprogramme,
+          comment,
+        },
+        CURRENT_BUDGET_VERSION,
+      );
       if (result.success && result.data) {
         const added = result.data;
         setStates((prev) => ({
@@ -2639,7 +2660,7 @@ export function EntityDetail({
   );
 
   const handleStartReview = useCallback(async () => {
-    const result = await startReviewModeAction(entity);
+    const result = await startReviewModeAction(entity, CURRENT_BUDGET_VERSION);
     if (result.success && result.data) {
       setIsUnderReview(result.data.isUnderReview);
       setReviewStartedBy(result.data.startedBy);
@@ -2652,7 +2673,7 @@ export function EntityDetail({
   }, [entity, showError]);
 
   const handleEndReview = useCallback(async () => {
-    const result = await endReviewModeAction(entity);
+    const result = await endReviewModeAction(entity, CURRENT_BUDGET_VERSION);
     if (result.success && result.data) {
       setIsUnderReview(result.data.isUnderReview);
       setReviewStartedBy(null);
@@ -2664,7 +2685,10 @@ export function EntityDetail({
   }, [entity, showError]);
 
   const handleClearAll = useCallback(async () => {
-    const result = await clearAllEntityDecisionsAction(entity);
+    const result = await clearAllEntityDecisionsAction(
+      entity,
+      CURRENT_BUDGET_VERSION,
+    );
     if (result.success && result.data) {
       // Clear all local state
       setStates({});
@@ -2711,7 +2735,7 @@ export function EntityDetail({
         return newStates;
       });
 
-      await approveDecisionAction(decisionId, approved);
+      await approveDecisionAction(decisionId, approved, CURRENT_BUDGET_VERSION);
     },
     [userEmail],
   );
@@ -2722,12 +2746,15 @@ export function EntityDetail({
       if (!FEATURE_FLAGS.reviewChangeIndicator) return; // Feature disabled
       if (!reviewSessionId) return;
 
-      const result = await acceptReviewChangeAction({
-        entity,
-        documentSymbol: symbol,
-        subprogramme,
-        reviewSessionId,
-      });
+      const result = await acceptReviewChangeAction(
+        {
+          entity,
+          documentSymbol: symbol,
+          subprogramme,
+          reviewSessionId,
+        },
+        CURRENT_BUDGET_VERSION,
+      );
 
       if (result.success && result.data) {
         const key = `${symbol}:${subprogramme || ""}`;
@@ -2751,12 +2778,15 @@ export function EntityDetail({
       if (!FEATURE_FLAGS.reviewChangeIndicator) return; // Feature disabled
       if (!reviewSessionId) return;
 
-      const result = await revertReviewChangeAction({
-        entity,
-        documentSymbol: symbol,
-        subprogramme,
-        reviewSessionId,
-      });
+      const result = await revertReviewChangeAction(
+        {
+          entity,
+          documentSymbol: symbol,
+          subprogramme,
+          reviewSessionId,
+        },
+        CURRENT_BUDGET_VERSION,
+      );
 
       if (result.success && result.data) {
         const key = `${symbol}:${subprogramme || ""}`;
@@ -2924,7 +2954,7 @@ export function EntityDetail({
 
       {cycleReadOnly && (
         <p className="rounded border border-blue-200 bg-blue-50 p-3 text-sm">
-          {SUBMISSION_CYCLES.ppb2027.label} are read-only.
+          {DISABLED_REVIEW_MESSAGE}
         </p>
       )}
       {/* Read-only notice */}

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import {
   type BudgetVersion,
   KNOWN_BUDGET_VERSIONS,
+  CURRENT_BUDGET_VERSION,
   DISABLED_REVIEW_MESSAGE,
 } from "./budget-version";
 
@@ -13,7 +14,7 @@ export function withBudgetVersion<T>(version: BudgetVersion, fn: () => T): T {
   return cycleContext.run(parseBudgetVersion(version), fn);
 }
 
-export const REVIEW_CYCLE_COOKIE = "review_budget_version";
+export const REVIEW_CYCLE_COOKIE = "review_budget_version_2028";
 
 export function parseBudgetVersion(value: string): BudgetVersion {
   if (!KNOWN_BUDGET_VERSIONS.includes(value as BudgetVersion)) {
@@ -22,16 +23,16 @@ export function parseBudgetVersion(value: string): BudgetVersion {
   return value as BudgetVersion;
 }
 
-/** A missing selection always means the original review, never the registry default. */
+/** Start on the active review; an explicit selection can open the archived cycle. */
 export async function getBudgetVersion(): Promise<BudgetVersion> {
   const explicit = cycleContext.getStore();
   if (explicit) return explicit;
   const value = (await cookies()).get(REVIEW_CYCLE_COOKIE)?.value;
-  return value ? parseBudgetVersion(value) : "ppb2026";
+  return value ? parseBudgetVersion(value) : CURRENT_BUDGET_VERSION;
 }
 
 export function isReviewEnabled(version: BudgetVersion): boolean {
-  return version === "ppb2026";
+  return version === CURRENT_BUDGET_VERSION;
 }
 
 export async function assertReviewEnabled(): Promise<void> {
@@ -40,8 +41,14 @@ export async function assertReviewEnabled(): Promise<void> {
   }
 }
 
-export async function getReviewWriteError(): Promise<string | null> {
-  return isReviewEnabled(await getBudgetVersion())
-    ? null
-    : DISABLED_REVIEW_MESSAGE;
+/** Reject old bundles and pages whose review cycle differs from the request. */
+export async function getReviewWriteError(
+  expectedBudgetVersion: string | null | undefined,
+): Promise<string | null> {
+  const selected = await getBudgetVersion();
+  if (!isReviewEnabled(selected)) return DISABLED_REVIEW_MESSAGE;
+  if (expectedBudgetVersion !== selected) {
+    return "The submission cycle has changed. Reload this page before saving.";
+  }
+  return null;
 }

@@ -3,20 +3,19 @@
  *
  * The shared ppb2026.source_document_citations table holds citations for
  * multiple budget cycles (ppb2026 = PPB 2026 + PKM 2025/26, ppb2027 = PPB
- * 2027 + PKM 2026/27). This housekeeping app reviews the ppb2026 cycle to
- * produce input for ppb2027, so every citation query must scope to ppb2026
- * — otherwise PPB 2027 rows leak into the UI (e.g. each entity appears
- * twice in the budget-part tree under "Other").
+ * 2027 + PKM 2026/27). The active review uses ppb2027 to produce
+ * submissions for PPB 2028. Every citation query must scope to the selected
+ * cycle so citations from different reviews do not leak into the UI.
  *
  * Membership: a citation belongs to version V iff its origin_document
  * matches the regex of any budget_documents row that has a
  * budget_document_versions row for version V.
  */
 
-export const CURRENT_BUDGET_VERSION = "ppb2026";
+export const CURRENT_BUDGET_VERSION = "ppb2027";
 
-/** The next/comparison cycle whose fascicle is loaded into the same tables. */
-export const COMPARISON_BUDGET_VERSION = "ppb2027";
+/** The previous cycle available for read-only comparison. */
+export const COMPARISON_BUDGET_VERSION = "ppb2026";
 
 /** All budget versions known to live in ppb2026.source_document_citations. */
 export const KNOWN_BUDGET_VERSIONS = ["ppb2026", "ppb2027"] as const;
@@ -28,7 +27,7 @@ export const SUBMISSION_CYCLES = {
   ppb2027: { year: 2028, label: "Submissions for PPB 2028" },
 } as const;
 
-export const DISABLED_REVIEW_MESSAGE = `${SUBMISSION_CYCLES.ppb2027.label} are read-only. Review is not enabled for this cycle.`;
+export const DISABLED_REVIEW_MESSAGE = `${SUBMISSION_CYCLES[COMPARISON_BUDGET_VERSION].label} are read-only. Review is not enabled for this cycle.`;
 
 /**
  * EXISTS predicate restricting a citation row (`alias.origin_document`) to a
@@ -55,7 +54,7 @@ export function versionPredicateSqlFor(
 export function versionPredicateSql(citationAlias: string): string {
   return membershipPredicate(
     citationAlias,
-    "COALESCE(NULLIF(current_setting('app.budget_version', true), ''), 'ppb2026')",
+    `COALESCE(NULLIF(current_setting('app.budget_version', true), ''), '${CURRENT_BUDGET_VERSION}')`,
   );
 }
 

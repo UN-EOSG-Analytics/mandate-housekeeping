@@ -10,7 +10,7 @@ It is also related to the UN Digital Lbrary mirror (github.com/united-nations/do
 
 ## What this app does
 
-Internal UN tool for reviewing **mandates** in the Programme Budget. Entity reviewers log in, inspect the document citations ("mandates") backing each budget part of their entity, and record housekeeping decisions (keep / remove / etc.) plus comments. Decisions feed the next budget cycle. The current review cycle is **ppb2026** (producing input for PPB 2027).
+Internal UN tool for reviewing **mandates** in the Programme Budget. Entity reviewers log in, inspect the document citations ("mandates") backing each budget part of their entity, and record housekeeping decisions (keep / remove / etc.) plus comments. Decisions feed the next budget cycle. The active review cycle is **ppb2027** (submissions for PPB 2028). The previous **ppb2026** cycle (submissions for PPB 2027) is read-only.
 
 ## Commands
 
@@ -58,7 +58,7 @@ psql "$DATABASE_URL_CLAUDE" -c "..."
 
 ### Budget version scoping (critical gotcha)
 
-`ppb2026.source_document_citations` holds citations for **multiple budget cycles**. Every citation query **must** be scoped to the current version or rows from other cycles leak into the UI (e.g. entities appear twice). Always inline the predicate from [src/lib/db/budget-version.ts](src/lib/db/budget-version.ts) (`versionPredicateSql(alias)`, `CURRENT_BUDGET_VERSION`) into citation `WHERE` clauses.
+`ppb2026.source_document_citations` holds citations for **multiple budget cycles**. Every citation query **must** be scoped to the selected version or rows from other cycles leak into the UI (e.g. entities appear twice). Always inline the predicate from [src/lib/db/budget-version.ts](src/lib/db/budget-version.ts) (`versionPredicateSql(alias)`, `CURRENT_BUDGET_VERSION`) into citation `WHERE` clauses. `CURRENT_BUDGET_VERSION` is the default active cycle (`ppb2027`); the selected cycle may differ.
 
 ### Code organization — feature-first under `src/features/`
 

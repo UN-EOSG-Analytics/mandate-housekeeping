@@ -312,14 +312,17 @@ function detectChange(
 /**
  * Accept a review change (mark it as acknowledged)
  */
-export async function acceptReviewChangeAction(params: {
-  entity: string;
-  documentSymbol: string;
-  subprogramme: string | null;
-  reviewSessionId: string;
-  comment?: string;
-}): Promise<ActionResult<ReviewChangeResponse>> {
-  const cycleError = await getReviewWriteError();
+export async function acceptReviewChangeAction(
+  params: {
+    entity: string;
+    documentSymbol: string;
+    subprogramme: string | null;
+    reviewSessionId: string;
+    comment?: string;
+  },
+  expectedBudgetVersion?: string,
+): Promise<ActionResult<ReviewChangeResponse>> {
+  const cycleError = await getReviewWriteError(expectedBudgetVersion);
   if (cycleError) return { success: false, error: cycleError };
 
   const user = await getCurrentUser();
@@ -365,14 +368,17 @@ export async function acceptReviewChangeAction(params: {
 /**
  * Revert a review change (restore the baseline decision)
  */
-export async function revertReviewChangeAction(params: {
-  entity: string;
-  documentSymbol: string;
-  subprogramme: string | null;
-  reviewSessionId: string;
-  comment?: string;
-}): Promise<ActionResult<ReviewChangeResponse>> {
-  const cycleError = await getReviewWriteError();
+export async function revertReviewChangeAction(
+  params: {
+    entity: string;
+    documentSymbol: string;
+    subprogramme: string | null;
+    reviewSessionId: string;
+    comment?: string;
+  },
+  expectedBudgetVersion?: string,
+): Promise<ActionResult<ReviewChangeResponse>> {
+  const cycleError = await getReviewWriteError(expectedBudgetVersion);
   if (cycleError) return { success: false, error: cycleError };
 
   const user = await getCurrentUser();

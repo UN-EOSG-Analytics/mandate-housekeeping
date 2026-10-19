@@ -4,11 +4,15 @@ import { useState, useTransition } from "react";
 import { unstable_rethrow, usePathname } from "next/navigation";
 import { HierarchicalSingleSelect } from "@un-eosg/ui/components/hierarchical-single-select";
 import { selectReviewCycle } from "../actions/review-cycle";
-import { SUBMISSION_CYCLES, type BudgetVersion } from "@/lib/db/budget-version";
+import {
+  SUBMISSION_CYCLES,
+  CURRENT_BUDGET_VERSION,
+  type BudgetVersion,
+} from "@/lib/db/budget-version";
 
 const options = Object.entries(SUBMISSION_CYCLES).map(([id, cycle]) => ({
   id,
-  label: cycle.label + (id === "ppb2027" ? " · read-only" : ""),
+  label: cycle.label + (id !== CURRENT_BUDGET_VERSION ? " · read-only" : ""),
   children: [],
 }));
 
