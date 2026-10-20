@@ -14,10 +14,9 @@
 
 import { getReviewWriteError } from "@/lib/db/review-cycle";
 import { getCurrentUser } from "@/features/auth/auth";
-import { query } from "@/lib/db/db";
+import { query, transaction } from "@/lib/db/db";
 import type { MandateComment, MandateDecision, MandateState } from "@/types";
 import { revalidatePath } from "next/cache";
-import { checkReviewModeBlock } from "./review-mode";
 
 // Return type for actions
 type ActionResult<T = void> =
@@ -313,81 +312,77 @@ export async function createDecisionAction(
   const cycleError = await getReviewWriteError(expectedBudgetVersion);
   if (cycleError) return { success: false, error: cycleError };
 
-  const user = await getCurrentUser();
-  if (!user) {
-    return { success: false, error: "unauthorized" };
-  }
+  // Auth, review status and the event write share one cycle-scoped transaction.
+  // The returned event updates the caller; polling supplies fresh activity.
+  return transaction<ActionResult<MandateDecision>>(async (tx) => {
+    const user = await getCurrentUser(tx);
+    if (!user) {
+      return { success: false, error: "unauthorized" };
+    }
 
-  const {
-    documentSymbol,
-    entity,
-    subprogramme,
-    decision,
-    newSymbol,
-    manualMetadata,
-  } = params;
+    const {
+      documentSymbol,
+      entity,
+      subprogramme,
+      decision,
+      newSymbol,
+      manualMetadata,
+    } = params;
 
-  if (
-    [documentSymbol, newSymbol].some(
-      (symbol) => symbol && /^\d+\/\d+$/.test(symbol.trim()),
-    )
-  ) {
-    return {
-      success: false,
-      error:
-        "An issuer-scoped document identity is required; a reference number alone is ambiguous",
-    };
-  }
-  if (!documentSymbol || !entity || !decision) {
-    return { success: false, error: "invalid request" };
-  }
+    if (
+      [documentSymbol, newSymbol].some(
+        (symbol) => symbol && /^\d+\/\d+$/.test(symbol.trim()),
+      )
+    ) {
+      return {
+        success: false,
+        error:
+          "An issuer-scoped document identity is required; a reference number alone is ambiguous",
+      };
+    }
+    if (!documentSymbol || !entity || !decision) {
+      return { success: false, error: "invalid request" };
+    }
 
-  // Reviewers (DMSPC entity + in allowed_reviewers list) can edit any entity
-  if (!user.canReviewAnyEntity && user.entity !== entity) {
-    return {
-      success: false,
-      error: "You can only make decisions for your own entity",
-    };
-  }
+    // Reviewers (DMSPC entity + in allowed_reviewers list) can edit any entity
+    if (!user.canReviewAnyEntity && user.entity !== entity) {
+      return {
+        success: false,
+        error: "You can only make decisions for your own entity",
+      };
+    }
 
-  if (!user.entity && !user.canReviewAnyEntity) {
-    return { success: false, error: "You must have an entity assigned" };
-  }
+    if (!user.entity && !user.canReviewAnyEntity) {
+      return { success: false, error: "You must have an entity assigned" };
+    }
 
-  if (!["retain", "remove", "add", "update", "cancel"].includes(decision)) {
-    return { success: false, error: "invalid decision" };
-  }
+    if (!["retain", "remove", "add", "update", "cancel"].includes(decision)) {
+      return { success: false, error: "invalid decision" };
+    }
 
-  if (decision === "update" && !newSymbol) {
-    return { success: false, error: "newSymbol required for update" };
-  }
+    if (decision === "update" && !newSymbol) {
+      return { success: false, error: "newSymbol required for update" };
+    }
 
-  // Validate manual metadata link if provided
-  if (manualMetadata?.link && !/^https?:\/\/.+/.test(manualMetadata.link)) {
-    return { success: false, error: "invalid link format" };
-  }
+    // Validate manual metadata link if provided
+    if (manualMetadata?.link && !/^https?:\/\/.+/.test(manualMetadata.link)) {
+      return { success: false, error: "invalid link format" };
+    }
 
-  // Check if entity is under review (blocks non-reviewers)
-  const reviewBlock = await checkReviewModeBlock(
-    entity,
-    user.email,
-    user.isReviewer,
-  );
-  if (reviewBlock) {
-    return { success: false, error: reviewBlock };
-  }
-
-  // Get the active review session ID (if any) to link this decision to it
-  const reviewSessionRows = await query<{ id: string }>(
-    `SELECT id FROM mandates_housekeeping.entity_review_mode 
+    // Get the active review session ID (if any) to link this decision to it
+    const reviewSessionRows = await tx<{ id: string }>(
+      `SELECT id FROM mandates_housekeeping.entity_review_mode
      WHERE entity = $1 AND ended_at IS NULL`,
-    [entity],
-  );
-  const reviewSessionId = reviewSessionRows[0]?.id || null;
+      [entity],
+    );
+    const reviewSessionId = reviewSessionRows[0]?.id || null;
+    if (reviewSessionId && !user.isReviewer) {
+      return { success: false, error: "review_mode_blocked" };
+    }
 
-  // Insert new decision event
-  const rows = await query<DecisionRow>(
-    `WITH inserted AS (
+    // Insert new decision event
+    const rows = await tx<DecisionRow>(
+      `WITH inserted AS (
       INSERT INTO mandates_housekeeping.mandate_decisions 
         (document_symbol, entity, subprogramme, decision, new_symbol, manual_metadata, decision_reason, other_reason, user_email, review_session_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -396,23 +391,22 @@ export async function createDecisionAction(
     SELECT i.*, u.entity as user_entity, NULL::text as approved_by_entity
     FROM inserted i
     LEFT JOIN mandates_housekeeping.users u ON i.user_email = u.email`,
-    [
-      documentSymbol,
-      entity,
-      subprogramme || null,
-      decision,
-      newSymbol || null,
-      manualMetadata ? JSON.stringify(manualMetadata) : null,
-      params.decisionReason || null,
-      params.decisionReason === "other" ? params.otherReason || null : null,
-      user.email,
-      reviewSessionId,
-    ],
-  );
+      [
+        documentSymbol,
+        entity,
+        subprogramme || null,
+        decision,
+        newSymbol || null,
+        manualMetadata ? JSON.stringify(manualMetadata) : null,
+        params.decisionReason || null,
+        params.decisionReason === "other" ? params.otherReason || null : null,
+        user.email,
+        reviewSessionId,
+      ],
+    );
 
-  revalidatePath(`/entity/${entity}`);
-
-  return { success: true, data: toDecision(rows[0]) };
+    return { success: true, data: toDecision(rows[0]) };
+  });
 }
 
 /**
@@ -493,55 +487,53 @@ export async function updateDecisionReasonAction(
   const cycleError = await getReviewWriteError(expectedBudgetVersion);
   if (cycleError) return { success: false, error: cycleError };
 
-  const user = await getCurrentUser();
-  if (!user) {
-    return { success: false, error: "unauthorized" };
-  }
+  // Auth, review status and the event write share one cycle-scoped transaction.
+  // The returned event updates the caller; polling supplies fresh activity.
+  return transaction<ActionResult<MandateDecision>>(async (tx) => {
+    const user = await getCurrentUser(tx);
+    if (!user) {
+      return { success: false, error: "unauthorized" };
+    }
 
-  const { decisionId, decisionReason, otherReason } = params;
+    const { decisionId, decisionReason, otherReason } = params;
 
-  if (!decisionId) {
-    return { success: false, error: "decisionId required" };
-  }
+    if (!decisionId) {
+      return { success: false, error: "decisionId required" };
+    }
 
-  // Get the existing decision to check permissions
-  const existingRows = await query<DecisionRow>(
-    `SELECT d.*, u.entity as user_entity, approver.entity as approved_by_entity
+    // Get the existing decision to check permissions
+    const existingRows = await tx<DecisionRow & { review_active: boolean }>(
+      `SELECT d.*, EXISTS (SELECT 1 FROM mandates_housekeeping.entity_review_mode r
+       WHERE r.entity = d.entity AND r.ended_at IS NULL) AS review_active, u.entity as user_entity, approver.entity as approved_by_entity
      FROM mandates_housekeeping.mandate_decisions d
      LEFT JOIN mandates_housekeeping.users u ON d.user_email = u.email
      LEFT JOIN mandates_housekeeping.users approver ON d.approved_by = approver.email
      WHERE d.id = $1`,
-    [decisionId],
-  );
+      [decisionId],
+    );
 
-  if (existingRows.length === 0) {
-    return { success: false, error: "Decision not found" };
-  }
+    if (existingRows.length === 0) {
+      return { success: false, error: "Decision not found" };
+    }
 
-  const existing = existingRows[0];
+    const existing = existingRows[0];
 
-  // DMSPC users can update any entity, others can only update their own entity
-  if (!user.canReviewAnyEntity && user.entity !== existing.entity) {
-    return {
-      success: false,
-      error: "You can only update reasons for your own entity",
-    };
-  }
+    // DMSPC users can update any entity, others can only update their own entity
+    if (!user.canReviewAnyEntity && user.entity !== existing.entity) {
+      return {
+        success: false,
+        error: "You can only update reasons for your own entity",
+      };
+    }
 
-  // Check if entity is under review (blocks non-reviewers)
-  const reviewBlock = await checkReviewModeBlock(
-    existing.entity,
-    user.email,
-    user.isReviewer,
-  );
-  if (reviewBlock) {
-    return { success: false, error: reviewBlock };
-  }
+    if (existing.review_active && !user.isReviewer) {
+      return { success: false, error: "review_mode_blocked" };
+    }
 
-  // Create a new decision record to preserve reason history (append-only)
-  // This creates a new entry with the same decision type but updated reason
-  const rows = await query<DecisionRow>(
-    `WITH inserted AS (
+    // Create a new decision record to preserve reason history (append-only)
+    // This creates a new entry with the same decision type but updated reason
+    const rows = await tx<DecisionRow>(
+      `WITH inserted AS (
       INSERT INTO mandates_housekeeping.mandate_decisions 
         (document_symbol, entity, subprogramme, decision, new_symbol, manual_metadata, decision_reason, other_reason, user_email, review_session_id)
       SELECT 
@@ -562,17 +554,16 @@ export async function updateDecisionReasonAction(
     SELECT i.*, users.entity as user_entity, NULL::text as approved_by_entity
     FROM inserted i
     LEFT JOIN mandates_housekeeping.users users ON i.user_email = users.email`,
-    [
-      decisionId,
-      decisionReason,
-      decisionReason === "other" ? otherReason : null,
-      user.email,
-    ],
-  );
+      [
+        decisionId,
+        decisionReason,
+        decisionReason === "other" ? otherReason : null,
+        user.email,
+      ],
+    );
 
-  revalidatePath(`/entity/${existing.entity}`);
-
-  return { success: true, data: toDecision(rows[0]) };
+    return { success: true, data: toDecision(rows[0]) };
+  });
 }
 
 /**

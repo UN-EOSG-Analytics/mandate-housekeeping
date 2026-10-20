@@ -832,7 +832,7 @@ export function DocumentSymbol({
   // Wrapper - just forward to parent, polling will update the list
   const handleDecision = useCallback(
     async (decision: Decision, newSymbol?: string) => {
-      return (await onDecision?.(decision, newSymbol)) ?? false;
+      return (await onDecision?.(decision, newSymbol)) ?? null;
     },
     [onDecision],
   );

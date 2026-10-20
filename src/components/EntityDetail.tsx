@@ -518,9 +518,7 @@ function MandateRowContent({
   const currentDecision = state?.decision;
 
   // Keep original document content legible while identifying replaced/removed rows.
-  const hasUpdate = currentDecision?.decision === "update";
   const hasRemove = currentDecision?.decision === "remove";
-  const contentSuperseded = (hasUpdate || hasRemove) && !isUpdateTarget;
 
   // Approval state - only reviewers can approve, and only if there's a decision
   const hasDecision =
@@ -566,7 +564,7 @@ function MandateRowContent({
             className="inline-block whitespace-nowrap focus-visible:rounded focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2"
             onClick={(e) => !mandate.link && e.preventDefault()}
           >
-            <DocumentSymbolBadge subdued={contentSuperseded}>
+            <DocumentSymbolBadge>
               {mandate.symbol.length > 18
                 ? `${mandate.symbol.slice(0, 18)}…`
                 : mandate.symbol}
@@ -1101,7 +1099,7 @@ function MandateRow({
             allEntitySymbols={allEntitySymbols}
             newestWithNewerVersion={newestWithNewerVersion}
             onOpenSidebar={() => setNewDocSidebarOpen(true)}
-            onDecision={async () => false}
+            onDecision={async () => null}
           />
         )}
 
@@ -1508,11 +1506,12 @@ function MandateSection({
     symbol: string,
     decision: Decision,
     newSymbol?: string,
-  ) => Promise<boolean>;
+  ) => Promise<MandateDecision | null>;
   onReasonChange: (
     symbol: string,
     decisionReason: string | null,
     otherReason: string | null,
+    savedDecision?: MandateDecision,
   ) => Promise<boolean>;
   onApprove: (decisionId: string, approved: boolean) => void;
   onUpdateWithManual: (
@@ -1809,8 +1808,8 @@ function MandateSection({
               onDecision={(decision, newSymbol) =>
                 onDecision(m.symbol, decision, newSymbol)
               }
-              onReasonChange={(reason, otherReason) =>
-                onReasonChange(m.symbol, reason, otherReason)
+              onReasonChange={(reason, otherReason, savedDecision) =>
+                onReasonChange(m.symbol, reason, otherReason, savedDecision)
               }
               onApprove={onApprove}
               onUpdateWithManual={(newSymbol, manualData) =>
@@ -1852,8 +1851,8 @@ function MandateSection({
               reviewChangeInfo={reviewChanges?.[stateKey(m.symbol)]}
               isUnderReview={isUnderReview}
               onDecision={(decision) => onDecision(m.symbol, decision)}
-              onReasonChange={(reason, otherReason) =>
-                onReasonChange(m.symbol, reason, otherReason)
+              onReasonChange={(reason, otherReason, savedDecision) =>
+                onReasonChange(m.symbol, reason, otherReason, savedDecision)
               }
               onApprove={onApprove}
               onUpdateWithManual={async () => false}
@@ -2178,7 +2177,7 @@ export function EntityDetail({
       decision: Decision,
       newSymbol?: string,
     ) => {
-      if (!userEmail) return false;
+      if (!userEmail) return null;
       const key = `${symbol}:${subprogramme || ""}`;
       const now = new Date().toISOString();
       const newDecision: MandateDecision = {
@@ -2248,13 +2247,13 @@ export function EntityDetail({
             setShowReviewBlockedDialog(true);
           }, 2000);
           // Don't revert - let user continue exploring
-          return false;
+          return null;
         }
         // Restore the last persisted event when saving fails.
         showError(`Failed to save decision: ${result.error}`);
         rollbackDecision(key);
       }
-      return result.success && !!result.data;
+      return result.success ? (result.data ?? null) : null;
     },
     [
       entity,
@@ -2273,10 +2272,11 @@ export function EntityDetail({
       subprogramme: string | null,
       decisionReason: string | null,
       otherReason: string | null,
+      savedDecision?: MandateDecision,
     ) => {
       const key = `${symbol}:${subprogramme || ""}`;
-      const currentState = states[key];
-      const decisionId = currentState?.decision?.id;
+      const currentDecision = savedDecision ?? states[key]?.decision;
+      const decisionId = currentDecision?.id;
 
       if (!decisionId) {
         showError(
@@ -2335,7 +2335,7 @@ export function EntityDetail({
           prev[key]?.decision?.id === decisionId
             ? {
                 ...prev,
-                [key]: { ...prev[key], decision: currentState.decision },
+                [key]: { ...prev[key], decision: currentDecision },
               }
             : prev,
         );
@@ -3006,7 +3006,15 @@ export function EntityDetail({
       symbol: string,
       decisionReason: string | null,
       otherReason: string | null,
-    ) => handleReasonChange(symbol, subprog, decisionReason, otherReason),
+      savedDecision?: MandateDecision,
+    ) =>
+      handleReasonChange(
+        symbol,
+        subprog,
+        decisionReason,
+        otherReason,
+        savedDecision,
+      ),
     onUpdateWithManual: (
       symbol: string,
       newSymbol: string,

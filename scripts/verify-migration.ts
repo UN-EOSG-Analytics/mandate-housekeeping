@@ -281,7 +281,7 @@ async function main() {
           );
           assert(
             body.indexOf("getReviewWriteError(expectedBudgetVersion)") <
-              body.indexOf("getCurrentUser()"),
+              body.indexOf("getCurrentUser("),
             "Gate must precede all side effects",
           );
           gatedActions.push(node.name!.text);

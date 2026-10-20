@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { randomBytes, createHmac, timingSafeEqual } from "crypto";
-import { query } from "../../lib/db/db";
+import { query, type TransactionQueryFn } from "../../lib/db/db";
 
 const AUTH_SECRET = process.env.AUTH_SECRET;
 if (!AUTH_SECRET && process.env.NODE_ENV === "production") {
@@ -135,13 +135,13 @@ export async function clearSession() {
   cookieStore.delete(COOKIE_NAME);
 }
 
-export async function getCurrentUser() {
+export async function getCurrentUser(runQuery: TransactionQueryFn = query) {
   const session = await getSession();
   if (!session) return null;
 
   // Join with allowed_reviewers to dynamically determine reviewer status
   // This ensures removing someone from allowed_reviewers immediately revokes their reviewer access
-  const rows = await query<{
+  const rows = await runQuery<{
     id: string;
     email: string;
     entity: string | null;

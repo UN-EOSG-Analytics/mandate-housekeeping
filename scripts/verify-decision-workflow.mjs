@@ -134,27 +134,27 @@ function dropdown(props) {
   };
 }
 
-test("fast reason selection waits for the persisted decision and blocks the pencil", async () => {
+test("reason popup opens immediately and a fast choice waits for the exact saved event", async () => {
   const save = deferred();
   let saves = 0;
-  let reasons = 0;
+  const reasons = [];
   const ui = dropdown({
     decision: "retain",
     onChange: () => {
       saves++;
       return save.promise;
     },
-    onReasonChange: () => {
-      reasons++;
+    onReasonChange: async (reason, text, decision) => {
+      reasons.push({ reason, text, decision });
       return true;
     },
   });
   const select = ui.select();
   const pending = select("remove");
-  await select("retain"); // Repeated clicks from the old menu cannot create another event.
-  let tree = ui.render({ decision: "remove" });
+  await select("retain");
+  const tree = ui.render({ decision: "remove", disabled: true });
   assert.equal(saves, 1);
-  assert.equal(ui.popup(tree).props.isOpen, false);
+  assert.equal(ui.popup(tree).props.isOpen, true);
   const pencil = find(
     tree,
     (node) =>
@@ -162,14 +162,36 @@ test("fast reason selection waits for the persisted decision and blocks the penc
       node.props.onClick.toString().includes("stopPropagation"),
   );
   assert.equal(pencil.props.disabled, true);
-  pencil.props.onClick({ stopPropagation() {} });
-  assert.equal(ui.popup(ui.render()).props.isOpen, false);
-  save.resolve(true);
+  const queuedReason = ui.popup(tree).props.onChange("delivered", null);
+  ui.popup(tree).props.onClose();
+  assert.equal(reasons.length, 0);
+  const saved = { id: "new-event", decision: "remove", decisionReason: null };
+  save.resolve(saved);
+  await Promise.all([pending, queuedReason]);
+  assert.deepEqual(reasons, [
+    { reason: "delivered", text: null, decision: saved },
+  ]);
+});
+
+test("a dismissed initial popup keeps saving the decision without a reason", async () => {
+  const save = deferred();
+  let reasons = 0;
+  const ui = dropdown({
+    decision: null,
+    onChange: () => save.promise,
+    onReasonChange: async () => {
+      reasons++;
+      return true;
+    },
+  });
+  const pending = ui.select()("remove");
+  const popup = ui.popup(ui.render());
+  assert.equal(popup.props.isOpen, true);
+  popup.props.onClose();
+  save.resolve({ id: "saved", decision: "remove" });
   await pending;
-  tree = ui.render();
-  assert.equal(ui.popup(tree).props.isOpen, true);
-  ui.popup(tree).props.onChange("delivered", null);
-  assert.equal(reasons, 1);
+  assert.equal(reasons, 0);
+  assert.equal(ui.popup(ui.render({ decision: "remove" })).props.isOpen, false);
 });
 
 test("external update popups stay closed while the optimistic decision has no saved ID", () => {
@@ -205,9 +227,9 @@ test("reason saves block repeated edits until persistence finishes", async () =>
   assert.equal(ui.render().props["aria-busy"], false);
 });
 
-test("failed and throwing saves never open a reason popup", async () => {
+test("failed and throwing saves close the popup and report failure", async () => {
   for (const onChange of [
-    async () => false,
+    async () => null,
     async () => {
       throw new Error("offline");
     },
@@ -227,7 +249,7 @@ test("cancel never opens a reason popup and update waits for replacement selecti
     decision: "remove",
     onChange: async (value) => {
       saved.push(value);
-      return true;
+      return { id: "saved" };
     },
     onReasonChange: async () => true,
     onUpdateClick() {
@@ -242,8 +264,9 @@ test("cancel never opens a reason popup and update waits for replacement selecti
   assert.deepEqual(saved, ["cancel"]);
 });
 
-function actions() {
+function actions({ reviewer = true, activeReview = true } = {}) {
   const statements = [];
+  let transactionCount = 0;
   const source = {
     id: "old",
     document_symbol: "A/RES/80/1",
@@ -256,6 +279,33 @@ function actions() {
     other_reason: "Preserved explanation",
     user_email: "reviewer@un.org",
     review_session_id: "session-1",
+    review_active: activeReview,
+  };
+  const runQuery = async (sql, params) => {
+    statements.push({ sql, params });
+    if (/SELECT id FROM mandates_housekeeping.entity_review_mode/.test(sql))
+      return activeReview ? [{ id: "session-1" }] : [];
+    if (sql.includes("WITH inserted") && sql.includes("VALUES")) {
+      return [
+        {
+          ...source,
+          id: "new",
+          decision_reason: params[6],
+          other_reason: params[7],
+          review_session_id: params[9],
+        },
+      ];
+    }
+    if (sql.includes("WITH inserted"))
+      return [
+        {
+          ...source,
+          id: "reason-event",
+          decision_reason: params[1],
+          other_reason: params[2],
+        },
+      ];
+    return [source];
   };
   const api = loadSource("src/features/mandates/actions/decisions.ts", {
     "@/lib/db/review-cycle": {
@@ -263,45 +313,44 @@ function actions() {
         version === "ppb2027" ? null : "read-only",
     },
     "@/features/auth/auth": {
-      getCurrentUser: async () => ({
-        email: "reviewer@un.org",
-        entity: "UNOMS",
-        canReviewAnyEntity: true,
-        isReviewer: true,
-      }),
+      getCurrentUser: async (tx) => {
+        assert.equal(tx, runQuery, "Auth must use the same transaction");
+        return {
+          email: "reviewer@un.org",
+          entity: "UNOMS",
+          canReviewAnyEntity: reviewer,
+          isReviewer: reviewer,
+        };
+      },
     },
-    "next/cache": { revalidatePath() {} },
-    "./review-mode": { checkReviewModeBlock: async () => null },
+    "next/cache": {
+      revalidatePath() {
+        assert.fail("Decision saves must not rerender the citation page");
+      },
+    },
+    "./review-mode": {
+      checkReviewModeBlock: async () => {
+        assert.fail("Reuse the scoped review lookup");
+      },
+    },
     "@/lib/db/db": {
-      query: async (sql, params) => {
-        statements.push({ sql, params });
-        if (sql.includes("FROM mandates_housekeeping.entity_review_mode"))
-          return [{ id: "session-1" }];
-        if (sql.includes("WITH inserted") && sql.includes("VALUES")) {
-          return [
-            {
-              ...source,
-              id: "new",
-              decision_reason: params[6],
-              other_reason: params[7],
-              review_session_id: params[9],
-            },
-          ];
-        }
-        if (sql.includes("WITH inserted"))
-          return [
-            {
-              ...source,
-              id: "reason-event",
-              decision_reason: params[1],
-              other_reason: params[2],
-            },
-          ];
-        return [source];
+      query: async () => {
+        assert.fail("Decision saves must not open separate query transactions");
+      },
+      transaction: async (fn) => {
+        transactionCount++;
+        return fn(runQuery);
       },
     },
   });
-  return { api, statements, source };
+  return {
+    api,
+    statements,
+    source,
+    get transactionCount() {
+      return transactionCount;
+    },
+  };
 }
 
 test("manual metadata edits can preserve the existing reason on the new event", async () => {
@@ -361,4 +410,41 @@ test("archived or missing originating cycles reject before any mocked database a
     assert.equal(result.success, false);
     assert.equal(statements.length, 0);
   }
+});
+
+test("active review blocks entity reviewers but permits authorised reviewers in one transaction", async () => {
+  for (const reviewer of [false, true]) {
+    const fixture = actions({ reviewer, activeReview: true });
+    const result = await fixture.api.createDecisionAction(
+      {
+        documentSymbol: "A/RES/80/1",
+        entity: "UNOMS",
+        subprogramme: null,
+        decision: "remove",
+      },
+      "ppb2027",
+    );
+    assert.equal(result.success, reviewer);
+    assert.equal(fixture.transactionCount, 1);
+    if (!reviewer) assert.equal(result.error, "review_mode_blocked");
+  }
+});
+
+test("a failed initial decision never attempts its queued reason write", async () => {
+  const save = deferred();
+  let reasons = 0;
+  const ui = dropdown({
+    decision: null,
+    onChange: () => save.promise,
+    onReasonChange: async () => {
+      reasons++;
+      return true;
+    },
+  });
+  const pending = ui.select()("remove");
+  const queued = ui.popup(ui.render()).props.onChange("delivered", null);
+  save.resolve(null);
+  await Promise.all([pending, queued]);
+  assert.equal(reasons, 0);
+  assert.equal(ui.popup(ui.render({ decision: "retain" })).props.isOpen, false);
 });
