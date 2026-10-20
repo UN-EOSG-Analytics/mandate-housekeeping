@@ -2,6 +2,7 @@ import { getBudgetVersion } from "@/lib/db/review-cycle";
 import {
   CURRENT_BUDGET_VERSION,
   SUBMISSION_CYCLES,
+  type BudgetVersion,
 } from "@/lib/db/budget-version";
 import Image from "next/image";
 import Link from "next/link";
@@ -14,6 +15,8 @@ interface Props {
   entities?: EntityOption[];
   maxWidth?: "6xl" | "7xl";
   hideAbout?: boolean;
+  navigationPending?: boolean;
+  budgetVersion?: BudgetVersion;
 }
 
 export const SITE_TITLE = "Mandate Housekeeping Platform";
@@ -25,8 +28,11 @@ export async function Header({
   entities = [],
   maxWidth = "7xl",
   hideAbout = false,
+  navigationPending = false,
+  budgetVersion,
 }: Props) {
-  const version = user ? await getBudgetVersion() : CURRENT_BUDGET_VERSION;
+  const version =
+    budgetVersion ?? (user ? await getBudgetVersion() : CURRENT_BUDGET_VERSION);
   const isLoggedIn = !!user;
   const widthClass = maxWidth === "6xl" ? "max-w-6xl" : "max-w-7xl";
 
@@ -36,7 +42,7 @@ export async function Header({
         className={`mx-auto flex ${widthClass} items-center justify-between px-3 py-4 sm:px-4`}
       >
         <Link
-          href={isLoggedIn ? "/" : "/about"}
+          href={isLoggedIn || navigationPending ? "/" : "/about"}
           className="flex items-center gap-3 hover:opacity-90"
         >
           <Image
@@ -56,7 +62,9 @@ export async function Header({
               </span>
             </div>
             <p className="text-xs text-gray-500">
-              {user ? SUBMISSION_CYCLES[version].label : SITE_SUBTITLE}
+              {user || navigationPending
+                ? SUBMISSION_CYCLES[version].label
+                : SITE_SUBTITLE}
             </p>
           </div>
         </Link>
@@ -80,7 +88,14 @@ export async function Header({
               <div className="h-6 w-px bg-gray-200" />
             </>
           )}
-          {isLoggedIn ? (
+          {navigationPending ? (
+            <span
+              aria-busy="true"
+              className="h-8 w-24 animate-pulse rounded bg-gray-100 motion-reduce:animate-none"
+            >
+              <span className="sr-only">Loading account navigation</span>
+            </span>
+          ) : isLoggedIn ? (
             <UserMenu
               email={user.email}
               entity={user.entity}

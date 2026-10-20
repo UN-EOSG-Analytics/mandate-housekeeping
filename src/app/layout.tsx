@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Footer from "@/components/core/Footer";
 import { SITE_SUBTITLE, SITE_TITLE } from "@/components/core/Header";
 import { AuthenticatedFeedbackButton } from "@/components/AuthenticatedFeedbackButton";
@@ -50,7 +51,9 @@ export default function RootLayout({
         </div>
         <Footer />
         <AnimatedLogo />
-        <AuthenticatedFeedbackButton />
+        <Suspense fallback={null}>
+          <AuthenticatedFeedbackButton />
+        </Suspense>
         {process.env.NEXT_PUBLIC_GA_ID && (
           <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_ID} />
         )}

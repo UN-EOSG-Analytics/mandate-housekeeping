@@ -82,7 +82,7 @@ export async function query<T = Record<string, unknown>>(
 /**
  * Query function type for use in transactions
  */
-type TransactionQueryFn = <R = Record<string, unknown>>(
+export type TransactionQueryFn = <R = Record<string, unknown>>(
   text: string,
   params?: unknown[],
 ) => Promise<R[]>;

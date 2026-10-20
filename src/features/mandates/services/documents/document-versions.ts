@@ -2,7 +2,7 @@
  * Collections do not establish a version sequence. Issuer and document type are
  * part of the series key. Whitespace aliases cannot merge distinct issuers.
  */
-import { query } from "@/lib/db/db";
+import { query, type TransactionQueryFn } from "@/lib/db/db";
 import { normalizeSymbol, cleanTitle } from "./metadata";
 
 export interface DocumentVersion {
@@ -18,9 +18,10 @@ export interface SeriesCandidate extends DocumentVersion {
 
 export async function fetchSeriesCandidates(
   symbols: string[],
+  options: { newerOnly?: boolean; runQuery?: TransactionQueryFn } = {},
 ): Promise<SeriesCandidate[]> {
   if (!symbols.length) return [];
-  return query<SeriesCandidate>(
+  return (options.runQuery ?? query)<SeriesCandidate>(
     `
     WITH requested AS (SELECT DISTINCT unnest($1::text[]) AS symbol), matches AS (
       SELECT r.symbol, s.series_key, s.un_body, s.doc_type, s.year,
@@ -45,6 +46,7 @@ export async function fetchSeriesCandidates(
       ON (s.series_key, s.un_body, s.doc_type) = (c.series_key, c.un_body, c.doc_type)
     JOIN digitallibrary.documents d ON d.recid = s.recid AND d.deleted_at IS NULL
     WHERE NOT s.is_collection AND s.is_informative AND s.year > 0
+      ${options.newerOnly ? "AND s.year > c.year" : ""}
     ORDER BY "currentSymbol", year, symbol
   `,
     [symbols],

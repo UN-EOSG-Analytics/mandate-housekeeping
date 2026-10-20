@@ -3,7 +3,7 @@
  * Fetches PPB records from database and transforms into hierarchical structure
  */
 
-import { query } from "@/lib/db/db";
+import { query, transaction, type TransactionQueryFn } from "@/lib/db/db";
 import { versionPredicateSql } from "@/lib/db/budget-version";
 import type {
   PPBRecord,
@@ -17,6 +17,7 @@ import type {
 } from "@/types";
 import { BUDGET_PARTS_META } from "@/lib/constants";
 import { fetchDocumentMetadata } from "./documents/metadata";
+import { fetchNewerVersions } from "./documents/newer-versions";
 
 export interface EntityOption {
   entity: string;
@@ -51,7 +52,44 @@ interface DBCitationRow {
  * Resolves current registry metadata with the conserved compatibility floor.
  */
 export async function fetchPPBRecords(): Promise<PPBRecord[]> {
-  const rows = await query<DBCitationRow>(`
+  return transaction((tx) => fetchRecords(tx));
+}
+
+/**
+ * Fetch an entity's documents, retaining every selected-cycle citation for those
+ * symbols. Other entities' citations supply the shared-document counts/badges.
+ * Related reads share one cycle-scoped transaction instead of opening one per query.
+ */
+export async function fetchEntityPageData(
+  entity: string,
+): Promise<ReturnType<typeof collectEntityData>> {
+  const parts = await transaction((tx) => fetchParts(tx, entity));
+  return collectEntityData(parts, entity);
+}
+
+/** Load the overview without separate transaction setup for each related read. */
+export async function fetchOverviewPageData(): Promise<PartData[]> {
+  return transaction((tx) => fetchParts(tx));
+}
+
+async function fetchParts(
+  runQuery: TransactionQueryFn,
+  entity?: string,
+): Promise<PartData[]> {
+  const records = await fetchRecords(runQuery, entity);
+  const symbols = records
+    .filter((record) => record.metadata_from_db && record.document_symbol)
+    .map((record) => record.document_symbol as string);
+  const newerVersions = await fetchNewerVersions(symbols, runQuery);
+  return transformPPBData(records, getBudgetPartsMeta(), newerVersions);
+}
+
+async function fetchRecords(
+  runQuery: TransactionQueryFn,
+  entity?: string,
+): Promise<PPBRecord[]> {
+  const rows = await runQuery<DBCitationRow>(
+    `
     SELECT 
       c.id,
       c.sub_programme_number,
@@ -73,12 +111,24 @@ export async function fetchPPBRecords(): Promise<PPBRecord[]> {
     FROM ppb2026.source_document_citations c
     LEFT JOIN systemchart.entities e ON c.entity = e.entity
     WHERE ${versionPredicateSql("c")}
+      ${
+        entity !== undefined
+          ? `AND c.ppb_full_document_symbol IN (
+        SELECT ec.ppb_full_document_symbol
+        FROM ppb2026.source_document_citations ec
+        WHERE ec.entity = $1 AND ${versionPredicateSql("ec")}
+      )`
+          : ""
+      }
     ORDER BY c.ppb_full_document_symbol, c.entity
-  `);
+  `,
+    entity !== undefined ? [entity] : undefined,
+  );
 
-  const metadata = await fetchDocumentMetadata([
-    ...new Set(rows.map((r) => r.ppb_full_document_symbol)),
-  ]);
+  const metadata = await fetchDocumentMetadata(
+    [...new Set(rows.map((r) => r.ppb_full_document_symbol))],
+    runQuery,
+  );
 
   // Group rows by document symbol to build PPBRecord structure
   const recordsMap = new Map<string, PPBRecord>();

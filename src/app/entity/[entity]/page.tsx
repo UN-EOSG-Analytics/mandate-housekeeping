@@ -1,17 +1,11 @@
+import { Suspense } from "react";
 import { SubmissionCycleControl } from "@/features/mandates/ui/SubmissionCycleControl";
 import { getBudgetVersion, isReviewEnabled } from "@/lib/db/review-cycle";
+import type { BudgetVersion } from "@/lib/db/budget-version";
 import { EntityDetail } from "@/components/EntityDetail";
 import { FooterFootnote } from "@/components/core/FooterFootnote";
-import { Header } from "@/components/core/Header";
-import { getCurrentUser } from "@/features/auth/auth";
-import {
-  collectEntityData,
-  fetchEntities,
-  fetchPPBRecords,
-  getBudgetPartsMeta,
-  transformPPBData,
-} from "@/features/mandates/services/data-service";
-import { fetchNewerVersions } from "@/features/mandates/services/documents/newer-versions";
+import { PageHeader } from "@/components/core/PageHeader";
+import { fetchEntityPageData } from "@/features/mandates/services/data-service";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -20,38 +14,72 @@ interface PageProps {
   params: Promise<{ entity: string }>;
 }
 
-async function getData() {
-  const records = await fetchPPBRecords();
-  const budgetPartsMeta = getBudgetPartsMeta();
+function EntityDataSkeleton({ entityCode }: { entityCode: string }) {
+  return (
+    <section
+      aria-busy="true"
+      aria-label={`Loading mandates for ${entityCode}`}
+      className="space-y-5"
+    >
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900">{entityCode}</h2>
+        <p role="status" className="sr-only">
+          Loading entity mandates
+        </p>
+      </div>
+      <div
+        aria-hidden="true"
+        className="animate-pulse space-y-4 motion-reduce:animate-none"
+      >
+        <div className="h-4 w-2/3 max-w-lg rounded bg-gray-200" />
+        <div className="h-10 w-full rounded bg-gray-100" />
+        {[0, 1, 2].map((row) => (
+          <div
+            key={row}
+            className="space-y-3 rounded-lg border border-gray-200 p-5"
+          >
+            <div className="h-4 w-32 rounded bg-gray-200" />
+            <div className="h-4 w-3/4 rounded bg-gray-100" />
+            <div className="h-4 w-1/2 rounded bg-gray-100" />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
-  // Get all unique document symbols that have metadata from DB
-  const symbolsWithDbMetadata = records
-    .filter((r) => r.metadata_from_db && r.document_symbol)
-    .map((r) => r.document_symbol as string);
-
-  // Fetch newer versions for documents with DB metadata
-  const newerVersions = await fetchNewerVersions(symbolsWithDbMetadata);
-
-  return transformPPBData(records, budgetPartsMeta, newerVersions);
+async function EntityData({
+  entityCode,
+  budgetVersion,
+}: {
+  entityCode: string;
+  budgetVersion: BudgetVersion;
+}) {
+  const match = await fetchEntityPageData(entityCode);
+  if (!match) notFound();
+  const { data: entityData, partName } = match;
+  return (
+    <EntityDetail
+      key={`${budgetVersion}:${entityData.entity}`}
+      cycleReadOnly={!isReviewEnabled(budgetVersion)}
+      entity={entityData.entity}
+      entityLong={entityData.entityLong}
+      partName={partName}
+      backgroundMandates={entityData.backgroundMandates}
+      legislativeMandates={entityData.legislativeMandates}
+    />
+  );
 }
 
 export default async function EntityPage({ params }: PageProps) {
-  const { entity: entityParam } = await params;
-  const budgetVersion = await getBudgetVersion();
-  const entityCode = decodeURIComponent(entityParam);
-  const [parts, user, entities] = await Promise.all([
-    getData(),
-    getCurrentUser(),
-    fetchEntities(),
+  const [{ entity: entityParam }, budgetVersion] = await Promise.all([
+    params,
+    getBudgetVersion(),
   ]);
-
-  const match = collectEntityData(parts, entityCode);
-  if (!match) notFound();
-  const { data: entityData, partName } = match;
-
+  const entityCode = decodeURIComponent(entityParam);
   return (
     <>
-      <Header user={user} entities={entities} />
+      <PageHeader budgetVersion={budgetVersion} />
       <main className="mx-auto max-w-7xl px-3 py-8 sm:px-4">
         <SubmissionCycleControl />
         <Link
@@ -61,15 +89,12 @@ export default async function EntityPage({ params }: PageProps) {
           <ArrowLeft className="h-4 w-4" />
           <span>Back to all entities</span>
         </Link>
-        <EntityDetail
-          key={`${budgetVersion}:${entityData.entity}`}
-          cycleReadOnly={!isReviewEnabled(budgetVersion)}
-          entity={entityData.entity}
-          entityLong={entityData.entityLong}
-          partName={partName}
-          backgroundMandates={entityData.backgroundMandates}
-          legislativeMandates={entityData.legislativeMandates}
-        />
+        <Suspense
+          key={`${budgetVersion}:${entityCode}`}
+          fallback={<EntityDataSkeleton entityCode={entityCode} />}
+        >
+          <EntityData entityCode={entityCode} budgetVersion={budgetVersion} />
+        </Suspense>
       </main>
       <FooterFootnote />
     </>

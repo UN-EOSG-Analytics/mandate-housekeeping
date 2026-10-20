@@ -1,3 +1,4 @@
+import type { TransactionQueryFn } from "@/lib/db/db";
 import type { NewerVersion } from "@/types";
 import { fetchSeriesCandidates } from "./document-versions";
 import { cleanTitle } from "./metadata";
@@ -5,8 +6,12 @@ import { cleanTitle } from "./metadata";
 /** Newer series members are review candidates, not legal supersession findings. */
 export async function fetchNewerVersions(
   symbols: string[],
+  runQuery?: TransactionQueryFn,
 ): Promise<Map<string, NewerVersion>> {
-  const rows = await fetchSeriesCandidates(symbols);
+  const rows = await fetchSeriesCandidates(symbols, {
+    newerOnly: true,
+    runQuery,
+  });
   const result = new Map<string, NewerVersion>();
   for (const row of rows) {
     if (row.year <= row.currentYear) continue;

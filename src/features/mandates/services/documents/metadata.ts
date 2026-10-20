@@ -2,7 +2,7 @@
  * The compatibility table is seeded once by migration 008; legacy catalogues are
  * never queried at runtime. Manual review metadata remains an explicit override.
  */
-import { query } from "@/lib/db/db";
+import { query, type TransactionQueryFn } from "@/lib/db/db";
 
 export interface DocumentMetadata {
   title: string | null;
@@ -31,15 +31,16 @@ export function buildPlaceholders(count: number, offset = 1): string {
 
 export async function fetchDocumentMetadata(
   symbols: string[],
+  runQuery: TransactionQueryFn = query,
 ): Promise<Record<string, DocumentMetadata | null>> {
   if (!symbols.length) return {};
-  const rows = await query<ResolvedMetadata & { symbol: string }>(
+  const rows = await runQuery<ResolvedMetadata & { symbol: string }>(
     `
     WITH requested AS MATERIALIZED (
       SELECT DISTINCT symbol, upper(regexp_replace(symbol, '[[:space:]]', '', 'g')) AS normalized_key
       FROM unnest($1::text[]) AS symbol
-    ), catalogue_keys AS MATERIALIZED (
-      -- Normalize once for the entire catalogue, never once per requested symbol.
+    ), catalogue_keys AS NOT MATERIALIZED (
+      -- Inline the scan so only requested catalogue rows are materialized below.
       SELECT d.*, upper(regexp_replace(d.ppb_full_document_symbol, '[[:space:]]', '', 'g')) AS normalized_key
       FROM public.unified_documents d
     ), catalogue AS MATERIALIZED (
