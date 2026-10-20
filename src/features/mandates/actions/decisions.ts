@@ -305,6 +305,8 @@ export async function createDecisionAction(
     decision: string;
     newSymbol?: string | null;
     manualMetadata?: ManualMetadata | null;
+    decisionReason?: string | null;
+    otherReason?: string | null;
   },
   expectedBudgetVersion?: string,
 ): Promise<ActionResult<MandateDecision>> {
@@ -401,8 +403,8 @@ export async function createDecisionAction(
       decision,
       newSymbol || null,
       manualMetadata ? JSON.stringify(manualMetadata) : null,
-      null, // decision_reason - set later via updateDecisionReasonAction
-      null, // other_reason - set later via updateDecisionReasonAction
+      params.decisionReason || null,
+      params.decisionReason === "other" ? params.otherReason || null : null,
       user.email,
       reviewSessionId,
     ],
@@ -541,7 +543,7 @@ export async function updateDecisionReasonAction(
   const rows = await query<DecisionRow>(
     `WITH inserted AS (
       INSERT INTO mandates_housekeeping.mandate_decisions 
-        (document_symbol, entity, subprogramme, decision, new_symbol, manual_metadata, decision_reason, other_reason, user_email)
+        (document_symbol, entity, subprogramme, decision, new_symbol, manual_metadata, decision_reason, other_reason, user_email, review_session_id)
       SELECT 
         document_symbol, 
         entity, 
@@ -551,7 +553,8 @@ export async function updateDecisionReasonAction(
         manual_metadata,
         $2,  -- new decision_reason
         $3,  -- new other_reason
-        $4   -- current user (who is updating the reason)
+        $4,  -- current user (who is updating the reason)
+        review_session_id
       FROM mandates_housekeeping.mandate_decisions
       WHERE id = $1
       RETURNING *

@@ -176,6 +176,17 @@ export interface PartData {
 // Housekeeping decisions (event log)
 export type Decision = "retain" | "remove" | "add" | "update" | "cancel";
 
+/** Resolves only when the decision has been persisted, before opening its reason popup. */
+export type DecisionChangeHandler = (
+  decision: Decision,
+  newSymbol?: string,
+) => Promise<boolean>;
+
+export type DecisionReasonChangeHandler = (
+  reason: string | null,
+  otherReason: string | null,
+) => Promise<boolean>;
+
 export interface ManualMetadata {
   title?: string;
   body?: string;

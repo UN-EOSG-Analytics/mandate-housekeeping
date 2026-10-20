@@ -1,5 +1,10 @@
 "use client";
 
+import type {
+  DecisionChangeHandler,
+  DecisionReasonChangeHandler,
+} from "@/types";
+
 import {
   CURRENT_BUDGET_VERSION,
   DISABLED_REVIEW_MESSAGE,
@@ -484,8 +489,8 @@ function MandateRowContent({
   isUnderReview?: boolean; // Whether entity is currently under review
   onOpenSidebar?: () => void;
   onOpenActivityTab?: () => void;
-  onDecision: (decision: Decision, newSymbol?: string) => void;
-  onReasonChange?: (reason: string | null, otherReason: string | null) => void;
+  onDecision: DecisionChangeHandler;
+  onReasonChange?: DecisionReasonChangeHandler;
   onApprove?: (decisionId: string, approved: boolean) => void;
   onUpdateClick?: (prefillSymbol?: string) => void;
   showReasonPopup?: boolean;
@@ -725,7 +730,7 @@ function MandateRowContent({
               createdAt={currentDecision?.createdAt ?? null}
               onChange={onDecision}
               onUpdateClick={onUpdateClick}
-              disabled={false}
+              disabled={!!currentDecision && !currentDecision.id}
               reason={currentDecision?.decisionReason}
               otherReason={currentDecision?.otherReason}
               onReasonChange={onReasonChange}
@@ -798,6 +803,7 @@ function MandateRowContent({
 
 function MandateRow({
   mandate,
+  subprogramme,
   state,
   commentCount,
   isReviewer,
@@ -822,16 +828,20 @@ function MandateRow({
   onRevertChange,
 }: {
   mandate: Mandate;
+  subprogramme: string | null;
   state?: MandateState;
   commentCount: number;
   isReviewer: boolean;
   canReviewAnyEntity?: boolean;
   userEmail: string | null;
   userEntity: string | null;
-  onDecision: (decision: Decision, newSymbol?: string) => void;
-  onReasonChange: (reason: string | null, otherReason: string | null) => void;
+  onDecision: DecisionChangeHandler;
+  onReasonChange: DecisionReasonChangeHandler;
   onApprove: (decisionId: string, approved: boolean) => void;
-  onUpdateWithManual: (newSymbol: string, manualData: ManualEntryData) => void;
+  onUpdateWithManual: (
+    newSymbol: string,
+    manualData: ManualEntryData,
+  ) => Promise<boolean>;
   onEditManual?: (data: ManualEntryData) => void;
   onComment: (comment: string) => void;
   onOpenActivityTab?: () => void;
@@ -914,15 +924,15 @@ function MandateRow({
         }
       : null;
 
-  const handleUpdateSelect = (symbol: string) => {
-    onDecision("update", symbol);
+  const handleUpdateSelect = async (symbol: string) => {
+    if (!(await onDecision("update", symbol))) return;
     setShowUpdateSearch(false);
     setShowReasonPopup(true);
     setUpdatePrefillSymbol(undefined);
   };
 
-  const handleUpdateManual = (data: ManualEntryData) => {
-    onUpdateWithManual(data.symbol, data);
+  const handleUpdateManual = async (data: ManualEntryData) => {
+    if (!(await onUpdateWithManual(data.symbol, data))) return;
     setShowUpdateSearch(false);
     setShowReasonPopup(true);
     setUpdatePrefillSymbol(undefined);
@@ -1063,7 +1073,7 @@ function MandateRow({
             allEntitySymbols={allEntitySymbols}
             newestWithNewerVersion={newestWithNewerVersion}
             onOpenSidebar={() => setNewDocSidebarOpen(true)}
-            onDecision={() => {}}
+            onDecision={async () => false}
           />
         )}
 
@@ -1071,6 +1081,7 @@ function MandateRow({
         <div onClick={(e) => e.stopPropagation()}>
           <DocumentSymbol
             readOnly={readOnly}
+            subprogramme={subprogramme}
             citationLocations={mandate.citationLocations}
             symbol={mandate.symbol}
             link={mandate.link}
@@ -1099,6 +1110,7 @@ function MandateRow({
             userEntity={userEntity}
             isFoundational={isFoundational}
             onDecision={onDecision}
+            onReasonChange={onReasonChange}
             onApprove={onApprove}
             onComment={readOnly ? undefined : onComment}
             onUpdateClick={(prefillSymbol) => {
@@ -1114,6 +1126,7 @@ function MandateRow({
           {hasCompletedUpdate && newMandate && (
             <DocumentSymbol
               readOnly={readOnly}
+              subprogramme={subprogramme}
               citationLocations={mandate.citationLocations}
               symbol={newMandate.symbol}
               link={newMandate.link}
@@ -1138,6 +1151,7 @@ function MandateRow({
               userEmail={userEmail}
               userEntity={userEntity}
               onDecision={onDecision}
+              onReasonChange={onReasonChange}
               onApprove={onApprove}
               onComment={readOnly ? undefined : onComment}
               metadataFromDb={newMandate.metadataFromDb}
@@ -1462,18 +1476,22 @@ function MandateSection({
   reviewChanges?: Record<string, ReviewChangeInfo>;
   isUnderReview?: boolean;
   reviewSessionId?: string | null;
-  onDecision: (symbol: string, decision: Decision, newSymbol?: string) => void;
+  onDecision: (
+    symbol: string,
+    decision: Decision,
+    newSymbol?: string,
+  ) => Promise<boolean>;
   onReasonChange: (
     symbol: string,
     decisionReason: string | null,
     otherReason: string | null,
-  ) => void;
+  ) => Promise<boolean>;
   onApprove: (decisionId: string, approved: boolean) => void;
   onUpdateWithManual: (
     symbol: string,
     newSymbol: string,
     manualData: ManualEntryData,
-  ) => void;
+  ) => Promise<boolean>;
   onEditManual?: (symbol: string, data: ManualEntryData) => void;
   onComment: (symbol: string, comment: string) => void;
   onAdd: (symbol: string) => void;
@@ -1744,6 +1762,7 @@ function MandateSection({
           const targetSymbol = getUpdateTargetSymbol(m.symbol);
           return (
             <MandateRow
+              subprogramme={subprogramme}
               key={m.symbol}
               mandate={{ ...m, entity }}
               state={states[stateKey(m.symbol)]}
@@ -1790,6 +1809,7 @@ function MandateSection({
         {!readOnly &&
           addedMandates.map((m) => (
             <MandateRow
+              subprogramme={subprogramme}
               key={m.symbol}
               mandate={m}
               state={states[stateKey(m.symbol)]}
@@ -1808,7 +1828,7 @@ function MandateSection({
                 onReasonChange(m.symbol, reason, otherReason)
               }
               onApprove={onApprove}
-              onUpdateWithManual={() => {}}
+              onUpdateWithManual={async () => false}
               onEditManual={
                 onEditManual
                   ? (data) => onEditManual(m.symbol, data)
@@ -2109,6 +2129,20 @@ export function EntityDetail({
       .catch(() => {});
   }, [states, updateTargetMetadata]);
 
+  const rollbackDecision = useCallback((key: string) => {
+    setStates((prev) => {
+      const decisions = prev[key]?.decisions?.filter((d) => d.id) || [];
+      return {
+        ...prev,
+        [key]: {
+          ...prev[key],
+          decision: decisions[decisions.length - 1] || null,
+          decisions,
+        },
+      };
+    });
+  }, []);
+
   const handleDecision = useCallback(
     async (
       symbol: string,
@@ -2116,7 +2150,7 @@ export function EntityDetail({
       decision: Decision,
       newSymbol?: string,
     ) => {
-      if (!userEmail) return;
+      if (!userEmail) return false;
       const key = `${symbol}:${subprogramme || ""}`;
       const now = new Date().toISOString();
       const newDecision: MandateDecision = {
@@ -2158,7 +2192,10 @@ export function EntityDetail({
           newSymbol,
         },
         CURRENT_BUDGET_VERSION,
-      );
+      ).catch(() => ({
+        success: false as const,
+        error: "The change could not be saved. Please try again.",
+      }));
       if (result.success && result.data) {
         const updated = result.data;
         setStates((prev) => ({
@@ -2183,24 +2220,13 @@ export function EntityDetail({
             setShowReviewBlockedDialog(true);
           }, 2000);
           // Don't revert - let user continue exploring
-          return;
+          return false;
         }
-        // Revert optimistic update on other failures
+        // Restore the last persisted event when saving fails.
         showError(`Failed to save decision: ${result.error}`);
-        setStates((prev) => {
-          const prevDecisions = prev[key]?.decisions?.filter((d) => d.id) || [];
-          const lastValidDecision =
-            prevDecisions[prevDecisions.length - 1] || null;
-          return {
-            ...prev,
-            [key]: {
-              ...prev[key],
-              decision: lastValidDecision,
-              decisions: prevDecisions,
-            },
-          };
-        });
+        rollbackDecision(key);
       }
+      return result.success && !!result.data;
     },
     [
       entity,
@@ -2209,6 +2235,7 @@ export function EntityDetail({
       reviewSessionId,
       refreshReviewChanges,
       showError,
+      rollbackDecision,
     ],
   );
 
@@ -2223,7 +2250,12 @@ export function EntityDetail({
       const currentState = states[key];
       const decisionId = currentState?.decision?.id;
 
-      if (!decisionId) return;
+      if (!decisionId) {
+        showError(
+          "The decision is still saving. Please wait before setting its reason.",
+        );
+        return false;
+      }
 
       // Optimistic update
       setStates((prev) => ({
@@ -2247,7 +2279,10 @@ export function EntityDetail({
           otherReason: decisionReason === "other" ? otherReason : null,
         },
         CURRENT_BUDGET_VERSION,
-      );
+      ).catch(() => ({
+        success: false as const,
+        error: "The change could not be saved. Please try again.",
+      }));
 
       if (result.success && result.data) {
         const updated = result.data;
@@ -2256,10 +2291,11 @@ export function EntityDetail({
           [key]: {
             ...prev[key],
             decision: updated,
-            decisions:
-              prev[key]?.decisions?.map((d) =>
-                d.id === updated.id ? updated : d,
-              ) || [],
+            decisions: [
+              ...(prev[key]?.decisions?.filter((d) => d.id !== updated.id) ||
+                []),
+              updated,
+            ],
           },
         }));
         // Refresh review changes to update change indicators
@@ -2267,6 +2303,14 @@ export function EntityDetail({
           refreshReviewChanges();
         }
       } else if (!result.success) {
+        setStates((prev) =>
+          prev[key]?.decision?.id === decisionId
+            ? {
+                ...prev,
+                [key]: { ...prev[key], decision: currentState.decision },
+              }
+            : prev,
+        );
         if (result.error === "review_mode_blocked") {
           setTimeout(() => {
             setShowReviewBlockedDialog(true);
@@ -2275,6 +2319,7 @@ export function EntityDetail({
           showError(`Failed to save: ${result.error}`);
         }
       }
+      return result.success && !!result.data;
     },
     [states, reviewSessionId, refreshReviewChanges, showError],
   );
@@ -2286,7 +2331,7 @@ export function EntityDetail({
       newSymbol: string,
       manualData: ManualEntryData,
     ) => {
-      if (!userEmail) return;
+      if (!userEmail) return false;
       const key = `${symbol}:${subprogramme || ""}`;
       const now = new Date().toISOString();
       const manualMetadata = {
@@ -2325,16 +2370,6 @@ export function EntityDetail({
           decisions: [...(prev[key]?.decisions || []), newDecision],
         },
       }));
-      // Also add to updateTargetMetadata for display
-      setUpdateTargetMetadata((prev) => ({
-        ...prev,
-        [newSymbol]: {
-          title: manualData.title || null,
-          year: manualData.year ? parseInt(manualData.year) : null,
-          body: manualData.body || null,
-        },
-      }));
-
       const result = await createDecisionAction(
         {
           documentSymbol: symbol,
@@ -2345,9 +2380,22 @@ export function EntityDetail({
           manualMetadata,
         },
         CURRENT_BUDGET_VERSION,
-      );
+      ).catch(() => ({
+        success: false as const,
+        error: "The change could not be saved. Please try again.",
+      }));
       if (result.success && result.data) {
         const updated = result.data;
+        // Also add to updateTargetMetadata for display
+        setUpdateTargetMetadata((prev) => ({
+          ...prev,
+          [newSymbol]: {
+            title: manualData.title || null,
+            year: manualData.year ? parseInt(manualData.year) : null,
+            body: manualData.body || null,
+          },
+        }));
+
         setStates((prev) => ({
           ...prev,
           [key]: {
@@ -2370,8 +2418,10 @@ export function EntityDetail({
           }, 2000);
         } else {
           showError(`Failed to save: ${result.error}`);
+          rollbackDecision(key);
         }
       }
+      return result.success && !!result.data;
     },
     [
       entity,
@@ -2380,6 +2430,7 @@ export function EntityDetail({
       reviewSessionId,
       refreshReviewChanges,
       showError,
+      rollbackDecision,
     ],
   );
 
@@ -2424,18 +2475,6 @@ export function EntityDetail({
           decisions: [...(prev[key]?.decisions || []), newDecision],
         },
       }));
-      // Also add to addedMetadata for display
-      setAddedMetadata((prev) => ({
-        ...prev,
-        [data.symbol]: {
-          title: data.title || null,
-          year: data.year ? parseInt(data.year) : null,
-          body: data.body || null,
-          docType: null,
-          link: data.link || null,
-        },
-      }));
-
       const result = await createDecisionAction(
         {
           documentSymbol: data.symbol,
@@ -2445,9 +2484,24 @@ export function EntityDetail({
           manualMetadata,
         },
         CURRENT_BUDGET_VERSION,
-      );
+      ).catch(() => ({
+        success: false as const,
+        error: "The change could not be saved. Please try again.",
+      }));
       if (result.success && result.data) {
         const updated = result.data;
+        // Also add to addedMetadata for display
+        setAddedMetadata((prev) => ({
+          ...prev,
+          [data.symbol]: {
+            title: data.title || null,
+            year: data.year ? parseInt(data.year) : null,
+            body: data.body || null,
+            docType: null,
+            link: data.link || null,
+          },
+        }));
+
         setStates((prev) => ({
           ...prev,
           [key]: {
@@ -2470,6 +2524,7 @@ export function EntityDetail({
           }, 2000);
         } else {
           showError(`Failed to save: ${result.error}`);
+          rollbackDecision(key);
         }
       }
     },
@@ -2480,6 +2535,7 @@ export function EntityDetail({
       reviewSessionId,
       refreshReviewChanges,
       showError,
+      rollbackDecision,
     ],
   );
 
@@ -2514,38 +2570,8 @@ export function EntityDetail({
         [key]: {
           ...prev[key],
           decision: updatedDecision,
-          decisions:
-            prev[key]?.decisions?.map((d) =>
-              d.id === currentDecision.id ? updatedDecision : d,
-            ) || [],
         },
       }));
-
-      // Update addedMetadata if this is an "add" decision
-      if (currentDecision.decision === "add") {
-        setAddedMetadata((prev) => ({
-          ...prev,
-          [symbol]: {
-            title: data.title || null,
-            year: data.year ? parseInt(data.year) : null,
-            body: data.body || null,
-            docType: null,
-            link: data.link || null,
-          },
-        }));
-      }
-
-      // Update updateTargetMetadata if this is an "update" decision
-      if (currentDecision.decision === "update" && currentDecision.newSymbol) {
-        setUpdateTargetMetadata((prev) => ({
-          ...prev,
-          [currentDecision.newSymbol!]: {
-            title: data.title || null,
-            year: data.year ? parseInt(data.year) : null,
-            body: data.body || null,
-          },
-        }));
-      }
 
       // Save to server
       const result = await createDecisionAction(
@@ -2555,10 +2581,15 @@ export function EntityDetail({
           subprogramme,
           decision: currentDecision.decision,
           newSymbol: currentDecision.newSymbol || undefined,
+          decisionReason: currentDecision.decisionReason,
+          otherReason: currentDecision.otherReason,
           manualMetadata,
         },
         CURRENT_BUDGET_VERSION,
-      );
+      ).catch(() => ({
+        success: false as const,
+        error: "The change could not be saved. Please try again.",
+      }));
 
       if (result.success && result.data) {
         const updated = result.data;
@@ -2574,6 +2605,35 @@ export function EntityDetail({
             ],
           },
         }));
+        // Update addedMetadata if this is an "add" decision
+        if (currentDecision.decision === "add") {
+          setAddedMetadata((prev) => ({
+            ...prev,
+            [symbol]: {
+              title: data.title || null,
+              year: data.year ? parseInt(data.year) : null,
+              body: data.body || null,
+              docType: null,
+              link: data.link || null,
+            },
+          }));
+        }
+
+        // Update updateTargetMetadata if this is an "update" decision
+        if (
+          currentDecision.decision === "update" &&
+          currentDecision.newSymbol
+        ) {
+          setUpdateTargetMetadata((prev) => ({
+            ...prev,
+            [currentDecision.newSymbol!]: {
+              title: data.title || null,
+              year: data.year ? parseInt(data.year) : null,
+              body: data.body || null,
+            },
+          }));
+        }
+
         // Refresh review changes to update change indicators
         if (reviewSessionId) {
           refreshReviewChanges();
@@ -2585,6 +2645,11 @@ export function EntityDetail({
           }, 2000);
         } else {
           showError(`Failed to save: ${result.error}`);
+          setStates((prev) =>
+            prev[key]?.decision?.id === currentDecision.id
+              ? { ...prev, [key]: currentState }
+              : prev,
+          );
         }
       }
     },

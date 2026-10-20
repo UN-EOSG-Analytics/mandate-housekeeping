@@ -12,10 +12,7 @@ import {
 } from "@/features/mandates/services/documents/paragraph-presentation";
 import { getAgeIndicator } from "@/features/mandates/services/age-indicator";
 import { fetchParagraphs } from "@/features/mandates/services/documents/client-data-service";
-import {
-  getDocumentDecisionsAction,
-  updateDecisionReasonAction,
-} from "@/features/mandates/actions/decisions";
+import { getDocumentDecisionsAction } from "@/features/mandates/actions/decisions";
 import { getDocumentVersionsAction } from "@/features/mandates/services/documents/document-fetching";
 import { resolveCommentAction } from "@/features/mandates/actions/comments";
 import type { DocumentVersion } from "@/features/mandates/services/documents/document-versions";
@@ -24,6 +21,8 @@ import { UN_BLUE, DECISION_THEME } from "@/lib/theme";
 import type {
   CitationInfo,
   Decision,
+  DecisionChangeHandler,
+  DecisionReasonChangeHandler,
   EntityRelevance,
   MandateComment,
   MandateDecision,
@@ -63,6 +62,7 @@ interface Props {
   readOnly?: boolean;
   citationLocations?: CitationInfo[];
   symbol: string;
+  subprogramme: string | null;
   link: string | null;
   title?: string;
   year?: number | null;
@@ -86,7 +86,8 @@ interface Props {
   userEmail?: string | null;
   userEntity?: string | null;
   isFoundational?: boolean;
-  onDecision?: (decision: Decision, newSymbol?: string) => void;
+  onDecision?: DecisionChangeHandler;
+  onReasonChange?: DecisionReasonChangeHandler;
   onApprove?: (decisionId: string, approved: boolean) => void;
   onComment?: (comment: string) => void;
   onUpdateClick?: (prefillSymbol?: string) => void; // Called when user selects "update" from sidebar
@@ -658,6 +659,7 @@ function FullParagraphTree({
 }
 
 export function DocumentSymbol({
+  subprogramme,
   readOnly = false,
   citationLocations = [],
   symbol,
@@ -681,6 +683,7 @@ export function DocumentSymbol({
   userEntity: userEntityProp,
   isFoundational,
   onDecision: onDecisionProp,
+  onReasonChange: onReasonChangeProp,
   onApprove: onApproveProp,
   onComment: onCommentProp,
   onUpdateClick: onUpdateClickProp,
@@ -690,6 +693,7 @@ export function DocumentSymbol({
   const canReviewAnyEntity = readOnly ? false : canReviewAnyEntityProp;
   const userEntity = readOnly ? undefined : userEntityProp;
   const onDecision = readOnly ? undefined : onDecisionProp;
+  const onReasonChange = readOnly ? undefined : onReasonChangeProp;
   const onApprove = readOnly ? undefined : onApproveProp;
   const onComment = readOnly ? undefined : onCommentProp;
   const onUpdateClick = readOnly ? undefined : onUpdateClickProp;
@@ -824,8 +828,8 @@ export function DocumentSymbol({
 
   // Wrapper - just forward to parent, polling will update the list
   const handleDecision = useCallback(
-    (decision: Decision, newSymbol?: string) => {
-      onDecision?.(decision, newSymbol);
+    async (decision: Decision, newSymbol?: string) => {
+      return (await onDecision?.(decision, newSymbol)) ?? false;
     },
     [onDecision],
   );
@@ -1342,6 +1346,16 @@ export function DocumentSymbol({
                     }
                   }
 
+                  // The bound callbacks target this originating row, even before
+                  // it has any saved state (including user-added documents).
+                  if (entity) {
+                    const originKey = `${entity}:${subprogramme || ""}`;
+                    if (!rowKeys.has(originKey)) {
+                      rowKeys.add(originKey);
+                      rows.push({ entity, subprogramme });
+                    }
+                  }
+
                   // Sort: user's entity first, then by entity name, then by subprogramme
                   rows.sort((a, b) => {
                     if (a.entity === userEntity && b.entity !== userEntity)
@@ -1394,8 +1408,7 @@ export function DocumentSymbol({
                             {rows.map((row) => {
                               const isCurrentRow =
                                 row.entity === entity &&
-                                row.subprogramme ===
-                                  (state?.subprogramme || null);
+                                row.subprogramme === subprogramme;
                               const isUserEntity = row.entity === userEntity;
                               const rowDecisions = allDecisions.filter(
                                 (d) =>
@@ -1405,6 +1418,7 @@ export function DocumentSymbol({
                               const latestDecision =
                                 rowDecisions[rowDecisions.length - 1] || null;
                               const canEdit =
+                                isCurrentRow &&
                                 (isUserEntity || canReviewAnyEntity) &&
                                 onDecision;
                               const currentDecision = isCurrentRow
@@ -1435,73 +1449,22 @@ export function DocumentSymbol({
                                       decision={
                                         currentDecision?.decision || null
                                       }
-                                      onChange={(decision) => {
-                                        if (!canEdit) return;
-                                        if (
-                                          decision === "update" &&
-                                          onUpdateClick
-                                        ) {
-                                          onUpdateClick();
-                                        } else {
-                                          handleDecision(decision);
-                                        }
-                                      }}
+                                      onChange={handleDecision}
                                       onUpdateClick={
                                         canEdit ? onUpdateClick : undefined
                                       }
-                                      disabled={!canEdit}
+                                      disabled={
+                                        !canEdit ||
+                                        (!!currentDecision &&
+                                          !currentDecision.id)
+                                      }
                                       userEmail={currentDecision?.userEmail}
                                       userEntity={currentDecision?.userEntity}
                                       createdAt={currentDecision?.createdAt}
                                       reason={currentDecision?.decisionReason}
                                       otherReason={currentDecision?.otherReason}
                                       onReasonChange={
-                                        canEdit
-                                          ? async (reason, otherReason) => {
-                                              if (!currentDecision?.id) return;
-                                              // Optimistic update
-                                              setAllDecisions((prev) =>
-                                                prev.map((d) =>
-                                                  d.id === currentDecision?.id
-                                                    ? {
-                                                        ...d,
-                                                        decisionReason: reason,
-                                                        otherReason:
-                                                          reason === "other"
-                                                            ? otherReason
-                                                            : null,
-                                                      }
-                                                    : d,
-                                                ),
-                                              );
-                                              // Persist to database
-                                              const result =
-                                                await updateDecisionReasonAction(
-                                                  {
-                                                    decisionId:
-                                                      currentDecision.id,
-                                                    decisionReason: reason,
-                                                    otherReason:
-                                                      reason === "other"
-                                                        ? otherReason
-                                                        : null,
-                                                  },
-                                                  CURRENT_BUDGET_VERSION,
-                                                );
-                                              if (
-                                                result.success &&
-                                                result.data
-                                              ) {
-                                                setAllDecisions((prev) =>
-                                                  prev.map((d) =>
-                                                    d.id === result.data!.id
-                                                      ? result.data!
-                                                      : d,
-                                                  ),
-                                                );
-                                              }
-                                            }
-                                          : undefined
+                                        canEdit ? onReasonChange : undefined
                                       }
                                       symbol={symbol}
                                       size="sm"

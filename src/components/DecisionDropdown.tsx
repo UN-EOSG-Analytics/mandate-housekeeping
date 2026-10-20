@@ -2,7 +2,11 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import type { Decision } from "@/types";
+import type {
+  Decision,
+  DecisionChangeHandler,
+  DecisionReasonChangeHandler,
+} from "@/types";
 import { ChevronDown, MessageCircle, Pencil } from "lucide-react";
 import { DECISION_THEME, POPUP_STYLES } from "@/lib/theme";
 import {
@@ -20,7 +24,7 @@ import type { DecisionType } from "@/features/mandates/services/decision-reasons
 
 interface DecisionDropdownProps {
   decision: Decision | null;
-  onChange: (decision: Decision, newSymbol?: string) => void;
+  onChange: DecisionChangeHandler;
   onUpdateClick?: () => void;
   disabled?: boolean;
   locked?: boolean; // Prevents changing decision but keeps full styling (used for 'add' decisions)
@@ -32,7 +36,7 @@ interface DecisionDropdownProps {
   // Reason props for integrated popup
   reason?: string | null;
   otherReason?: string | null;
-  onReasonChange?: (reason: string | null, otherReason: string | null) => void;
+  onReasonChange?: DecisionReasonChangeHandler;
   symbol?: string;
   // External control of reason popup
   showReasonPopup?: boolean;
@@ -106,7 +110,7 @@ export function DecisionDropdown({
   decision,
   onChange,
   onUpdateClick,
-  disabled,
+  disabled: disabledProp,
   locked,
   userEmail,
   userEntity,
@@ -121,6 +125,10 @@ export function DecisionDropdown({
   onReasonPopupClose,
 }: DecisionDropdownProps) {
   const [isOpen, setIsOpen] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+  const savingRef = React.useRef(false);
+  const disabled = disabledProp || saving;
   const [internalShowReasonPopup, setInternalShowReasonPopup] =
     React.useState(false);
   const [decisionTooltipOpen, setDecisionTooltipOpen] = React.useState(false);
@@ -170,40 +178,56 @@ export function DecisionDropdown({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleSelect = (value: Decision | "") => {
+  const handleSelect = async (value: Decision | "") => {
+    if (disabled || savingRef.current) return;
     setIsOpen(false);
+    setSaveError(null);
 
-    if (!value) {
-      onChange("cancel");
-      // Just close the popup - the new "cancel" decision won't have a reason.
-      // Don't call onReasonChange here as it would update the OLD decision
-      // and cause the state to revert.
-      setShowReasonPopup(false);
-      return;
-    }
-
-    // For "update", don't call onChange yet - the decision will be created
-    // after the user selects a replacement document in the update search panel.
-    // Calling onChange("update") without a newSymbol would be rejected by the server.
+    // Replacement selection must finish before an update can be saved.
     if (value === "update" && onUpdateClick) {
       onUpdateClick();
       return;
     }
 
-    onChange(value);
-
-    // Show reason popup after selecting a decision (except for cancel)
-    if (value && value !== "cancel" && onReasonChange) {
-      setShowReasonPopup(true);
+    setShowReasonPopup(false);
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      const saved = await onChange(value || "cancel");
+      if (!saved) {
+        setSaveError("Could not save the decision. Please try again.");
+        return;
+      }
+      // The parent now has the persisted ID. Opening earlier loses a fast reason
+      // selection, or attaches it to the previous decision rather than this one.
+      if (value && value !== "cancel" && onReasonChange) {
+        setShowReasonPopup(true);
+      }
+    } catch {
+      setSaveError("Could not save the decision. Please try again.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
 
-  const handleReasonChange = (
+  const handleReasonChange = async (
     newReason: string | null,
     newOtherReason: string | null,
   ) => {
-    if (onReasonChange) {
-      onReasonChange(newReason, newOtherReason);
+    if (!onReasonChange || disabled || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      if (!(await onReasonChange(newReason, newOtherReason))) {
+        setSaveError("Could not save the reason. Please try again.");
+      }
+    } catch {
+      setSaveError("Could not save the reason. Please try again.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
 
@@ -227,7 +251,21 @@ export function DecisionDropdown({
   const hasReason = reason && reason !== "";
 
   return (
-    <div ref={containerRef} className="relative flex items-center gap-0.5">
+    <div
+      ref={containerRef}
+      aria-busy={saving}
+      className="relative flex items-center gap-0.5"
+    >
+      {saving && (
+        <span role="status" className="sr-only">
+          Saving decision
+        </span>
+      )}
+      {saveError && (
+        <span role="alert" className="text-xs text-red-700">
+          {saveError}
+        </span>
+      )}
       {/* Main decision dropdown button */}
       {decision && decision !== "cancel" && userEmail && createdAt ? (
         <Popover
@@ -325,9 +363,10 @@ export function DecisionDropdown({
         <Popover open={reasonTooltipOpen} onOpenChange={setReasonTooltipOpen}>
           <PopoverTrigger asChild>
             <button
+              disabled={disabled}
               onClick={(e) => {
                 e.stopPropagation();
-                setShowReasonPopup(true);
+                if (!disabled) setShowReasonPopup(true);
               }}
               onMouseEnter={() => {
                 if (reasonTooltipTimeoutRef.current)
@@ -428,7 +467,7 @@ export function DecisionDropdown({
           otherReason={otherReason ?? null}
           onChange={handleReasonChange}
           onClose={() => setShowReasonPopup(false)}
-          isOpen={showReasonPopup}
+          isOpen={showReasonPopup && !disabled}
           symbol={symbol}
         />
       )}
