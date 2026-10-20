@@ -51,6 +51,7 @@ export default async function Home() {
     <>
       <PageHeader budgetVersion={budgetVersion} />
       <main className="mx-auto w-full max-w-7xl px-3 py-8 sm:px-4">
+        <h1 className="sr-only">Entities</h1>
         <SubmissionCycleControl />
         <Suspense key={budgetVersion} fallback={<OverviewSkeleton />}>
           <OverviewData />

@@ -7,10 +7,12 @@ import {
   getReasonLabel,
   type DecisionType,
 } from "@/features/mandates/services/decision-reasons";
-import { DECISION_COLORS } from "../../../components/DecisionDropdown";
+import { typography } from "@un-eosg/ui/typography";
+import { cn } from "@/lib/utils";
 import { POPUP_STYLES } from "@/lib/theme";
 import {
   X,
+  Check,
   CheckCircle2,
   Building2,
   RefreshCw,
@@ -115,7 +117,6 @@ export function ReasonPopup({
   const containerRef = React.useRef<HTMLDivElement>(null);
 
   const reasons = getReasonsForDecision(decision);
-  const colors = DECISION_COLORS[decision];
 
   // Get icon for a reason ID
   const getIconForReason = (reasonId: string) => {
@@ -219,16 +220,15 @@ export function ReasonPopup({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div
-          className={`flex items-center justify-between rounded-t-lg px-4 py-3 ${colors.bg} ${colors.border} border-b`}
-        >
-          <span className={`text-sm font-medium ${colors.text}`}>
+        <div className="flex items-center justify-between rounded-t-lg border-b border-border bg-un-blue-surface px-4 py-3">
+          <span className={cn(typography.body, "font-medium text-foreground")}>
             Why {decisionLabel.toLowerCase()}
             {symbol && <span className="font-semibold"> {symbol}</span>}?
           </span>
           <button
             onClick={onClose}
-            className={`rounded p-1 transition-colors hover:bg-white/50 ${colors.text}`}
+            aria-label="Close reason selection"
+            className="rounded p-1 text-foreground transition-colors hover:bg-white/50 focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 focus-visible:outline-none"
           >
             <X className="h-4 w-4" />
           </button>
@@ -240,22 +240,27 @@ export function ReasonPopup({
             <button
               key={r.id}
               onClick={() => handleReasonSelect(r.id)}
-              className={`flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors ${
-                index !== reasons.length - 1 ? "border-b border-gray-50" : ""
-              } ${
+              aria-pressed={localReason === r.id}
+              className={cn(
+                "flex w-full items-start gap-3 px-4 py-3 text-left text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:outline-none focus-visible:ring-inset",
+                index !== reasons.length - 1 && "border-b border-border/50",
                 localReason === r.id
-                  ? `${colors.bg} ${colors.text}`
-                  : `text-gray-600 ${colors.hoverBg}`
-              }`}
+                  ? "bg-un-blue-surface"
+                  : "hover:bg-secondary",
+              )}
             >
-              <span
-                className={`mt-0.75 shrink-0 opacity-60 ${localReason === r.id ? colors.text : "text-gray-400"}`}
-              >
+              <span className="mt-1 shrink-0 text-un-blue-text">
                 {getIconForReason(r.id)}
               </span>
-              <span className="text-[13px] leading-5">
+              <span className={cn(typography.body, "flex-1")}>
                 {renderLabelWithBold(r.label)}
               </span>
+              {localReason === r.id && (
+                <Check
+                  aria-hidden="true"
+                  className="mt-1 h-4 w-4 shrink-0 text-un-blue-text"
+                />
+              )}
             </button>
           ))}
         </div>
@@ -270,14 +275,20 @@ export function ReasonPopup({
                 e.key === "Enter" && !e.shiftKey && handleOtherSubmit()
               }
               placeholder="Please specify the reason..."
-              className="w-full resize-none rounded border border-gray-200 px-3 py-2 text-sm text-gray-700 placeholder:text-gray-400 focus:border-gray-300 focus:outline-none"
+              className={cn(
+                typography.body,
+                "w-full resize-none rounded border border-border px-3 py-2 text-foreground placeholder:text-muted-foreground focus-visible:border-un-blue focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 focus-visible:outline-none",
+              )}
               rows={3}
               autoFocus
             />
             <div className="mt-3 flex justify-end">
               <button
                 onClick={handleOtherSubmit}
-                className={`rounded px-4 py-2 text-sm font-medium transition-colors ${colors.bg} ${colors.text} ${colors.hover}`}
+                className={cn(
+                  typography.label,
+                  "rounded bg-un-blue-surface px-4 py-2 text-un-blue-text transition-colors hover:bg-un-blue/20 focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 focus-visible:outline-none",
+                )}
               >
                 Done
               </button>

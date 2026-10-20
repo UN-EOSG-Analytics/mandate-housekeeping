@@ -27,18 +27,18 @@ export function UserMenu({
     <>
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-600">{email}</span>
+          <span className="text-sm text-foreground">{email}</span>
           {entity && (
             <button
               onClick={() => setIsDialogOpen(true)}
-              className="rounded-full bg-un-blue/10 px-2 py-0.5 text-xs font-medium text-un-blue transition-colors hover:bg-un-blue/20"
+              className="rounded-full bg-un-blue-surface px-2 py-0.5 text-xs font-medium text-un-blue-text transition-colors hover:bg-un-blue-tint-50 focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2"
               title="Click to update entity"
             >
               {entity}
             </button>
           )}
           {isReviewer && (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+            <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-foreground">
               Reviewer
             </span>
           )}
@@ -46,7 +46,7 @@ export function UserMenu({
         <div className="h-6 w-px bg-gray-200" />
         <button
           onClick={handleLogout}
-          className="flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-900"
+          className="flex items-center gap-1.5 text-sm text-foreground transition-colors hover:text-un-blue-text focus-visible:rounded focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2"
         >
           Logout
           <LogOut className="h-4 w-4" />

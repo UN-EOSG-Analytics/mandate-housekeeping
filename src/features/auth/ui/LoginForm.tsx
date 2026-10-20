@@ -27,7 +27,7 @@ export function LoginForm() {
     <div className="flex flex-1 items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
-          <h2 className="mb-1 text-2xl font-bold text-gray-900">Sign In</h2>
+          <h1 className="mb-1 text-2xl font-bold text-gray-900">Sign In</h1>
           <p className="mb-8 text-sm text-gray-500">
             Enter your UN entity email address to receive a sign-in link.
           </p>

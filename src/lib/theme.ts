@@ -15,8 +15,8 @@ export const DECISION_THEME = {
     bgStrong: "bg-blue-100",
     bgSubtle: "bg-blue-50/20",
     border: "border-blue-200",
-    text: "text-blue-700",
-    textStrong: "text-un-blue",
+    text: "text-foreground",
+    textStrong: "text-foreground",
     hover: "hover:border-blue-300",
     hoverBg: "hover:bg-blue-100",
     iconBg: "bg-blue-100",
@@ -27,8 +27,8 @@ export const DECISION_THEME = {
     bgStrong: "bg-red-100",
     bgSubtle: "bg-red-50/30",
     border: "border-red-200",
-    text: "text-red-700",
-    textStrong: "text-red-700",
+    text: "text-foreground",
+    textStrong: "text-foreground",
     hover: "hover:border-red-300",
     hoverBg: "hover:bg-red-100",
     iconBg: "bg-red-100",
@@ -39,8 +39,8 @@ export const DECISION_THEME = {
     bgStrong: "bg-amber-100",
     bgSubtle: "bg-amber-50/20",
     border: "border-amber-200",
-    text: "text-amber-700",
-    textStrong: "text-amber-700",
+    text: "text-foreground",
+    textStrong: "text-foreground",
     hover: "hover:border-amber-300",
     hoverBg: "hover:bg-amber-100",
     iconBg: "bg-amber-100",
@@ -51,8 +51,8 @@ export const DECISION_THEME = {
     bgStrong: "bg-emerald-100",
     bgSubtle: "bg-emerald-50/20",
     border: "border-emerald-200",
-    text: "text-emerald-700",
-    textStrong: "text-emerald-700",
+    text: "text-foreground",
+    textStrong: "text-foreground",
     hover: "hover:border-emerald-300",
     hoverBg: "hover:bg-emerald-100",
     iconBg: "bg-emerald-100",
@@ -63,8 +63,8 @@ export const DECISION_THEME = {
     bgStrong: "bg-gray-50",
     bgSubtle: "bg-gray-50/20",
     border: "border-gray-200",
-    text: "text-gray-500",
-    textStrong: "text-gray-600",
+    text: "text-foreground",
+    textStrong: "text-foreground",
     hover: "hover:border-gray-300",
     hoverBg: "hover:bg-gray-50",
     iconBg: "bg-gray-100",
@@ -159,19 +159,19 @@ export const STATUS_THEME = {
  */
 export const UN_BLUE = {
   // Primary button (solid)
-  button: "bg-un-blue text-white hover:bg-un-blue/90",
+  button: "bg-un-blue-text text-white hover:bg-un-blue-shade",
 
   // Secondary button/badge (light background)
-  badge: "bg-blue-50 text-un-blue hover:bg-blue-100",
+  badge: "bg-un-blue-surface text-un-blue-text hover:bg-un-blue-tint-50",
 
   // Info badge (subtle)
-  badgeSubtle: "bg-un-blue/10 text-un-blue hover:bg-un-blue/20",
+  badgeSubtle: "bg-un-blue-surface text-un-blue-text hover:bg-un-blue-tint-50",
 
   // Text link
-  link: "text-un-blue hover:underline",
+  link: "text-un-blue-text hover:underline",
 
   // Icon background
-  iconBg: "bg-un-blue/10 text-un-blue",
+  iconBg: "bg-un-blue-surface text-un-blue-text",
 } as const;
 
 /**

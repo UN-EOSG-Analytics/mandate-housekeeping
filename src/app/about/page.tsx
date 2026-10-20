@@ -159,9 +159,9 @@ export default async function AboutPage() {
       <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
         {/* Hero */}
         <section className="mx-auto max-w-6xl px-4 py-16 text-center">
-          <h2 className="mb-4 text-4xl font-bold tracking-tight text-gray-900">
+          <h1 className="mb-4 text-4xl font-bold tracking-tight text-foreground">
             Streamline Your Mandate Citation Review
-          </h2>
+          </h1>
           <p className="mx-auto mb-8 max-w-2xl text-lg text-gray-600">
             The Mandate Housekeeping Platform is being tested as a pilot tool to
             support UN Secretariat entities review and update mandate citations

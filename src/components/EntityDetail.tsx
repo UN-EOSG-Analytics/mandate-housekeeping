@@ -4,6 +4,9 @@ import type {
   DecisionChangeHandler,
   DecisionReasonChangeHandler,
 } from "@/types";
+import { DocumentSymbol as DocumentSymbolBadge } from "@un-eosg/ui/components/document-symbol";
+import { Chip } from "@un-eosg/ui/components/chip";
+import { typography } from "@un-eosg/ui/typography";
 
 import {
   CURRENT_BUDGET_VERSION,
@@ -22,7 +25,7 @@ import {
   type RealtimeChange,
 } from "@/hooks/useRealtimeDecisions";
 import { BODY_ABBREVS, FEATURE_FLAGS } from "@/lib/constants";
-import { abbreviateBody } from "@/lib/utils";
+import { abbreviateBody, cn } from "@/lib/utils";
 import {
   DECISION_THEME,
   DECISION_BADGE_STYLES,
@@ -353,7 +356,7 @@ function SortableHeader({
   return (
     <button
       onClick={() => onSort(column)}
-      className="flex items-center gap-0.5 uppercase transition-colors hover:text-gray-600"
+      className="flex items-center gap-0.5 uppercase transition-colors hover:text-un-blue-text focus-visible:rounded focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2"
     >
       <span>{label}</span>
       {isActive ? (
@@ -384,7 +387,10 @@ function ColumnHeaders({
 }) {
   return (
     <div
-      className={`grid ${GRID_COLS} items-center gap-x-2 py-1.5 text-[10px] font-medium tracking-wider text-gray-400 uppercase`}
+      className={cn(
+        typography.tableHeader,
+        `grid ${GRID_COLS} items-center gap-x-2 py-1.5 text-foreground`,
+      )}
     >
       <div className="pl-3">
         <SortableHeader
@@ -439,7 +445,10 @@ function ColumnHeaders({
               e.stopPropagation();
               onApproveAll();
             }}
-            className="text-[10px] font-medium tracking-wider text-gray-400 uppercase transition-colors hover:text-emerald-600"
+            className={cn(
+              typography.tableHeader,
+              "text-foreground transition-colors hover:text-un-blue-text focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2",
+            )}
             title="Approve all decisions in this section"
           >
             OK <Check className="inline h-3 w-3" />
@@ -508,10 +517,10 @@ function MandateRowContent({
   const ageInfo = getAgeIndicator(mandate.year);
   const currentDecision = state?.decision;
 
-  // Check if this row has an update or remove decision (to grey out content)
+  // Keep original document content legible while identifying replaced/removed rows.
   const hasUpdate = currentDecision?.decision === "update";
   const hasRemove = currentDecision?.decision === "remove";
-  const contentGreyed = (hasUpdate || hasRemove) && !isUpdateTarget;
+  const contentSuperseded = (hasUpdate || hasRemove) && !isUpdateTarget;
 
   // Approval state - only reviewers can approve, and only if there's a decision
   const hasDecision =
@@ -538,8 +547,8 @@ function MandateRowContent({
     <div className="relative">
       <div
         className={`grid ${GRID_COLS} cursor-pointer items-center gap-x-2 gap-y-1.5 py-2.5 text-sm transition-colors ${
-          bgColorClass || "hover:bg-gray-50"
-        } ${readOnly ? "opacity-60" : ""} ${!isUpdateTarget && !bgColorClass ? "hover:bg-gray-50" : ""}`}
+          bgColorClass || "hover:bg-un-blue-surface"
+        }`}
         onClick={onOpenSidebar}
       >
         <div
@@ -554,18 +563,18 @@ function MandateRowContent({
             target="_blank"
             rel="noopener noreferrer"
             title={mandate.symbol.length > 18 ? mandate.symbol : undefined}
-            className={`inline-block rounded px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors ${
-              contentGreyed ? "bg-gray-100 text-gray-400" : UN_BLUE.badge
-            }`}
+            className="inline-block whitespace-nowrap focus-visible:rounded focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2"
             onClick={(e) => !mandate.link && e.preventDefault()}
           >
-            {mandate.symbol.length > 18
-              ? `${mandate.symbol.slice(0, 18)}…`
-              : mandate.symbol}
+            <DocumentSymbolBadge subdued={contentSuperseded}>
+              {mandate.symbol.length > 18
+                ? `${mandate.symbol.slice(0, 18)}…`
+                : mandate.symbol}
+            </DocumentSymbolBadge>
           </a>
         </div>
         <div
-          className={`flex min-w-0 cursor-help items-center gap-1.5 ${contentGreyed ? "text-gray-400" : "text-gray-600"}`}
+          className="flex min-w-0 cursor-help items-center gap-1.5 text-foreground"
           title={mandate.title || undefined}
         >
           <span className="inline-flex w-4 shrink-0 items-center justify-center">
@@ -584,26 +593,39 @@ function MandateRowContent({
               </Tooltip>
             )}
           </span>
-          <span className="min-w-0 flex-1 truncate">
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate",
+              hasRemove &&
+                !isUpdateTarget &&
+                "line-through decoration-neutral-control",
+            )}
+          >
             {mandate.title || (
-              <span className="text-gray-400 italic">No title</span>
+              <span className="text-muted-foreground italic">No title</span>
             )}
           </span>
         </div>
         <div
-          className={`text-xs ${contentGreyed ? "text-gray-300" : "text-gray-400"}`}
+          className={cn(
+            typography.label,
+            mandate.body ? "text-foreground" : "text-muted-foreground",
+          )}
           title={mandate.body ?? undefined}
         >
           {abbreviateBody(mandate.body, BODY_ABBREVS) ?? "—"}
         </div>
         <div
-          className={`text-xs ${contentGreyed ? "text-gray-300" : "text-gray-400"}`}
+          className={cn(
+            typography.numeric,
+            mandate.year != null ? "text-foreground" : "text-muted-foreground",
+          )}
         >
           {mandate.year ?? "—"}
         </div>
         <Tooltip content={ageInfo.tooltip}>
           <span
-            className={`cursor-help rounded px-1.5 py-0.5 text-xs font-medium ${contentGreyed ? "opacity-50" : ""} ${ageInfo.color} ${ageInfo.bgColor}`}
+            className={`cursor-help rounded px-1.5 py-0.5 text-xs font-medium text-foreground ${ageInfo.bgColor}`}
           >
             {ageInfo.label}
           </span>
@@ -616,7 +638,13 @@ function MandateRowContent({
           }
         >
           <span
-            className={`cursor-help text-xs ${contentGreyed ? "text-gray-300" : "text-gray-400"}`}
+            className={cn(
+              typography.numeric,
+              "cursor-help",
+              mandate.otherEntitiesCount > 0
+                ? "text-foreground"
+                : "text-muted-foreground",
+            )}
           >
             {mandate.otherEntitiesCount > 0
               ? `+${mandate.otherEntitiesCount}`
@@ -752,7 +780,7 @@ function MandateRowContent({
               e.stopPropagation();
               onOpenActivityTab?.();
             }}
-            className={`cursor-pointer text-xs ${commentCount > 0 ? "font-medium text-un-blue" : "text-gray-400"} ${contentGreyed ? "opacity-50" : ""}`}
+            className={`cursor-pointer text-xs ${commentCount > 0 ? "font-medium text-un-blue-text" : "text-muted-foreground"}`}
           >
             {commentCount > 0 ? commentCount : "—"}
           </span>
@@ -3066,47 +3094,38 @@ export function EntityDetail({
       {coCitingEntities.length > 0 && (
         <div>
           <div className="mb-2 flex items-center gap-2">
-            <span className="text-xs font-medium text-gray-400 uppercase">
+            <span className={typography.eyebrow}>
               Filter by shared citations
             </span>
-            <span className="text-xs text-gray-400">
+            <span className={typography.caption}>
               — click an entity to show only documents cited by both {entity}{" "}
               and that entity
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             {coCitingEntities.map(({ entity: e, count }) => (
-              <button
+              <Chip
                 key={e}
                 onClick={() => setFilterEntity(filterEntity === e ? null : e)}
                 title={`Show ${count} mandates cited by both ${entity} and ${e}`}
-                className={`rounded-full px-2 py-0.5 text-xs transition-colors ${
-                  filterEntity === e
-                    ? "bg-un-blue text-white"
-                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                }`}
+                tone={filterEntity === e ? "selected" : "neutral"}
+                density="dense"
+                className={filterEntity === e ? undefined : "text-foreground"}
               >
-                {e}{" "}
-                <span
-                  className={
-                    filterEntity === e ? "text-white/60" : "text-gray-400"
-                  }
-                >
-                  {count}
-                </span>
-              </button>
+                {e} <span className="tabular-nums">{count}</span>
+              </Chip>
             ))}
             {filterEntity && (
               <button
                 onClick={() => setFilterEntity(null)}
-                className="rounded-full bg-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:bg-gray-400"
+                className="rounded-full bg-secondary px-2 py-0.5 text-xs text-foreground hover:bg-un-blue-surface focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2"
               >
                 Clear filter
               </button>
             )}
           </div>
           {filterEntity && (
-            <p className="mt-2 text-xs text-un-blue">
+            <p className="mt-2 text-xs text-foreground">
               Showing {filteredTotal} mandate{filteredTotal !== 1 ? "s" : ""}{" "}
               cited by both <strong>{entity}</strong> and{" "}
               <strong>{filterEntity}</strong>

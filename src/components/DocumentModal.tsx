@@ -4,6 +4,9 @@
 import { CURRENT_BUDGET_VERSION } from "@/lib/db/budget-version";
 
 import React from "react";
+import { DocumentSymbol as SharedDocumentSymbol } from "@un-eosg/ui/components/document-symbol";
+import { typography } from "@un-eosg/ui/typography";
+import { cn } from "@/lib/utils";
 import {
   isContentElement,
   resolveVisibilityTier,
@@ -177,10 +180,10 @@ function ActivityMeta({
       : "";
   const isReviewer = userEntity?.toUpperCase() === "DMSPC";
   return (
-    <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-gray-400">
-      <span className="font-medium text-gray-500">{userEmail}</span>
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
+      <span className="font-medium text-muted-foreground">{userEmail}</span>
       {userEntity && (
-        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
           {userEntity}
         </span>
       )}
@@ -191,9 +194,9 @@ function ActivityMeta({
       )}
       <span className="text-gray-300">·</span>
       <span>{new Date(createdAt).toLocaleDateString()}</span>
-      <span className="text-gray-400">
+      <span className="text-muted-foreground">
         {action} on{" "}
-        <span className="font-medium text-un-blue">
+        <span className="font-medium text-un-blue-text">
           {viaEntity}
           {subLabel}
         </span>{" "}
@@ -229,7 +232,7 @@ function ParaBox({
               {label}
             </span>
           )}
-          <p className="flex-1 text-sm leading-relaxed text-gray-700">
+          <p className={cn(typography.body, "flex-1 text-foreground")}>
             {highlightSearchAndEntity(p.text, searchQuery, entity, entityLong)}
           </p>
           {p.mandates?.[0] && (
@@ -257,7 +260,7 @@ function ParaBox({
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-un-blue underline"
+                className="text-un-blue-text underline"
               >
                 {label}
               </a>
@@ -438,7 +441,7 @@ function FilteredParagraphTree({
         <>
           <button
             onClick={() => setShowPreamble(!showPreamble)}
-            className="flex items-center gap-2 py-1.5 text-xs text-gray-500 hover:text-gray-700"
+            className="flex items-center gap-2 py-1.5 text-xs text-gray-500 hover:text-foreground"
           >
             <ChevronDown
               className={`h-3.5 w-3.5 transition-transform ${showPreamble ? "" : "-rotate-90"}`}
@@ -446,10 +449,10 @@ function FilteredParagraphTree({
             {showPreamble ? "Hide" : "Show"} {preamble.length} preambular
             paragraph{preamble.length !== 1 && "s"}
             {hasSearchQuery && preamble.length > 0 && (
-              <span className="text-un-blue">(matching search)</span>
+              <span className="text-un-blue-text">(matching search)</span>
             )}
             {!hasSearchQuery && preambleRelevant.length > 0 && (
-              <span className="text-un-blue">
+              <span className="text-un-blue-text">
                 ({preambleRelevant.length} mentioning {entity})
               </span>
             )}
@@ -600,7 +603,7 @@ function FullParagraphTree({
         <>
           <button
             onClick={() => setShowPreamble(!showPreamble)}
-            className="flex items-center gap-2 py-1.5 text-xs text-gray-500 hover:text-gray-700"
+            className="flex items-center gap-2 py-1.5 text-xs text-gray-500 hover:text-foreground"
           >
             <ChevronDown
               className={`h-3.5 w-3.5 transition-transform ${showPreamble ? "" : "-rotate-90"}`}
@@ -608,7 +611,7 @@ function FullParagraphTree({
             {showPreamble ? "Hide" : "Show"} {preamble.length} preambular
             paragraph{preamble.length !== 1 && "s"}
             {hasSearchQuery && (
-              <span className="text-un-blue">(matching search)</span>
+              <span className="text-un-blue-text">(matching search)</span>
             )}
           </button>
           {showPreamble && (
@@ -848,9 +851,10 @@ export function DocumentSymbol({
   const btn = (
     <button
       onClick={handleClick}
-      className={`w-fit rounded px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors ${UN_BLUE.badge}`}
+      className="w-fit rounded whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 focus-visible:outline-none"
+      aria-label={`Open document ${symbol}`}
     >
-      {displaySymbol}
+      <SharedDocumentSymbol>{displaySymbol}</SharedDocumentSymbol>
     </button>
   );
 
@@ -950,7 +954,7 @@ export function DocumentSymbol({
                     </h2>
                     {isFoundational && (
                       <Tooltip content="Also cited in the Mandates and Background section">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-un-blue/10 px-2.5 py-0.5 text-xs font-medium text-un-blue">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-un-blue/10 px-2.5 py-0.5 text-xs font-medium text-un-blue-text">
                           <Star
                             className="h-3 w-3 fill-un-blue"
                             strokeWidth={0}
@@ -961,7 +965,9 @@ export function DocumentSymbol({
                     )}
                   </div>
                   {title && (
-                    <p className="mt-1 text-sm text-gray-500">{title}</p>
+                    <p className={cn(typography.body, "mt-1 text-foreground")}>
+                      {title}
+                    </p>
                   )}
                 </div>
                 <button
@@ -979,8 +985,8 @@ export function DocumentSymbol({
                   onClick={() => setActiveTab("info")}
                   className={`flex items-center gap-1.5 rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors ${
                     activeTab === "info"
-                      ? "bg-gray-100 text-gray-900"
-                      : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                      ? "bg-gray-100 text-foreground"
+                      : "text-gray-500 hover:bg-gray-50 hover:text-foreground"
                   }`}
                 >
                   <Info className="h-4 w-4" />
@@ -990,8 +996,8 @@ export function DocumentSymbol({
                   onClick={() => setActiveTab("decisions")}
                   className={`flex items-center gap-1.5 rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors ${
                     activeTab === "decisions"
-                      ? "bg-gray-100 text-gray-900"
-                      : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                      ? "bg-gray-100 text-foreground"
+                      : "text-gray-500 hover:bg-gray-50 hover:text-foreground"
                   }`}
                 >
                   <CheckSquare className="h-4 w-4" />
@@ -1018,8 +1024,8 @@ export function DocumentSymbol({
                   onClick={() => setActiveTab("activity")}
                   className={`flex items-center gap-1.5 rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors ${
                     activeTab === "activity"
-                      ? "bg-gray-100 text-gray-900"
-                      : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                      ? "bg-gray-100 text-foreground"
+                      : "text-gray-500 hover:bg-gray-50 hover:text-foreground"
                   }`}
                 >
                   <History className="h-4 w-4" />
@@ -1034,8 +1040,8 @@ export function DocumentSymbol({
                   onClick={() => setActiveTab("paragraphs")}
                   className={`flex items-center gap-1.5 rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors ${
                     activeTab === "paragraphs"
-                      ? "bg-gray-100 text-gray-900"
-                      : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                      ? "bg-gray-100 text-foreground"
+                      : "text-gray-500 hover:bg-gray-50 hover:text-foreground"
                   }`}
                 >
                   <FileText className="h-4 w-4" />
@@ -1054,7 +1060,7 @@ export function DocumentSymbol({
               {activeTab === "info" && (
                 <div className="space-y-4">
                   <div className="rounded-xl bg-white p-4 shadow-sm">
-                    <h3 className="mb-3 text-xs font-semibold tracking-wider text-gray-400 uppercase">
+                    <h3 className={cn(typography.eyebrow, "mb-3")}>
                       Document Details
                     </h3>
                     <dl className="space-y-2 text-sm">
@@ -1064,7 +1070,7 @@ export function DocumentSymbol({
                           return (
                             <div className="flex items-center justify-between border-b border-gray-100 py-1.5">
                               <dt className="text-gray-500">Year</dt>
-                              <dd className="flex items-center gap-2 font-medium text-gray-900">
+                              <dd className="flex items-center gap-2 font-medium text-foreground">
                                 {year}
                                 <Tooltip content={ageInfo.tooltip}>
                                   <span
@@ -1080,13 +1086,15 @@ export function DocumentSymbol({
                       {body && (
                         <div className="flex items-center justify-between border-b border-gray-100 py-1.5">
                           <dt className="text-gray-500">Issuing body</dt>
-                          <dd className="font-medium text-gray-900">{body}</dd>
+                          <dd className="font-medium text-foreground">
+                            {body}
+                          </dd>
                         </div>
                       )}
                       {docType && (
                         <div className="flex items-center justify-between border-b border-gray-100 py-1.5">
                           <dt className="text-gray-500">Document type</dt>
-                          <dd className="font-medium text-gray-900">
+                          <dd className="font-medium text-foreground">
                             {docType}
                           </dd>
                         </div>
@@ -1095,7 +1103,7 @@ export function DocumentSymbol({
                         otherEntitiesCount > 0 && (
                           <div className="flex items-center justify-between border-b border-gray-100 py-1.5">
                             <dt className="text-gray-500">Also cited by</dt>
-                            <dd className="font-medium text-gray-900">
+                            <dd className="font-medium text-foreground">
                               {otherEntitiesCount} other{" "}
                               {otherEntitiesCount === 1 ? "entity" : "entities"}
                             </dd>
@@ -1109,7 +1117,7 @@ export function DocumentSymbol({
                               href={link}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 font-medium text-un-blue hover:underline"
+                              className="inline-flex items-center gap-1 font-medium text-un-blue-text hover:underline"
                             >
                               View PDF →
                             </a>
@@ -1135,7 +1143,7 @@ export function DocumentSymbol({
                       if (newerVersions.length > 0) {
                         return (
                           <div className="rounded-xl bg-white p-4 shadow-sm">
-                            <h3 className="mb-3 text-xs font-semibold tracking-wider text-gray-400 uppercase">
+                            <h3 className={cn(typography.eyebrow, "mb-3")}>
                               Newer Versions ({newerVersions.length})
                             </h3>
                             {/* Header row */}
@@ -1173,12 +1181,12 @@ export function DocumentSymbol({
                                 return (
                                   <React.Fragment key={version.symbol}>
                                     {/* Year */}
-                                    <span className="text-sm text-gray-700">
+                                    <span className="text-sm text-foreground">
                                       {version.year}
                                     </span>
 
                                     {/* Symbol */}
-                                    <span className="truncate text-sm font-medium text-gray-900">
+                                    <span className="truncate text-sm font-medium text-foreground">
                                       {version.symbol}
                                     </span>
 
@@ -1386,7 +1394,7 @@ export function DocumentSymbol({
 
                   return (
                     <div className="rounded-xl bg-white p-5 shadow-sm">
-                      <h3 className="mb-4 text-xs font-semibold tracking-wider text-gray-400 uppercase">
+                      <h3 className={cn(typography.eyebrow, "mb-4")}>
                         Entity Decisions
                       </h3>
                       <div className="scrollbar-thin overflow-x-visible overflow-y-auto">
@@ -1439,7 +1447,7 @@ export function DocumentSymbol({
                                   className="h-14 border-b border-gray-100 last:border-0"
                                 >
                                   <td
-                                    className={`py-3 pr-3 align-middle font-medium ${isUserEntity ? "text-un-blue" : "text-gray-700"}`}
+                                    className={`py-3 pr-3 align-middle font-medium ${isUserEntity ? "text-un-blue-text" : "text-foreground"}`}
                                     title={row.subprogramme || undefined}
                                   >
                                     {formatRowName(row)}
@@ -1542,7 +1550,7 @@ export function DocumentSymbol({
                     {/* Entity filter pills */}
                     {allEntities && allEntities.length > 1 && (
                       <div className="mb-3">
-                        <div className="mb-2 text-xs font-semibold tracking-wider text-gray-400 uppercase">
+                        <div className={cn(typography.eyebrow, "mb-2")}>
                           Filter by citing entity
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5">
@@ -1578,7 +1586,7 @@ export function DocumentSymbol({
                                     activityFilterEntity === ent
                                       ? "bg-un-blue text-white"
                                       : isCurrentEntity
-                                        ? "bg-un-blue/20 text-un-blue hover:bg-un-blue/30"
+                                        ? "bg-un-blue/20 text-un-blue-text hover:bg-un-blue/30"
                                         : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                                   }`}
                                 >
@@ -1771,10 +1779,7 @@ export function DocumentSymbol({
                                   )
                                 : null;
                             return (
-                              <div
-                                key={decision.id || i}
-                                className={`text-xs ${isSuperseded ? "opacity-50" : ""}`}
-                              >
+                              <div key={decision.id || i} className="text-xs">
                                 <div
                                   className={`rounded-lg border p-3 ${
                                     decision.decision === "retain"
@@ -1807,6 +1812,11 @@ export function DocumentSymbol({
                                         .toUpperCase() +
                                         decision.decision.slice(1)}
                                     </span>
+                                    {isSuperseded && (
+                                      <span className={typography.caption}>
+                                        Superseded
+                                      </span>
+                                    )}
                                     {decision.newSymbol && (
                                       <span className="text-gray-500">
                                         → {decision.newSymbol}
@@ -1840,15 +1850,10 @@ export function DocumentSymbol({
                                           }`,
                                         )}
                                       <span
-                                        className={`text-[11px] leading-relaxed ${
-                                          decision.decision === "retain"
-                                            ? DECISION_THEME.retain.text
-                                            : decision.decision === "remove"
-                                              ? "text-red-700"
-                                              : decision.decision === "update"
-                                                ? "text-amber-700"
-                                                : "text-gray-600"
-                                        }`}
+                                        className={cn(
+                                          typography.body,
+                                          "text-foreground",
+                                        )}
                                       >
                                         {renderLabelWithBold(reasonLabel)}
                                       </span>
@@ -1875,7 +1880,7 @@ export function DocumentSymbol({
                             return (
                               <div
                                 key={`approval-${decision.id}`}
-                                className={`text-xs ${isSuperseded ? "opacity-50" : ""}`}
+                                className="text-xs"
                               >
                                 <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
                                   <div className="flex items-center gap-2">
@@ -1893,6 +1898,11 @@ export function DocumentSymbol({
                                         .toUpperCase() +
                                         decision.decision.slice(1)}
                                     </span>
+                                    {isSuperseded && (
+                                      <span className={typography.caption}>
+                                        Superseded
+                                      </span>
+                                    )}
                                     {decision.newSymbol && (
                                       <span className="text-gray-500">
                                         → {decision.newSymbol}
@@ -1924,7 +1934,7 @@ export function DocumentSymbol({
                               <div
                                 className={`rounded-lg border p-3 transition-all ${
                                   isResolved
-                                    ? "border-gray-200 bg-gray-50 opacity-60"
+                                    ? "border-gray-200 bg-gray-50"
                                     : isReviewerComment
                                       ? "border-amber-300 bg-amber-50/70 shadow-sm"
                                       : "border-gray-200 bg-white"
@@ -1944,10 +1954,10 @@ export function DocumentSymbol({
                                     <div
                                       className={`leading-relaxed ${
                                         isResolved
-                                          ? "text-gray-500 line-through"
+                                          ? "text-foreground line-through"
                                           : isReviewerComment
-                                            ? "font-medium text-gray-800"
-                                            : "text-gray-700"
+                                            ? "font-medium text-foreground"
+                                            : "text-foreground"
                                       }`}
                                     >
                                       {comment.comment}
@@ -2092,7 +2102,7 @@ export function DocumentSymbol({
                 <div className="space-y-4">
                   {/* Search Box */}
                   <div className="rounded-xl bg-white p-4 shadow-sm">
-                    <div className="mb-2 text-xs font-semibold tracking-wider text-gray-400 uppercase">
+                    <div className={cn(typography.eyebrow, "mb-2")}>
                       Search in document
                     </div>
                     <div className="relative">
@@ -2117,7 +2127,7 @@ export function DocumentSymbol({
 
                   {allEntities && allEntities.length > 0 && (
                     <div className="rounded-xl bg-white p-4 shadow-sm">
-                      <div className="mb-2 text-xs font-semibold tracking-wider text-gray-400 uppercase">
+                      <div className={cn(typography.eyebrow, "mb-2")}>
                         Filter by mentioned entity (Experimental)
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -2212,7 +2222,7 @@ export function DocumentSymbol({
                             href={link}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-un-blue hover:underline"
+                            className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-un-blue-text hover:underline"
                           >
                             View original PDF →
                           </a>

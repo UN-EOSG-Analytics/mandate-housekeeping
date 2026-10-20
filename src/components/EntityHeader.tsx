@@ -1,3 +1,5 @@
+import { typography } from "@un-eosg/ui/typography";
+import { cn } from "@/lib/utils";
 import { Eye, MoreHorizontal, Trash2 } from "lucide-react";
 import { DocxUploadButton } from "./DocxUploadButton";
 import { ExportDropdown } from "./ExportDropdown";
@@ -48,19 +50,23 @@ export function EntityHeader({
     <div className="rounded-xl border border-gray-200 bg-white px-6 py-5 shadow-sm">
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-3xl font-bold text-foreground">{entity}</h2>
-          {entityLong && <p className="text-lg text-gray-500">{entityLong}</p>}
-          {partName && <p className="mt-1 text-sm text-gray-400">{partName}</p>}
+          <h1 className={typography.pageTitle}>{entity}</h1>
+          {entityLong && <p className={typography.lead}>{entityLong}</p>}
+          {partName && (
+            <p className={cn(typography.body, "mt-1 text-foreground")}>
+              {partName}
+            </p>
+          )}
         </div>
         <div className="flex flex-col items-end gap-3">
           <div className="flex flex-col items-end gap-2">
             <div className="text-right">
-              <div className="text-4xl leading-tight font-bold text-un-blue">
+              <div className="text-4xl leading-tight font-bold text-foreground">
                 {uniqueDocs}
               </div>
-              <div className="-mt-0.5 text-sm text-gray-500">
+              <div className="-mt-0.5 text-sm text-foreground">
                 {filterEntity && (
-                  <span className="text-gray-400">
+                  <span className="text-muted-foreground">
                     of {totalUniqueDocuments}{" "}
                   </span>
                 )}
@@ -68,10 +74,10 @@ export function EntityHeader({
               </div>
             </div>
             <div className="text-right">
-              <div className="text-lg leading-tight font-semibold text-un-blue/70">
+              <div className="text-lg leading-tight font-semibold text-foreground">
                 {citations}
               </div>
-              <div className="-mt-0.5 text-xs text-gray-400">
+              <div className="-mt-0.5 text-xs text-foreground">
                 {filterEntity && <>of {totalCitations} </>}
                 Citation{totalCitations !== 1 ? "s" : ""}
               </div>

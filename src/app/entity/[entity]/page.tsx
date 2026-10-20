@@ -22,7 +22,7 @@ function EntityDataSkeleton({ entityCode }: { entityCode: string }) {
       className="space-y-5"
     >
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">{entityCode}</h2>
+        <h1 className="text-2xl font-bold text-foreground">{entityCode}</h1>
         <p role="status" className="sr-only">
           Loading entity mandates
         </p>

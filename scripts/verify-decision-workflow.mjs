@@ -28,6 +28,11 @@ function loadSource(file, dependencies) {
   return exports;
 }
 
+const sharedTypography = loadSource(
+  createRequire(import.meta.url).resolve("@un-eosg/ui/typography"),
+  {},
+);
+
 function find(node, predicate) {
   if (Array.isArray(node)) {
     for (const child of node) {
@@ -78,6 +83,7 @@ function dropdown(props) {
     "src/components/DecisionDropdown.tsx",
     {
       react: hooks,
+      "@un-eosg/ui/typography": sharedTypography,
       "react-dom": { createPortal: (node) => node },
       "lucide-react": {
         ChevronDown: Placeholder,

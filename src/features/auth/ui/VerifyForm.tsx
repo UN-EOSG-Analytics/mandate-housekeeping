@@ -112,9 +112,9 @@ export function VerifyForm({ entities }: VerifyFormProps) {
       <div className="flex flex-1 items-center justify-center px-4">
         <div className="w-full max-w-sm">
           <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
-            <h2 className="mb-1 text-2xl font-bold text-gray-900">
+            <h1 className="mb-1 text-2xl font-bold text-gray-900">
               Complete Sign In
-            </h2>
+            </h1>
             <p className="mb-8 text-sm text-gray-500">
               Signing in as <span className="font-medium">{userEmail}</span>
             </p>
@@ -141,9 +141,9 @@ export function VerifyForm({ entities }: VerifyFormProps) {
     <div className="flex flex-1 items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
-          <h2 className="mb-2 text-2xl font-bold text-gray-900">
+          <h1 className="mb-2 text-2xl font-bold text-gray-900">
             Complete Sign In
-          </h2>
+          </h1>
           {userEmail && (
             <p className="mb-6 text-sm text-gray-500">
               Signing in as <span className="font-medium">{userEmail}</span>

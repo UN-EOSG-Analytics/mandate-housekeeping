@@ -4,6 +4,8 @@ import type { EntityData, PartData } from "@/types";
 import { Building2, ChevronRight, Layers, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { typography } from "@un-eosg/ui/typography";
+import { cn } from "@/lib/utils";
 import { ExportDropdown } from "./ExportDropdown";
 
 interface Props {
@@ -35,35 +37,35 @@ function EntityCard({
   return (
     <Link
       href={`/entity/${encodeURIComponent(entityData.entity)}`}
-      className={`group flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 transition-all hover:shadow-md ${
+      className={`group flex items-center justify-between gap-2 rounded-lg border px-3 py-2.5 transition-colors hover:bg-un-blue-surface focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 ${
         highlight
-          ? "bg-un-blue/10 ring-2 ring-un-blue/30 hover:bg-un-blue"
-          : "bg-gray-100 hover:bg-un-blue"
+          ? "border-un-blue-text/30 bg-un-blue-surface"
+          : "border-border bg-white"
       }`}
       title={entityData.entityLong || entityData.entity}
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-medium text-foreground group-hover:text-white">
+          <span className="truncate text-sm font-medium text-foreground">
             {entityData.entity}
           </span>
-          <span className="shrink-0 text-xs text-gray-400 group-hover:text-white/70">
+          <span className="shrink-0 text-xs text-foreground tabular-nums">
             {mandateCount}
           </span>
         </div>
         {entityData.entityLong && (
-          <div className="truncate text-xs text-gray-500 group-hover:text-white/70">
+          <div className="truncate text-xs text-foreground">
             {entityData.entityLong}
           </div>
         )}
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {actionCount > 0 && (
-          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-600 group-hover:bg-white/20 group-hover:text-white">
+          <span className="rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-foreground">
             {actionCount}
           </span>
         )}
-        <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-white/70" />
+        <ChevronRight className="h-4 w-4 text-un-blue-text" />
       </div>
     </Link>
   );
@@ -137,7 +139,7 @@ export function EntityOverview({ parts, userEntity }: Props) {
       {/* My Entity card - shown for non-reviewer users */}
       {myEntityData && !searchQuery && (
         <div className="mb-8">
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-un-blue">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-un-blue-text">
             <Building2 className="h-4 w-4" />
             My Entity
           </div>
@@ -180,8 +182,8 @@ export function EntityOverview({ parts, userEntity }: Props) {
             onClick={() => setShowSections(!showSections)}
             className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
               showSections
-                ? "bg-un-blue text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                ? "bg-un-blue-text text-white"
+                : "bg-secondary text-foreground hover:bg-un-blue-surface"
             }`}
             title="Group entities by budget section"
           >
@@ -196,13 +198,11 @@ export function EntityOverview({ parts, userEntity }: Props) {
         <div key={partData.part}>
           <div className="mb-3 flex items-baseline gap-1.5">
             {partData.numeral && (
-              <span className="text-base font-medium text-gray-400">
+              <span className={cn(typography.subTitle, "font-medium")}>
                 PART {partData.numeral}.
               </span>
             )}
-            <span className="text-base font-semibold text-gray-600">
-              {partData.part}
-            </span>
+            <span className={typography.subTitle}>{partData.part}</span>
           </div>
 
           {showSections ? (
@@ -213,11 +213,11 @@ export function EntityOverview({ parts, userEntity }: Props) {
                   <div key={sectionKey}>
                     {sectionKey !== "_none" && (
                       <div className="mb-2 ml-1 flex items-baseline gap-1.5">
-                        <span className="text-sm font-medium text-gray-400">
+                        <span className="text-sm font-medium text-foreground">
                           Section {sectionKey}.
                         </span>
                         {title && (
-                          <span className="text-sm font-medium text-gray-500">
+                          <span className="text-sm font-medium text-foreground">
                             {title}
                           </span>
                         )}

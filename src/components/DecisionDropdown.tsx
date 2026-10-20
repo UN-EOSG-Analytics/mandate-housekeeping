@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { typography } from "@un-eosg/ui/typography";
 import { createPortal } from "react-dom";
 import type {
   Decision,
@@ -87,10 +88,10 @@ function DropdownMenu({
           <button
             key={opt.value || "empty"}
             onClick={() => onSelect(opt.value)}
-            className={`flex w-full items-center px-2.5 py-1 text-[11px] font-medium transition-colors ${
+            className={`flex w-full items-center px-2.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-inset ${
               isSelected
                 ? `${optColors.bg} ${optColors.text}`
-                : "text-gray-600 hover:bg-gray-50"
+                : "text-foreground hover:bg-un-blue-surface"
             }`}
           >
             {opt.label}
@@ -162,7 +163,8 @@ export function DecisionDropdown({
     decision && decision in DECISION_COLORS
       ? DECISION_COLORS[decision as keyof typeof DECISION_COLORS]
       : DECISION_COLORS.default;
-  const sizeClasses = size === "sm" ? "h-6 text-[11px]" : "h-6 text-[11px]";
+  const sizeClasses =
+    size === "sm" ? `h-6 ${typography.label}` : `h-6 ${typography.label}`;
 
   // Close dropdown when clicking outside
   React.useEffect(() => {
@@ -287,9 +289,9 @@ export function DecisionDropdown({
                 );
               }}
               disabled={disabled}
-              className={`flex w-21 items-center justify-between gap-1 rounded border px-2 font-medium transition-colors ${sizeClasses} ${colors.bg} ${colors.border} ${colors.text} ${
+              className={`flex w-21 items-center justify-between gap-1 rounded border px-2 font-medium transition-colors focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 ${sizeClasses} ${colors.bg} ${colors.border} ${colors.text} ${
                 disabled
-                  ? "cursor-default opacity-60"
+                  ? "cursor-default"
                   : locked
                     ? "cursor-default"
                     : `cursor-pointer ${colors.hover}`
@@ -319,18 +321,18 @@ export function DecisionDropdown({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-3 py-2">
-              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-gray-700">
+              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-foreground">
                 <span className={`font-medium ${colors.text}`}>
                   {displayLabel}
                 </span>
                 <span>by {userEmail}</span>
                 {userEntity && (
-                  <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+                  <span className="rounded bg-gray-100 px-1.5 py-0.5 text-micro font-medium text-foreground">
                     {userEntity}
                   </span>
                 )}
                 {userEntity?.toUpperCase() === "DMSPC" && (
-                  <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                  <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-micro font-medium text-foreground">
                     Reviewer
                   </span>
                 )}
@@ -343,9 +345,9 @@ export function DecisionDropdown({
         <button
           onClick={() => !disabled && !locked && setIsOpen(!isOpen)}
           disabled={disabled}
-          className={`flex w-21 items-center justify-between gap-1 rounded border px-2 font-medium transition-colors ${sizeClasses} ${colors.bg} ${colors.border} ${colors.text} ${
+          className={`flex w-21 items-center justify-between gap-1 rounded border px-2 font-medium transition-colors focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 ${sizeClasses} ${colors.bg} ${colors.border} ${colors.text} ${
             disabled
-              ? "cursor-default opacity-60"
+              ? "cursor-default"
               : locked
                 ? "cursor-default"
                 : `cursor-pointer ${colors.hover}`
@@ -429,11 +431,11 @@ export function DecisionDropdown({
                 )}
                 <div className="min-w-0 flex-1">
                   {reasonLabel ? (
-                    <p className="text-sm leading-relaxed text-gray-700">
+                    <p className="text-sm leading-relaxed text-foreground">
                       {renderLabelWithBold(reasonLabel)}
                     </p>
                   ) : (
-                    <p className="text-sm text-gray-400 italic">
+                    <p className="text-sm text-muted-foreground italic">
                       No reason provided
                     </p>
                   )}
