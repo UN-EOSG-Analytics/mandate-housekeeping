@@ -81,14 +81,15 @@ export default async function EntityPage({ params }: PageProps) {
     <>
       <PageHeader budgetVersion={budgetVersion} />
       <main className="mx-auto max-w-7xl px-3 py-8 sm:px-4">
-        <SubmissionCycleControl />
-        <Link
-          href="/"
-          className="mb-6 inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-un-blue"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Back to all entities</span>
-        </Link>
+        <SubmissionCycleControl>
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-sm text-foreground transition-colors hover:text-un-blue-text focus-visible:rounded focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back to all entities</span>
+          </Link>
+        </SubmissionCycleControl>
         <Suspense
           key={`${budgetVersion}:${entityCode}`}
           fallback={<EntityDataSkeleton entityCode={entityCode} />}
