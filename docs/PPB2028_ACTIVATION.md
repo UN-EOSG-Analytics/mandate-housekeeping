@@ -25,7 +25,8 @@ to PPB 2027, so the transition does not permit edits to archived work.
 
 Mutation requests must identify their originating active cycle. Old bundles
 that omit the cycle, or requests whose cycle differs from the selected cycle,
-receive a reload error before database access. DOCX uploads have the same check.
+receive a reload error before database access. DOCX uploads have since been removed
+from the application; historical upload records are retained.
 Queued worker jobs retain their immutable source cycle; archived-cycle jobs are
 rejected instead of being reassigned to PPB 2028. Ingestion remains unimplemented.
 

@@ -1,3 +1,17 @@
+# DOCX uploads removed
+
+The application no longer offers DOCX uploads or an upload HTTP endpoint.
+The unfinished storage-only feature and its application storage dependencies
+were removed. Exporting mandate DOCX files remains available.
+
+Historical `mandates_housekeeping.docx_uploads` records and previously stored
+files have not been deleted or modified. The legacy Python worker is scaffolding;
+it is not connected to the application and does not ingest decisions.
+
+The notes below describe the earlier proposed architecture, not a supported feature.
+
+---
+
 The architecture in one sentence
 
 > Next.js is the control plane (auth, upload, orchestration, UX). Python is the ingestion engine (DOCX parsing + normalization). Postgres is the source of truth. Azure Blob is file storage.

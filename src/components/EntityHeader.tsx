@@ -1,7 +1,6 @@
 import { typography } from "@un-eosg/ui/typography";
 import { cn } from "@/lib/utils";
 import { Eye, MoreHorizontal, Trash2 } from "lucide-react";
-import { DocxUploadButton } from "./DocxUploadButton";
 import { ExportDropdown } from "./ExportDropdown";
 import {
   DropdownMenu,
@@ -94,7 +93,6 @@ export function EntityHeader({
                 Start Review
               </button>
             )}
-            {canReviewAnyEntity && <DocxUploadButton entity={entity} />}
             <ExportDropdown entity={entity} />
             {canReviewAnyEntity && !isUnderReview && onClearAll && (
               <DropdownMenu>

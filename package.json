@@ -17,9 +17,6 @@
     "remotion:upgrade": "remotion upgrade"
   },
   "dependencies": {
-    "@azure/identity": "^4.13.1",
-    "@azure/storage-blob": "^12.32.0",
-    "@azure/storage-queue": "^12.30.0",
     "@elevenlabs/elevenlabs-js": "^2.54.0",
     "@next/third-parties": "^16.2.9",
     "@radix-ui/react-dialog": "^1.1.17",

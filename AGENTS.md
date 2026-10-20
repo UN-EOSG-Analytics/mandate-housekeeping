@@ -29,12 +29,11 @@ There is **no test suite**. Verify changes with `pnpm typecheck` and `pnpm build
 
 ## Architecture
 
-Four cooperating pieces (see [docs/DOCX_UPLOAD.md](docs/DOCX_UPLOAD.md)):
+The active application has three pieces:
 
 - **Next.js** (`src/`) — control plane: auth, UI, orchestration, exports. Next.js 16 App Router + React 19.
 - **Postgres** (Azure Flexible Server) — single source of truth.
-- **Azure Blob** — storage for uploaded DOCX files.
-- **Python** — ingestion engine for DOCX parsing/normalization (`python/`, `worker/`).
+- **Python** — local analysis and DOCX parsing/normalization (`python/`). The legacy `worker/` ingestion scaffold is not connected to the application.
 
 ### Database access — raw `pg`
 
@@ -43,6 +42,8 @@ All DB access goes through the raw `pg` pool in [src/lib/db/db.ts](src/lib/db/db
 Two Postgres schemas:
 - `mandates_housekeeping.*` — this app's own state: `users`, `magic_tokens`, `allowed_domains`, `allowed_reviewers`, `mandate_decisions`, `mandate_comments`, `entity_review_mode`, `review_change_responses`, `docx_uploads`.
 - `ppb2026.*` — shared upstream budget data this app reads: `source_document_citations`, `source_documents`, `source_documents_metadata_clean`, `budget_documents`, `budget_document_versions`.
+
+The upload UI and HTTP endpoint have been removed. Historical `docx_uploads` rows and stored files remain intact; see [docs/DOCX_UPLOAD.md](docs/DOCX_UPLOAD.md).
 
 SQL schema and migrations live in [sql/](sql/) (`sql/schema/`, `sql/migrations/`). They are applied manually/externally — there is no migration runner in the app.
 
@@ -84,13 +85,13 @@ No websockets. Collaboration is **polling-based**: [src/hooks/useRealtimeDecisio
 
 ### API routes
 
-Used only where App Router needs a real HTTP endpoint (see [src/app/api/README.md](src/app/api/README.md)): `/api/export/...` (file downloads) and `/api/upload/docx` (file uploads). Everything else uses server actions/server components, not API routes.
+Used only where App Router needs a real HTTP endpoint (see [src/app/api/README.md](src/app/api/README.md)): `/api/export/...` (file downloads) only. Everything else uses server actions/server components, not API routes.
 
 ### Python
 
 Two distinct contexts (uv workspace, members declared in `pyproject.toml`):
 - `python/` — analysis & ingestion scripts run locally (`llm_relevance.py` uses Azure OpenAI, `analysis.py`, `ppb_extraction/` parses PPB DOCX into per-entity data). Run with `uv run`.
-- `worker/ppb-docx-worker/` — Azure Function worker for async DOCX ingestion (currently scaffolding/TODO). Regenerate its pinned deps with `bash worker.sh` after editing `worker/pyproject.toml`. Deployed via `.github/workflows/deploy-docx-worker.yml`.
+- `worker/ppb-docx-worker/` — Legacy Azure Function scaffold for DOCX ingestion; uploads have been removed from the application. Regenerate its pinned deps with `bash worker.sh` after editing `worker/pyproject.toml`. Deployed via `.github/workflows/deploy-docx-worker.yml`.
 
 ## Conventions
 
@@ -100,5 +101,5 @@ Two distinct contexts (uv workspace, members declared in `pyproject.toml`):
 - shadcn/ui: add components with `npx shadcn@latest add <component>`; compose around `components/ui/` primitives rather than editing them.
 - Styling: Tailwind CSS **v4.1** (use current v4 syntax, not v3). Theme tokens and the UN color palette (esp. `un-blue`) live in [src/lib/theme.ts](src/lib/theme.ts); prefer them.
 - Design: left-align, minimal, clear visual hierarchy.
-- Secrets via `.env` / `process.env` only (see `.env.example`: `DATABASE_URL`, `AUTH_SECRET`, SMTP, Azure Storage, Azure OpenAI).
+- Secrets via `.env` / `process.env` only (see `.env.example`: `DATABASE_URL`, `AUTH_SECRET`, SMTP, Azure OpenAI).
 - Don't create parallel infrastructure or hardcode where a global/shared solution exists.
