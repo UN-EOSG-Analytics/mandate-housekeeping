@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { MAX_YEAR, MIN_YEAR } from "@/lib/constants";
 import { Tooltip } from "../../../components/Tooltip";
 import { getIssuingBodies } from "@/features/mandates/services/reference-data";
-import { searchDocumentsAction } from "@/features/mandates/services/documents/document-fetching";
+import { useDocumentSearch } from "@/hooks/useDocumentSearch";
 
 export interface ManualEntryData {
   symbol: string;
@@ -58,58 +58,24 @@ export function ManualDocumentForm({
   const [bodySuggestions, setBodySuggestions] = useState<string[]>([]);
   const [showBodySuggestions, setShowBodySuggestions] = useState(false);
   const [otherBody, setOtherBody] = useState("");
-  const [symbolExists, setSymbolExists] = useState(false);
-  const [checkingSymbol, setCheckingSymbol] = useState(false);
   const [yearTouched, setYearTouched] = useState(false);
-  const [overrideDuplicate, setOverrideDuplicate] = useState(false);
-  const [existingDoc, setExistingDoc] = useState<{
-    symbol: string;
-    title: string | null;
-    body: string | null;
-    year: number | null;
-  } | null>(null);
+  const { results, searching: checkingSymbol } = useDocumentSearch(
+    manualData.symbol,
+    true,
+  );
+  const existingDoc =
+    results.find(
+      (doc) =>
+        doc.symbol.trim().toUpperCase() ===
+        manualData.symbol.trim().toUpperCase(),
+    ) ?? null;
+  const symbolExists = !!existingDoc;
 
   useEffect(() => {
     getIssuingBodies()
       .then(setBodySuggestions)
       .catch(() => {});
   }, []);
-
-  useEffect(() => {
-    if (!manualData.symbol.trim()) {
-      // Defer state updates to next tick to avoid synchronous setState in effect
-      const clearTimer = setTimeout(() => {
-        setSymbolExists(false);
-        setOverrideDuplicate(false);
-        setExistingDoc(null);
-      }, 0);
-      return () => clearTimeout(clearTimer);
-    }
-
-    const timer = setTimeout(() => {
-      setCheckingSymbol(true);
-      searchDocumentsAction(manualData.symbol)
-        .then((results) => {
-          const exactMatch = results.find(
-            (doc) => doc.symbol === manualData.symbol,
-          );
-          if (exactMatch) {
-            setSymbolExists(true);
-            setExistingDoc(exactMatch);
-          } else {
-            setSymbolExists(false);
-            setExistingDoc(null);
-          }
-        })
-        .catch(() => {
-          setSymbolExists(false);
-          setExistingDoc(null);
-        })
-        .finally(() => setCheckingSymbol(false));
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [manualData.symbol]);
 
   const hasChanges =
     manualData.symbol !== initialSymbol ||
@@ -130,7 +96,6 @@ export function ManualDocumentForm({
     parseInt(manualData.year) >= MIN_YEAR &&
     parseInt(manualData.year) <= MAX_YEAR &&
     /^https?:\/\/.+/.test(manualData.link) &&
-    (!symbolExists || overrideDuplicate) &&
     hasChanges;
 
   const handleSubmit = () => {
@@ -145,9 +110,7 @@ export function ManualDocumentForm({
   const allBodyOptions = [...bodySuggestions, "Other"];
 
   return (
-    <div
-      className={`rounded-lg border border-gray-200 bg-white shadow-sm ${compact ? "p-3" : "p-6"}`}
-    >
+    <div className={compact ? "p-3" : "p-6"}>
       {(formTitle || !hideDescription) && (
         <div className="mb-4 border-b border-gray-100 pb-4">
           <div className="flex items-start justify-between">
@@ -167,6 +130,7 @@ export function ManualDocumentForm({
               )}
             </div>
             <button
+              type="button"
               onClick={onCancel}
               className="shrink-0 text-gray-400 hover:text-gray-600"
             >
@@ -189,10 +153,9 @@ export function ManualDocumentForm({
               value={manualData.symbol}
               onChange={(e) => {
                 setManualData((d) => ({ ...d, symbol: e.target.value }));
-                setOverrideDuplicate(false);
               }}
               className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:ring-2 focus:ring-un-blue/20 focus:outline-none ${
-                symbolExists && !overrideDuplicate
+                symbolExists
                   ? "border-un-blue bg-un-blue/5"
                   : "border-gray-200 bg-white hover:border-gray-300"
               } ${originalSymbol ? "pr-40" : ""}`}
@@ -214,7 +177,7 @@ export function ManualDocumentForm({
           {checkingSymbol && (
             <p className="mt-1 text-xs text-gray-400">Checking symbol...</p>
           )}
-          {symbolExists && !overrideDuplicate && existingDoc && onSelect && (
+          {symbolExists && existingDoc && onSelect && (
             <div className="mt-2 rounded-lg border border-un-blue/30 bg-un-blue/5 p-3">
               <div className="mb-2">
                 <div className="mb-1 text-xs font-medium text-un-blue">
@@ -232,8 +195,12 @@ export function ManualDocumentForm({
                 onClick={() => onSelect(existingDoc.symbol)}
                 className="rounded bg-un-blue px-3 py-1.5 text-sm text-white hover:bg-un-blue/90"
               >
-                Add this document
+                Use existing document
               </button>
+              <p className="mt-2 text-xs text-foreground">
+                Or save your edited details below. This changes only this
+                citation.
+              </p>
             </div>
           )}
         </div>
@@ -401,12 +368,14 @@ export function ManualDocumentForm({
         </div>
         <div className="flex justify-end gap-2 border-t border-gray-100 pt-4">
           <button
+            type="button"
             onClick={onCancel}
             className="rounded-lg px-4 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-100"
           >
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={!isFormValid}
             className="rounded-lg bg-un-blue px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-un-blue/90 disabled:cursor-not-allowed disabled:opacity-50"

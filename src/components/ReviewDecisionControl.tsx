@@ -226,7 +226,6 @@ export function ReviewDecisionControl({
   const hasMoreActions =
     reviewStale ||
     review?.decision === "update" ||
-    (submission?.decision === "add" && review?.decision !== "remove") ||
     (!!review?.manualMetadata && review.decision === "add");
   const agreeWithSubmission = () => {
     if (submission)
@@ -244,20 +243,6 @@ export function ReviewDecisionControl({
           Confirm review decision
         </button>
       )}
-      {canEdit &&
-        submission?.decision === "add" &&
-        review?.decision !== "remove" && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={async () => {
-              if (await save("remove")) setShowReason(true);
-            }}
-            className="text-left text-xs text-un-blue-text underline underline-offset-2"
-          >
-            Reject addition
-          </button>
-        )}
       {canEdit &&
         review?.manualMetadata &&
         (review.decision === "add" || review.decision === "update") && (
