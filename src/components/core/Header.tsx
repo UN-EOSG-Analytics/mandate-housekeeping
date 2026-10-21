@@ -2,7 +2,6 @@ import { getBudgetVersion } from "@/lib/db/review-cycle";
 import { CURRENT_BUDGET_VERSION } from "@/lib/db/budget-version";
 import Link from "next/link";
 import { SiteHeader } from "@un-eosg/ui/components/site-header";
-import { typography } from "@un-eosg/ui/typography";
 import { UserMenu } from "./UserMenu";
 import { CommentNotifications } from "@/components/CommentNotifications";
 import type { EntityOption } from "@/features/mandates/services/data-service";
@@ -37,13 +36,6 @@ export async function Header({
       descriptor="Housekeeping Platform"
       href={isLoggedIn || navigationPending ? "/" : "/about"}
       homeLabel={SITE_TITLE}
-      badge={
-        <span
-          className={`${typography.micro} rounded border border-border bg-secondary px-1.5 py-0.5 text-foreground`}
-        >
-          Beta
-        </span>
-      }
       showMobileMenu={false}
       transparency="none"
       className="relative top-auto py-4 [&_.text-wordmark>span]:font-light"
