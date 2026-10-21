@@ -72,6 +72,7 @@ function state(events) {
 }
 function build(changes = {}) {
   return view.buildEntityTableView({
+    entity: "OCHA",
     legislativeMandates: {
       "Subprogramme 10": [mandate("A/RES/75/10")],
       "Subprogramme 2": [
@@ -225,4 +226,27 @@ test("missing years sort last in both directions and shared-citation filter comb
   assert.equal(view.hasTableFilters(filters()), false);
   assert.equal(view.hasTableFilters(filters({ comments: ["unread"] })), true);
   assert.notEqual(view.sectionAnchor("a/b"), view.sectionAnchor("a b"));
+});
+
+test("Others exposes actual other entities, excludes the current entity, and supports combined entity choices", () => {
+  const unfiltered = build();
+  assert.deepEqual(
+    unfiltered.facets.others.map((option) => option.value),
+    ["DESA"],
+  );
+  assert.equal(unfiltered.facets.others[0].count, 5);
+  assert.equal(
+    build({ filters: filters({ others: ["DESA", "UNEP"] }) }).visibleItems
+      .length,
+    5,
+  );
+  assert.equal(
+    build({ filters: filters({ others: ["OCHA"] }) }).visibleItems.length,
+    0,
+  );
+  assert.equal(
+    build({ filters: filters({ others: ["DESA"], bodies: ["SC"] }) })
+      .visibleItems.length,
+    1,
+  );
 });

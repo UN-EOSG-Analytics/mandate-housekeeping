@@ -12,7 +12,6 @@ import type {
   DecisionReasonChangeHandler,
 } from "@/types";
 import { DocumentSymbol as DocumentSymbolBadge } from "@un-eosg/ui/components/document-symbol";
-import { Chip } from "@un-eosg/ui/components/chip";
 import { typography } from "@un-eosg/ui/typography";
 
 import {
@@ -98,6 +97,8 @@ import {
   ActiveTableFilters,
   EntityTableColumnHeader,
   SubprogrammeContents,
+  EntityTableFilterContext,
+  OtherEntitiesCell,
   type EntityTableViewControls,
 } from "./EntityTableControls";
 import {
@@ -154,7 +155,7 @@ function formatSubprogrammeName(subprog: string): string {
     subprog === "Legislative mandates" ||
     subprog.toLowerCase().includes("all subprogramme")
   ) {
-    return "PROGRAMME LEVEL";
+    return "Programme level";
   }
   return subprog;
 }
@@ -357,14 +358,14 @@ function getDecisionChange(
 // }
 
 const GRID_COLS =
-  "grid-cols-[140px_minmax(180px,1fr)_50px_50px_45px_25px_30px_70px_140px_160px_85px]";
+  "grid-cols-[130px_minmax(180px,1fr)_76px_76px_52px_92px_72px_154px_180px_94px]";
 
 function ColumnHeaders({ controls }: { controls: EntityTableViewControls }) {
   return (
     <div
       className={cn(
         typography.tableHeader,
-        `grid ${GRID_COLS} items-center gap-x-2 py-1.5 text-foreground`,
+        `grid ${GRID_COLS} h-10 items-center gap-x-2 text-foreground`,
       )}
     >
       <div className="pl-3">
@@ -389,7 +390,6 @@ function ColumnHeaders({ controls }: { controls: EntityTableViewControls }) {
         label="Others"
         controls={controls}
       />
-      <span />
       <EntityTableColumnHeader
         column="notes"
         label="Notes"
@@ -478,25 +478,13 @@ function MandateRowContent({
   // Keep original document content legible while identifying replaced/removed rows.
   const hasRemove = currentDecision?.decision === "remove";
 
-  // Determine background color based on decision
-  let bgColorClass = "";
-  if (isUpdateTarget) {
-    bgColorClass = "bg-amber-50/50";
-  } else if (currentDecision?.decision === "remove") {
-    bgColorClass = DECISION_THEME.remove.bgSubtle;
-  } else if (currentDecision?.decision === "update") {
-    bgColorClass = "bg-amber-50/40";
-  } else if (currentDecision?.decision === "add") {
-    bgColorClass = DECISION_THEME.add.bgSubtle;
-  } else if (currentDecision?.decision === "retain") {
-    bgColorClass = DECISION_THEME.retain.bgSubtle;
-  }
+  const bgColorClass = isUpdateTarget ? "bg-secondary/40" : "";
 
   return (
     <div className="relative">
       <div
-        className={`grid ${GRID_COLS} cursor-pointer items-center gap-x-2 gap-y-1.5 py-2.5 text-sm transition-colors ${
-          bgColorClass || "hover:bg-un-blue-surface"
+        className={`grid ${GRID_COLS} min-h-10 cursor-pointer items-center gap-x-2 border-b border-border py-1 text-sm transition-colors ${
+          bgColorClass || "hover:bg-muted"
         }`}
         onClick={onOpenSidebar}
       >
@@ -579,28 +567,15 @@ function MandateRowContent({
             {ageInfo.label}
           </span>
         </Tooltip>
-        <Tooltip
-          content={
-            mandate.otherEntitiesCount > 0
-              ? `${mandate.otherEntitiesCount} other entit${mandate.otherEntitiesCount !== 1 ? "ies" : "y"} also cite${mandate.otherEntitiesCount === 1 ? "s" : ""} ${mandate.symbol}`
-              : `No other entities cite ${mandate.symbol}`
-          }
-        >
-          <span
-            className={cn(
-              typography.numeric,
-              "cursor-help",
-              mandate.otherEntitiesCount > 0
-                ? "text-foreground"
-                : "text-muted-foreground",
-            )}
-          >
-            {mandate.otherEntitiesCount > 0
-              ? `+${mandate.otherEntitiesCount}`
-              : "—"}
-          </span>
-        </Tooltip>
-        <div></div>
+        <OtherEntitiesCell
+          entities={[
+            ...new Set(
+              mandate.allEntities.filter((entity) => entity !== mandate.entity),
+            ),
+          ]}
+          entityLongMap={mandate.entityLongMap}
+          symbol={mandate.symbol}
+        />
         <div className="flex items-center justify-start pr-2">
           {!isUpdateTarget &&
             (() => {
@@ -724,6 +699,7 @@ function MandateRowContent({
         <div>
           {!isUpdateTarget && (
             <ReviewDecisionControl
+              compact
               entity={mandate.entity || trackContext?.entity || ""}
               symbol={mandate.symbol}
               subprogramme={subprogramme}
@@ -942,7 +918,7 @@ function MandateRow({
 
   return (
     <div className="relative">
-      <div className="overflow-visible rounded-lg bg-white shadow-sm">
+      <div className="overflow-visible bg-white">
         <div hidden={!visible}>
           {/* Original row */}
           <MandateRowContent
@@ -1212,7 +1188,7 @@ function MandateRow({
                   </div>
                   <div className="space-y-2.5">
                     {/* Before Review */}
-                    <div className="space-y-1.5">
+                    <div>
                       <div className="text-[10px] font-medium tracking-wide whitespace-nowrap text-gray-500 uppercase">
                         Before Review
                       </div>
@@ -1403,7 +1379,6 @@ function MandateSection({
   onAcceptChange,
   onRevertChange,
   visibleMandates,
-  controls,
   sectionId,
 }: {
   title: string;
@@ -1463,7 +1438,6 @@ function MandateSection({
   onAcceptChange?: (symbol: string) => void;
   onRevertChange?: (symbol: string) => void;
   visibleMandates: Mandate[];
-  controls: EntityTableViewControls;
   sectionId: string;
 }) {
   const tracksContext = useContext(DecisionTracksContext);
@@ -1513,40 +1487,33 @@ function MandateSection({
     <section
       id={sectionId}
       aria-label={title}
-      className="min-w-[1180px] scroll-mt-3"
+      className="scroll-mt-10"
       style={visibleMandates.length ? undefined : { display: "contents" }}
     >
-      {readOnly && visibleMandates.length > 0 && (
-        <div className="mb-6 border-t border-dashed border-gray-300 pt-6" />
-      )}
       <div
         hidden={!visibleMandates.length}
-        className="sticky top-0 z-20 border-b border-border bg-white py-2 shadow-sm"
+        className="sticky top-10 z-10 flex h-8 items-center gap-2 border-b border-border bg-muted px-3 text-sm"
       >
-        <div className="flex items-baseline gap-2">
-          <h3 className="text-sm font-semibold tracking-wide text-foreground uppercase">
-            {title}
-          </h3>
-          <span className="text-xs text-foreground">
-            {visibleMandates.length} of {mandates.length} citations
-          </span>
-          {!readOnly && title !== "PROGRAMME LEVEL" && (
-            <button
-              onClick={() => setShowEditModal(true)}
-              className="text-gray-400 transition-colors hover:text-gray-600"
-              title="Edit subprogramme"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-          )}
-          {readOnly && (
-            <span className="text-xs text-gray-400">
-              — for your reference (read-only)
-            </span>
-          )}
-        </div>
-
-        <ColumnHeaders controls={controls} />
+        <h3 className="truncate font-semibold text-foreground">{title}</h3>
+        <span className="shrink-0 text-xs text-foreground tabular-nums">
+          {visibleMandates.length}
+          {visibleMandates.length !== mandates.length
+            ? ` / ${mandates.length}`
+            : ""}
+        </span>
+        {!readOnly && title !== "Programme level" && (
+          <button
+            type="button"
+            onClick={() => setShowEditModal(true)}
+            className="rounded text-foreground"
+            title="Edit subprogramme"
+          >
+            <Pencil className="h-3 w-3" />
+          </button>
+        )}
+        {readOnly && (
+          <span className="text-xs text-foreground">· reference</span>
+        )}
       </div>
 
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
@@ -1653,7 +1620,7 @@ export function EntityDetail({
     !!notificationSymbol &&
     notificationId !== dismissedNotification &&
     notificationCycle === budgetVersion;
-  const [filterEntity, setFilterEntity] = useState<string | null>(null);
+  const filterEntity: string | null = null;
   const [tableFilters, setTableFilters] =
     useState<TableFilters>(EMPTY_TABLE_FILTERS);
   const [tableSort, setTableSort] = useState<TableSort>({
@@ -2680,28 +2647,10 @@ export function EntityDetail({
     [entity, reviewSessionId, refreshDecisions, refreshReviewChanges],
   );
 
-  // Combine all mandates for co-citing calculation
-  const allMandates = [
-    ...backgroundMandates,
-    ...Object.values(legislativeMandates).flat(),
-  ];
-
-  // Compute co-citing entities and their counts
-  const coCitingCounts: Record<string, number> = {};
-  for (const m of allMandates) {
-    for (const e of m.allEntities) {
-      if (e !== entity) {
-        coCitingCounts[e] = (coCitingCounts[e] || 0) + 1;
-      }
-    }
-  }
-  const coCitingEntities = Object.entries(coCitingCounts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([e, count]) => ({ entity: e, count }));
-
   const tableView = useMemo(
     () =>
       buildEntityTableView({
+        entity,
         legislativeMandates,
         backgroundMandates,
         states,
@@ -2721,6 +2670,7 @@ export function EntityDetail({
         sharedEntity: filterEntity,
       }),
     [
+      entity,
       legislativeMandates,
       backgroundMandates,
       states,
@@ -2752,7 +2702,6 @@ export function EntityDetail({
   };
   const clearTableFilters = () => {
     setTableFilters(EMPTY_TABLE_FILTERS);
-    setFilterEntity(null);
   };
   const filtersActive = hasTableFilters(tableFilters) || !!filterEntity;
   const totalMandates = tableItems.length;
@@ -2889,316 +2838,251 @@ export function EntityDetail({
           onSaved: onTrackSaved,
         }}
       >
-        <div className="space-y-5">
-          {notificationOpen && notificationSymbol && (
-            <DocumentSymbol
-              symbol={notificationSymbol}
-              entity={entity}
-              entityLong={entityLong}
-              subprogramme={notificationSubprogramme}
-              link={null}
-              relevanceCount={0}
-              relevanceIndices={[]}
-              aiComments={{}}
-              allEntityRelevance={{}}
-              budgetVersion={budgetVersion}
-              targetCommentId={notificationId}
-              isOpen
-              onOpenChange={(open) => {
-                if (!open) setDismissedNotification(notificationId);
-              }}
-              initialTab="activity"
-              readOnly={cycleReadOnly}
-              userEmail={userEmail}
-              userEntity={userEntity}
-              state={
-                sharedSectionProps.states[
-                  `${notificationSymbol}:${notificationSubprogramme || ""}`
-                ]
-              }
-              onDecision={(decision, newSymbol) =>
-                handleDecision(
-                  notificationSymbol,
-                  notificationSubprogramme,
-                  decision,
-                  newSymbol,
-                )
-              }
-              onReasonChange={(reason, other, saved) =>
-                handleReasonChange(
-                  notificationSymbol,
-                  notificationSubprogramme,
-                  reason,
-                  other,
-                  saved,
-                )
-              }
-              onComment={
-                !cycleReadOnly && (userEntity === entity || canReviewAnyEntity)
-                  ? (text) =>
-                      handleComment(
-                        notificationSymbol,
-                        notificationSubprogramme,
-                        text,
-                      )
-                  : undefined
-              }
-            />
-          )}
-          {notificationId &&
-            notificationCycle &&
-            notificationCycle !== budgetVersion && (
-              <p
-                role="alert"
-                className="rounded border border-amber-200 bg-amber-50 p-3 text-sm"
-              >
-                This comment belongs to a different submission cycle. Select
-                that cycle to view it.
-              </p>
-            )}
-          {/* Error toast */}
-          {errorMessage && (
-            <div className="fixed right-4 bottom-4 z-50 flex max-w-md items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 shadow-lg">
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
-              <p className="text-sm text-red-800">{errorMessage}</p>
-              <button
-                onClick={() => setErrorMessage(null)}
-                className="ml-auto shrink-0 text-red-400 hover:text-red-600"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-
-          {cycleReadOnly && (
-            <p className="rounded border border-blue-200 bg-blue-50 p-3 text-sm">
-              {DISABLED_REVIEW_MESSAGE}
-            </p>
-          )}
-          {/* Read-only notice */}
-          {!cycleReadOnly &&
-            !isOwnEntity &&
-            userEntity &&
-            !canReviewAnyEntity && (
-              <ReadOnlyNoticeBanner
-                viewingEntity={entity}
+        <EntityTableFilterContext.Provider value={tableControls}>
+          <div className="space-y-5">
+            {notificationOpen && notificationSymbol && (
+              <DocumentSymbol
+                symbol={notificationSymbol}
+                entity={entity}
+                entityLong={entityLong}
+                subprogramme={notificationSubprogramme}
+                link={null}
+                relevanceCount={0}
+                relevanceIndices={[]}
+                aiComments={{}}
+                allEntityRelevance={{}}
+                budgetVersion={budgetVersion}
+                targetCommentId={notificationId}
+                isOpen
+                onOpenChange={(open) => {
+                  if (!open) setDismissedNotification(notificationId);
+                }}
+                initialTab="activity"
+                readOnly={cycleReadOnly}
+                userEmail={userEmail}
                 userEntity={userEntity}
+                state={
+                  sharedSectionProps.states[
+                    `${notificationSymbol}:${notificationSubprogramme || ""}`
+                  ]
+                }
+                onDecision={(decision, newSymbol) =>
+                  handleDecision(
+                    notificationSymbol,
+                    notificationSubprogramme,
+                    decision,
+                    newSymbol,
+                  )
+                }
+                onReasonChange={(reason, other, saved) =>
+                  handleReasonChange(
+                    notificationSymbol,
+                    notificationSubprogramme,
+                    reason,
+                    other,
+                    saved,
+                  )
+                }
+                onComment={
+                  !cycleReadOnly &&
+                  (userEntity === entity || canReviewAnyEntity)
+                    ? (text) =>
+                        handleComment(
+                          notificationSymbol,
+                          notificationSubprogramme,
+                          text,
+                        )
+                    : undefined
+                }
               />
             )}
-          {canReviewAnyEntity && userEntity !== entity && (
-            <ReviewerModeBanner reviewingEntity={entity} />
-          )}
-          {isUnderReview && (
-            <ReviewInProgressBanner
-              startedBy={reviewStartedBy}
-              isReviewer={isReviewer}
-              onEndReview={isReviewer ? handleEndReview : undefined}
-            />
-          )}
-
-          <EntityHeader
-            entity={entity}
-            entityLong={entityLong}
-            partName={partName}
-            filterEntity={filterEntity}
-            filtersActive={filtersActive}
-            filteredCitations={filteredTotal}
-            totalCitations={totalMandates}
-            filteredUniqueDocuments={filteredUniqueDocuments}
-            totalUniqueDocuments={totalUniqueDocuments}
-            canReviewAnyEntity={canReviewAnyEntity}
-            isUnderReview={isUnderReview}
-            onStartReview={
-              !cycleReadOnly && reviewModeLoaded ? handleStartReview : undefined
-            }
-            isClearingAll={isClearingAll}
-          />
-
-          {/* Phase Tracker */}
-          {/* <PhaseTracker /> */}
-
-          {/* Co-citing entities filter */}
-          {coCitingEntities.length > 0 && (
-            <div>
-              <div className="mb-2 flex items-center gap-2">
-                <span className={typography.eyebrow}>
-                  Filter by shared citations
-                </span>
-                <span className={typography.caption}>
-                  — click an entity to show only documents cited by both{" "}
-                  {entity} and that entity
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {coCitingEntities.map(({ entity: e, count }) => (
-                  <Chip
-                    key={e}
-                    onClick={() =>
-                      setFilterEntity(filterEntity === e ? null : e)
-                    }
-                    title={`Show ${count} mandates cited by both ${entity} and ${e}`}
-                    tone={filterEntity === e ? "selected" : "neutral"}
-                    density="dense"
-                    className={
-                      filterEntity === e ? undefined : "text-foreground"
-                    }
-                  >
-                    {e} <span className="tabular-nums">{count}</span>
-                  </Chip>
-                ))}
-                {filterEntity && (
-                  <button
-                    onClick={() => setFilterEntity(null)}
-                    className="rounded-full bg-secondary px-2 py-0.5 text-xs text-foreground hover:bg-un-blue-surface focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2"
-                  >
-                    Clear filter
-                  </button>
-                )}
-              </div>
-              {filterEntity && (
-                <p className="mt-2 text-xs text-foreground">
-                  Showing {filteredTotal} mandate
-                  {filteredTotal !== 1 ? "s" : ""} cited by both{" "}
-                  <strong>{entity}</strong> and <strong>{filterEntity}</strong>
+            {notificationId &&
+              notificationCycle &&
+              notificationCycle !== budgetVersion && (
+                <p
+                  role="alert"
+                  className="rounded border border-amber-200 bg-amber-50 p-3 text-sm"
+                >
+                  This comment belongs to a different submission cycle. Select
+                  that cycle to view it.
                 </p>
               )}
-            </div>
-          )}
-
-          {/* Global Search */}
-          <div className="mb-6">
-            <div className="relative">
-              <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search across all mandates by symbol, title, or body..."
-                value={tableFilters.search}
-                onChange={(e) =>
-                  setTableFilters({ ...tableFilters, search: e.target.value })
-                }
-                className="w-full rounded-lg border border-gray-300 py-2 pr-10 pl-10 text-sm focus:border-un-blue focus:ring-1 focus:ring-un-blue focus:outline-none"
-              />
-              {tableFilters.search && (
+            {/* Error toast */}
+            {errorMessage && (
+              <div className="fixed right-4 bottom-4 z-50 flex max-w-md items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 shadow-lg">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+                <p className="text-sm text-red-800">{errorMessage}</p>
                 <button
-                  onClick={() =>
-                    setTableFilters({ ...tableFilters, search: "" })
-                  }
-                  className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  onClick={() => setErrorMessage(null)}
+                  className="ml-auto shrink-0 text-red-400 hover:text-red-600"
                 >
                   <X className="h-4 w-4" />
                 </button>
-              )}
-            </div>
-          </div>
+              </div>
+            )}
 
-          <div className="mb-5 space-y-4">
-            <div
-              aria-label="Table filters"
-              className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border border-border bg-white px-4 py-2"
-            >
-              <span className="text-sm font-semibold">Filters</span>
-              {[
-                ["body", "Body / type"],
-                ["year", "Year"],
-                ["age", "Age"],
-                ["submissions", "Entity submission"],
-                ["reviews", "Review decision"],
-                ["comments", "Comments"],
-              ].map(([column, label]) => (
-                <EntityTableColumnHeader
-                  key={column}
-                  column={column}
-                  label={label}
-                  controls={tableControls}
+            {cycleReadOnly && (
+              <p className="rounded border border-blue-200 bg-blue-50 p-3 text-sm">
+                {DISABLED_REVIEW_MESSAGE}
+              </p>
+            )}
+            {/* Read-only notice */}
+            {!cycleReadOnly &&
+              !isOwnEntity &&
+              userEntity &&
+              !canReviewAnyEntity && (
+                <ReadOnlyNoticeBanner
+                  viewingEntity={entity}
+                  userEntity={userEntity}
                 />
-              ))}
+              )}
+            {canReviewAnyEntity && userEntity !== entity && (
+              <ReviewerModeBanner reviewingEntity={entity} />
+            )}
+            {isUnderReview && (
+              <ReviewInProgressBanner
+                startedBy={reviewStartedBy}
+                isReviewer={isReviewer}
+                onEndReview={isReviewer ? handleEndReview : undefined}
+              />
+            )}
+
+            <EntityHeader
+              entity={entity}
+              entityLong={entityLong}
+              partName={partName}
+              filterEntity={filterEntity}
+              filtersActive={filtersActive}
+              filteredCitations={filteredTotal}
+              totalCitations={totalMandates}
+              filteredUniqueDocuments={filteredUniqueDocuments}
+              totalUniqueDocuments={totalUniqueDocuments}
+              canReviewAnyEntity={canReviewAnyEntity}
+              isUnderReview={isUnderReview}
+              onStartReview={
+                !cycleReadOnly && reviewModeLoaded
+                  ? handleStartReview
+                  : undefined
+              }
+              isClearingAll={isClearingAll}
+              navigation={
+                <SubprogrammeContents
+                  sections={sectionViews.map((section) => ({
+                    id: section.id,
+                    title: section.title,
+                    count: section.visibleMandates.length,
+                    total: section.mandates.length,
+                  }))}
+                />
+              }
+            />
+
+            {/* Phase Tracker */}
+            {/* <PhaseTracker /> */}
+
+            {/* Global Search */}
+            <div className="mb-6">
+              <div className="relative">
+                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search across all mandates by symbol, title, or body..."
+                  value={tableFilters.search}
+                  onChange={(e) =>
+                    setTableFilters({ ...tableFilters, search: e.target.value })
+                  }
+                  className="w-full rounded-lg border border-gray-300 py-2 pr-10 pl-10 text-sm focus:border-un-blue focus:ring-1 focus:ring-un-blue focus:outline-none"
+                />
+                {tableFilters.search && (
+                  <button
+                    onClick={() =>
+                      setTableFilters({ ...tableFilters, search: "" })
+                    }
+                    className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
+
             <ActiveTableFilters
               controls={tableControls}
-              sharedEntity={filterEntity}
+              sharedEntity={null}
               onClearAll={clearTableFilters}
             />
-            <p role="status" className="text-sm text-foreground">
-              Showing {filteredTotal} of {totalMandates} citation rows across{" "}
-              {
-                sectionViews.filter(
-                  (section) => section.visibleMandates.length > 0,
-                ).length
-              }{" "}
-              sections. Filters apply to every section.
-            </p>
-            <SubprogrammeContents
-              sections={sectionViews.map((section) => ({
-                id: section.id,
-                title: section.title,
-                count: section.visibleMandates.length,
-                total: section.mandates.length,
-              }))}
+            {/* One horizontal scroll area keeps columns aligned. On narrow screens it also provides a bounded vertical scroll area for sticky section headings. */}
+            <div
+              role="region"
+              aria-label="Resolution review sections"
+              tabIndex={0}
+              className="max-h-[75vh] overflow-auto rounded-lg border border-border bg-white focus-visible:ring-2 focus-visible:ring-un-blue xl:max-h-none xl:overflow-visible"
+            >
+              <div className="min-w-[1220px]">
+                <div className="sticky top-0 z-20 rounded-t-lg border-b border-border bg-muted">
+                  <ColumnHeaders controls={tableControls} />
+                </div>
+                {sectionViews.map((section) => (
+                  <MandateSection
+                    key={section.id}
+                    title={
+                      section.subprogramme === null
+                        ? section.title
+                        : formatSubprogrammeName(section.subprogramme)
+                    }
+                    sectionId={section.id}
+                    mandates={section.mandates}
+                    visibleMandates={section.visibleMandates}
+                    subprogramme={section.subprogramme}
+                    foundationalSymbols={foundationalSymbols}
+                    readOnly={
+                      section.subprogramme !== null
+                        ? !isOwnEntity
+                        : !canReviewAnyEntity &&
+                          !(
+                            isReviewer &&
+                            userEntity === entity &&
+                            !cycleReadOnly
+                          )
+                    }
+                    {...sharedSectionProps}
+                    {...makeSubprogHandlers(section.subprogramme)}
+                  />
+                ))}
+              </div>
+            </div>
+            {filteredTotal === 0 && (
+              <div className="rounded-lg border border-border bg-white p-8 text-center text-foreground">
+                <p>No citations match these filters.</p>
+                <button
+                  type="button"
+                  onClick={clearTableFilters}
+                  className="mt-3 text-un-blue-text underline"
+                >
+                  Clear all filters
+                </button>
+              </div>
+            )}
+
+            {/* Review blocked dialog - shown when user tries to save while under review */}
+            <ReviewBlockedDialog
+              isOpen={showReviewBlockedDialog}
+              onClose={() => {
+                setShowReviewBlockedDialog(false);
+                refreshDecisions();
+              }}
+            />
+
+            {/* Clear all decisions dialog - shown when reviewer clicks Clear All */}
+            <ClearAllDecisionsDialog
+              isOpen={showClearAllDialog}
+              onClose={() => setShowClearAllDialog(false)}
+              onConfirm={handleClearAll}
+              entityName={entity}
+              onClearingStateChange={setIsClearingAll}
             />
           </div>
-          {/* One horizontal scroll area keeps columns aligned. On narrow screens it also provides a bounded vertical scroll area for sticky section headings. */}
-          <div
-            role="region"
-            aria-label="Resolution review sections"
-            tabIndex={0}
-            className="max-h-[75vh] space-y-8 overflow-auto focus-visible:ring-2 focus-visible:ring-un-blue xl:max-h-none xl:overflow-visible"
-          >
-            {sectionViews.map((section) => (
-              <MandateSection
-                key={section.id}
-                title={
-                  section.subprogramme === null
-                    ? section.title
-                    : formatSubprogrammeName(section.subprogramme)
-                }
-                sectionId={section.id}
-                mandates={section.mandates}
-                visibleMandates={section.visibleMandates}
-                controls={tableControls}
-                subprogramme={section.subprogramme}
-                foundationalSymbols={foundationalSymbols}
-                readOnly={
-                  section.subprogramme !== null
-                    ? !isOwnEntity
-                    : !canReviewAnyEntity &&
-                      !(isReviewer && userEntity === entity && !cycleReadOnly)
-                }
-                {...sharedSectionProps}
-                {...makeSubprogHandlers(section.subprogramme)}
-              />
-            ))}
-          </div>
-          {filteredTotal === 0 && (
-            <div className="rounded-lg border border-border bg-white p-8 text-center text-foreground">
-              <p>No citations match these filters.</p>
-              <button
-                type="button"
-                onClick={clearTableFilters}
-                className="mt-3 text-un-blue-text underline"
-              >
-                Clear all filters
-              </button>
-            </div>
-          )}
-
-          {/* Review blocked dialog - shown when user tries to save while under review */}
-          <ReviewBlockedDialog
-            isOpen={showReviewBlockedDialog}
-            onClose={() => {
-              setShowReviewBlockedDialog(false);
-              refreshDecisions();
-            }}
-          />
-
-          {/* Clear all decisions dialog - shown when reviewer clicks Clear All */}
-          <ClearAllDecisionsDialog
-            isOpen={showClearAllDialog}
-            onClose={() => setShowClearAllDialog(false)}
-            onConfirm={handleClearAll}
-            entityName={entity}
-            onClearingStateChange={setIsClearingAll}
-          />
-        </div>
+        </EntityTableFilterContext.Provider>
       </DecisionTracksContext.Provider>
     </CommentConversationContext.Provider>
   );

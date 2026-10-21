@@ -699,6 +699,17 @@ function reviewControl(props, context = null) {
     "@/features/mandates/ui/DocumentSearchInput": {
       DocumentSearchInput: "DocumentSearchInput",
     },
+    "lucide-react": {
+      Check: "Check",
+      MoreHorizontal: "MoreHorizontal",
+      AlertCircle: "AlertCircle",
+      ArrowRightLeft: "ArrowRightLeft",
+    },
+    "./ui/popover": {
+      Popover: "Popover",
+      PopoverContent: "PopoverContent",
+      PopoverTrigger: "PopoverTrigger",
+    },
     "./DecisionDropdown": { DecisionDropdown: "DecisionDropdown" },
     "./ui/dialog": Object.fromEntries(
       ["Dialog", "DialogContent", "DialogHeader", "DialogTitle"].map((name) => [
@@ -809,4 +820,31 @@ test("session transitions share decision lock, enforce scope and leave decision 
       assert.equal(statements[3], "LOCK");
     } else assert.deepEqual(statements, []);
   }
+});
+
+test("compact review keeps agreement available without a second line of status text", async () => {
+  const submission = { ...event("s1", "entity", "retain", null, 1) };
+  const ui = reviewControl({
+    submission,
+    review: null,
+    editable: true,
+    compact: true,
+  });
+  assert.ok(!ui.tree.props.className.includes("flex-col"));
+  assert.equal(
+    find(
+      ui.tree,
+      (node) => node.type === "span" && node.props.children === "Not reviewed",
+    ),
+    undefined,
+  );
+  const agree = find(
+    ui.tree,
+    (node) =>
+      node.type === "button" &&
+      node.props["aria-label"] === "Agree with submission",
+  );
+  assert.ok(agree);
+  await agree.props.onClick();
+  assert.equal(ui.calls[0].params.agreeWithSubmission, true);
 });

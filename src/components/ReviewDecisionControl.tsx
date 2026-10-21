@@ -1,6 +1,13 @@
 "use client";
 
 import { createContext, useContext, useState } from "react";
+import {
+  Check,
+  MoreHorizontal,
+  AlertCircle,
+  ArrowRightLeft,
+} from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import type { Decision, MandateDecision, ManualMetadata } from "@/types";
 import {
   createDecisionAction,
@@ -31,6 +38,7 @@ export function ReviewDecisionControl({
   submission,
   review,
   editable = false,
+  compact = false,
   onSaved,
 }: {
   entity: string;
@@ -39,6 +47,7 @@ export function ReviewDecisionControl({
   submission: MandateDecision | null;
   review: MandateDecision | null;
   editable?: boolean;
+  compact?: boolean;
   onSaved?: (event: MandateDecision) => void;
 }) {
   const context = useContext(DecisionTracksContext);
@@ -186,53 +195,8 @@ export function ReviewDecisionControl({
       setBusy(false);
     }
   };
-  return (
-    <div
-      className="flex min-w-0 flex-col items-start gap-1"
-      onClick={(e) => e.stopPropagation()}
-    >
-      {!review || review.decision === "cancel" ? (
-        <span className="text-xs text-foreground">Not reviewed</span>
-      ) : null}
-      {(canEdit || (review && review.decision !== "cancel")) && (
-        <DecisionDropdown
-          decision={review?.decision ?? null}
-          onChange={save}
-          disabled={!canEdit || busy}
-          userEmail={review?.userEmail}
-          userEntity={review?.userEntity}
-          createdAt={review?.createdAt}
-          reason={review?.decisionReason}
-          otherReason={review?.otherReason}
-          onReasonChange={canEdit ? reason : undefined}
-          onUpdateClick={() => setShowReplacement(true)}
-          symbol={symbol}
-          showReasonPopup={showReason}
-          onReasonPopupClose={() => setShowReason(false)}
-        />
-      )}
-      {review?.decision === "update" && (
-        <span className="text-xs break-all text-un-blue-text">
-          → {review.newSymbol}
-        </span>
-      )}
-      {reviewStale && (
-        <span className="text-xs text-amber-800">
-          Submission changed — review needed
-        </span>
-      )}
-      {canEdit && submission && submission.decision !== "cancel" && (
-        <button
-          type="button"
-          disabled={busy}
-          className="text-left text-xs text-un-blue-text underline underline-offset-2 disabled:opacity-60"
-          onClick={() =>
-            void save(submission.decision, undefined, undefined, true)
-          }
-        >
-          {busy ? "Saving…" : "Agree with submission"}
-        </button>
-      )}
+  const moreActions = (
+    <>
       {canEdit && reviewStale && (
         <button
           type="button"
@@ -279,6 +243,113 @@ export function ReviewDecisionControl({
             Edit review document details
           </button>
         )}
+    </>
+  );
+  return (
+    <div
+      className={
+        compact
+          ? "flex min-w-0 flex-nowrap items-center gap-1"
+          : "flex min-w-0 flex-col items-start gap-1"
+      }
+      onClick={(e) => e.stopPropagation()}
+    >
+      {(!review || review.decision === "cancel") && (!compact || !canEdit) ? (
+        <span className="text-xs whitespace-nowrap text-foreground">
+          Not reviewed
+        </span>
+      ) : null}
+      {(canEdit || (review && review.decision !== "cancel")) && (
+        <DecisionDropdown
+          decision={review?.decision ?? null}
+          onChange={save}
+          disabled={!canEdit || busy}
+          userEmail={review?.userEmail}
+          userEntity={review?.userEntity}
+          createdAt={review?.createdAt}
+          reason={review?.decisionReason}
+          otherReason={review?.otherReason}
+          onReasonChange={canEdit ? reason : undefined}
+          onUpdateClick={() => setShowReplacement(true)}
+          symbol={symbol}
+          showReasonPopup={showReason}
+          onReasonPopupClose={() => setShowReason(false)}
+        />
+      )}
+      {review?.decision === "update" && (
+        <span className="text-xs break-all text-un-blue-text">
+          {compact ? (
+            <span title={`Replacement: ${review.newSymbol}`}>
+              <ArrowRightLeft className="h-3 w-3" />
+              <span className="sr-only">Replacement: {review.newSymbol}</span>
+            </span>
+          ) : (
+            <>→ {review.newSymbol}</>
+          )}
+        </span>
+      )}
+      {reviewStale && (
+        <span className="text-xs text-amber-800">
+          {compact ? (
+            <span title="Submission changed — review needed">
+              <AlertCircle className="h-3.5 w-3.5" />
+              <span className="sr-only">
+                Submission changed — review needed
+              </span>
+            </span>
+          ) : (
+            "Submission changed — review needed"
+          )}
+        </span>
+      )}
+      {canEdit && submission && submission.decision !== "cancel" && (
+        <button
+          type="button"
+          disabled={busy}
+          title="Agree with submission"
+          aria-label="Agree with submission"
+          className={
+            compact
+              ? "flex h-6 w-6 shrink-0 items-center justify-center rounded text-un-blue-text hover:bg-un-blue-surface disabled:opacity-60"
+              : "text-left text-xs text-un-blue-text underline underline-offset-2 disabled:opacity-60"
+          }
+          onClick={() =>
+            void save(submission.decision, undefined, undefined, true)
+          }
+        >
+          {compact ? (
+            <Check className="h-3.5 w-3.5" />
+          ) : busy ? (
+            "Saving…"
+          ) : (
+            "Agree with submission"
+          )}
+        </button>
+      )}
+      {compact
+        ? canEdit &&
+          ((review && review.decision !== "cancel") ||
+            submission?.decision === "add") && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={busy}
+                  aria-label="More review actions"
+                  className="flex h-6 w-5 shrink-0 items-center justify-center rounded text-foreground hover:bg-secondary"
+                >
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                className="flex w-56 flex-col items-start gap-3 p-3"
+              >
+                {moreActions}
+              </PopoverContent>
+            </Popover>
+          )
+        : moreActions}
       <Dialog open={showEditMetadata} onOpenChange={setShowEditMetadata}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
@@ -301,8 +372,15 @@ export function ReviewDecisionControl({
         </DialogContent>
       </Dialog>
       {error && (
-        <span role="alert" className="text-xs text-red-700">
-          {error}
+        <span role="alert" title={error} className="text-xs text-red-700">
+          {compact ? (
+            <>
+              <AlertCircle className="h-4 w-4" />
+              <span className="sr-only">{error}</span>
+            </>
+          ) : (
+            error
+          )}
         </span>
       )}
       <Dialog open={showReplacement} onOpenChange={setShowReplacement}>

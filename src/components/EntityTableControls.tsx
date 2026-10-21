@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, Filter, X } from "lucide-react";
+// Adapted from mandates/website/src/components/table/ColumnHeaderFilter.tsx.
+// Keep its separate sort/funnel controls, searchable pill choices and year range.
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronUp, Filter, Search, X } from "lucide-react";
+import { Chip, ChipCount } from "@un-eosg/ui/components/chip";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import type {
   FacetOption,
@@ -18,74 +21,8 @@ export interface EntityTableViewControls {
   onSort: (column: TableSortColumn, direction?: "asc" | "desc") => void;
   facets: Record<TableFacet, FacetOption[]>;
 }
-
-function Options({
-  facet,
-  label,
-  controls,
-}: {
-  facet: TableFacet;
-  label: string;
-  controls: EntityTableViewControls;
-}) {
-  const [search, setSearch] = useState("");
-  const options = controls.facets[facet];
-  const selected = controls.filters[facet];
-  return (
-    <fieldset className="space-y-2">
-      <legend className="mb-2 text-xs font-semibold text-foreground">
-        {label}
-      </legend>
-      {options.length > 10 && (
-        <input
-          aria-label={`Search ${label.toLowerCase()} options`}
-          placeholder="Search options…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded border border-input bg-white px-2 py-1.5 text-sm"
-        />
-      )}
-      <div className="max-h-52 space-y-1 overflow-y-auto">
-        {options
-          .filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
-          .map((option) => (
-            <label
-              key={option.value}
-              className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-secondary"
-            >
-              <input
-                type="checkbox"
-                checked={selected.includes(option.value)}
-                onChange={() =>
-                  controls.setFilters({
-                    ...controls.filters,
-                    [facet]: selected.includes(option.value)
-                      ? selected.filter((v) => v !== option.value)
-                      : [...selected, option.value],
-                  })
-                }
-                className="accent-un-blue-text"
-              />
-              <span className="min-w-0 flex-1">{option.label}</span>
-              <span className="text-xs tabular-nums">{option.count}</span>
-            </label>
-          ))}
-        {!options.length && <p className="text-sm">No options</p>}
-      </div>
-      {selected.length > 0 && (
-        <button
-          type="button"
-          onClick={() =>
-            controls.setFilters({ ...controls.filters, [facet]: [] })
-          }
-          className="text-xs text-un-blue-text underline"
-        >
-          Clear {label.toLowerCase()}
-        </button>
-      )}
-    </fieldset>
-  );
-}
+export const EntityTableFilterContext =
+  createContext<EntityTableViewControls | null>(null);
 
 const COLUMN_FACETS: Record<string, TableFacet[]> = {
   body: ["bodies", "types"],
@@ -108,7 +45,151 @@ const FACET_LABELS: Record<TableFacet, string> = {
   comments: "Comments",
 };
 
-/** Local version of the mandates registry's sortable column/filter popover. */
+function PillFilter({
+  facet,
+  controls,
+}: {
+  facet: TableFacet;
+  controls: EntityTableViewControls;
+}) {
+  const [search, setSearch] = useState("");
+  const [showAll, setShowAll] = useState(false);
+  const options = controls.facets[facet];
+  const selected = controls.filters[facet];
+  const filtered = options.filter((option) =>
+    option.label.toLowerCase().includes(search.toLowerCase()),
+  );
+  const displayed = !showAll && !search ? filtered.slice(0, 20) : filtered;
+  return (
+    <fieldset className="w-64 space-y-3">
+      <legend className="mb-2 text-xs font-semibold">
+        {FACET_LABELS[facet]}
+      </legend>
+      {options.length > 8 && (
+        <div className="relative">
+          <Search className="absolute top-2 left-2 h-3.5 w-3.5 text-muted-foreground" />
+          <input
+            aria-label={`Search ${FACET_LABELS[facet].toLowerCase()}`}
+            placeholder={`Search ${FACET_LABELS[facet].toLowerCase()}…`}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="h-8 w-full rounded border border-input bg-white pr-2 pl-7 text-sm focus-visible:ring-1 focus-visible:ring-un-blue"
+          />
+        </div>
+      )}
+      {selected.length > 0 && (
+        <button
+          type="button"
+          onClick={() =>
+            controls.setFilters({ ...controls.filters, [facet]: [] })
+          }
+          className="flex items-center gap-1 text-sm text-foreground"
+        >
+          <X className="h-3 w-3" />
+          Clear filter
+        </button>
+      )}
+      <div className="flex max-h-64 flex-wrap gap-1.5 overflow-y-auto">
+        {displayed.map((option) => (
+          <Chip
+            key={option.value}
+            density="dense"
+            tone={selected.includes(option.value) ? "selected" : "neutral"}
+            onClick={() =>
+              controls.setFilters({
+                ...controls.filters,
+                [facet]: selected.includes(option.value)
+                  ? selected.filter((value) => value !== option.value)
+                  : [...selected, option.value],
+              })
+            }
+            title={option.label}
+            className="whitespace-nowrap"
+          >
+            {option.label}
+            <ChipCount>{option.count}</ChipCount>
+          </Chip>
+        ))}
+        {!displayed.length && <p className="py-2 text-sm">No options found</p>}
+      </div>
+      {!showAll && !search && filtered.length > 20 && (
+        <button
+          type="button"
+          onClick={() => setShowAll(true)}
+          className="text-sm text-un-blue-text"
+        >
+          Show {filtered.length - 20} more…
+        </button>
+      )}
+    </fieldset>
+  );
+}
+
+function YearRangeFilter({
+  controls,
+  onDone,
+}: {
+  controls: EntityTableViewControls;
+  onDone: () => void;
+}) {
+  const [from, setFrom] = useState(controls.filters.yearFrom);
+  const [to, setTo] = useState(controls.filters.yearTo);
+  const apply = () => {
+    controls.setFilters({ ...controls.filters, yearFrom: from, yearTo: to });
+    onDone();
+  };
+  return (
+    <div className="space-y-3">
+      <p className="text-xs font-semibold">Year range</p>
+      <div className="flex items-end gap-2">
+        {(["From", "To"] as const).map((label, index) => (
+          <label key={label} className="text-xs">
+            {label}
+            <input
+              inputMode="numeric"
+              pattern="[0-9]*"
+              aria-label={`${label} year`}
+              placeholder={index ? "Latest" : "Earliest"}
+              value={index ? to : from}
+              onChange={(event) =>
+                (index ? setTo : setFrom)(
+                  event.target.value.replace(/\D/g, "").slice(0, 4),
+                )
+              }
+              onKeyDown={(event) => {
+                if (event.key === "Enter") apply();
+              }}
+              className="mt-1 block h-7 w-20 rounded border border-input bg-white px-2 text-sm"
+            />
+          </label>
+        ))}
+        <button
+          type="button"
+          onClick={apply}
+          className="h-7 rounded px-2 text-sm hover:bg-secondary"
+        >
+          Apply
+        </button>
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          controls.setFilters({
+            ...controls.filters,
+            yearFrom: "",
+            yearTo: "",
+          });
+          onDone();
+        }}
+        className="flex items-center gap-1 text-sm"
+      >
+        <X className="h-3 w-3" />
+        Clear filter
+      </button>
+    </div>
+  );
+}
+
 export function EntityTableColumnHeader({
   column,
   label,
@@ -118,127 +199,194 @@ export function EntityTableColumnHeader({
   label: string;
   controls: EntityTableViewControls;
 }) {
+  const [open, setOpen] = useState(false);
   const sortable = ["symbol", "title", "body", "year", "others"].includes(
     column,
   );
   const facets = COLUMN_FACETS[column] || [];
   const active =
-    facets.reduce((sum, facet) => sum + controls.filters[facet].length, 0) +
-    (column === "symbol" && controls.filters.symbol ? 1 : 0) +
-    (column === "title" && controls.filters.title ? 1 : 0) +
-    (column === "year" && (controls.filters.yearFrom || controls.filters.yearTo)
-      ? 1
-      : 0);
+    facets.some((facet) => controls.filters[facet].length > 0) ||
+    (column === "symbol" && !!controls.filters.symbol) ||
+    (column === "title" && !!controls.filters.title) ||
+    (column === "year" &&
+      !!(controls.filters.yearFrom || controls.filters.yearTo));
+  const direction =
+    controls.sort.column === column ? controls.sort.direction : null;
+  const nextDirection = direction === "desc" ? "asc" : "desc";
   return (
-    <Popover>
+    <div className="flex items-center gap-0.5 text-xs font-medium whitespace-nowrap text-foreground">
+      {sortable ? (
+        <button
+          type="button"
+          onClick={() =>
+            controls.onSort(column as TableSortColumn, nextDirection)
+          }
+          aria-label={`Sort ${label} ${nextDirection === "asc" ? "ascending" : "descending"}`}
+          className="flex items-center gap-0.5 rounded focus-visible:ring-2 focus-visible:ring-un-blue"
+        >
+          {label}
+          {direction === "asc" ? (
+            <ChevronUp className="h-3.5 w-3.5 text-un-blue-text" />
+          ) : (
+            <ChevronDown
+              className={`h-3.5 w-3.5 ${direction ? "text-un-blue-text" : "opacity-40"}`}
+            />
+          )}
+        </button>
+      ) : (
+        <span>{label}</span>
+      )}
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label={`Filter by ${label}`}
+            className={`flex h-5 w-5 items-center justify-center rounded transition-colors focus-visible:ring-2 focus-visible:ring-un-blue ${active ? "bg-un-blue-text text-white" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+          >
+            <Filter className="h-3 w-3" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          sideOffset={4}
+          className="max-h-[70vh] w-auto space-y-4 overflow-y-auto p-3 text-foreground"
+        >
+          {(column === "symbol" || column === "title") && (
+            <label className="block w-64 text-sm">
+              {label}
+              <input
+                aria-label={`Filter ${label.toLowerCase()}`}
+                value={controls.filters[column]}
+                onChange={(event) =>
+                  controls.setFilters({
+                    ...controls.filters,
+                    [column]: event.target.value,
+                  })
+                }
+                placeholder={`Search ${label.toLowerCase()}…`}
+                className="mt-2 h-8 w-full rounded border border-input bg-white px-2 text-sm"
+              />
+            </label>
+          )}
+          {column === "year" && (
+            <YearRangeFilter
+              controls={controls}
+              onDone={() => setOpen(false)}
+            />
+          )}
+          {facets.map((facet) => (
+            <PillFilter key={facet} facet={facet} controls={controls} />
+          ))}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
+/** Entity badges in a hover/focus card; each refines the same Others column. */
+export function OtherEntitiesCell({
+  entities,
+  entityLongMap,
+  symbol,
+}: {
+  entities: string[];
+  entityLongMap: Record<string, string>;
+  symbol: string;
+}) {
+  const controls = useContext(EntityTableFilterContext);
+  const [open, setOpen] = useState(false);
+  const openedByPointer = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const enter = () => {
+    if (timer.current) clearTimeout(timer.current);
+    setOpen(true);
+  };
+  const leave = () => {
+    timer.current = setTimeout(() => setOpen(false), 150);
+  };
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+  if (!entities.length)
+    return <span className="text-xs text-foreground">—</span>;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={`${label}: sort and filter${active ? `, ${active} active` : ""}`}
-          className={`inline-flex items-center gap-1 rounded py-1 text-left text-[10px] font-semibold uppercase focus-visible:ring-2 focus-visible:ring-un-blue ${active ? "text-un-blue-text" : "text-foreground"}`}
+          aria-label={`${entities.length} other entities cite ${symbol}`}
+          onMouseEnter={() => {
+            openedByPointer.current = true;
+            enter();
+          }}
+          onMouseLeave={leave}
+          onFocus={() => {
+            openedByPointer.current = false;
+            enter();
+          }}
+          onBlur={leave}
+          onClick={(event) => {
+            event.stopPropagation();
+            event.preventDefault();
+            openedByPointer.current = false;
+            enter();
+          }}
+          className="w-fit rounded text-xs text-foreground tabular-nums underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-un-blue"
         >
-          {label}
-          {active ? (
-            <Filter className="h-3 w-3 shrink-0 fill-current" />
-          ) : controls.sort.column === column ? (
-            controls.sort.direction === "asc" ? (
-              <ChevronUp className="h-3 w-3 shrink-0" />
-            ) : (
-              <ChevronDown className="h-3 w-3 shrink-0" />
-            )
-          ) : (
-            <ChevronDown className="h-2.5 w-2.5 shrink-0" />
-          )}
+          +{entities.length}
         </button>
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="max-h-[70vh] w-72 space-y-4 overflow-y-auto text-foreground"
+        sideOffset={4}
+        onOpenAutoFocus={(event) => {
+          if (openedByPointer.current) event.preventDefault();
+        }}
+        onCloseAutoFocus={(event) => {
+          if (openedByPointer.current) event.preventDefault();
+        }}
+        onMouseEnter={enter}
+        onMouseLeave={leave}
+        onFocusCapture={enter}
+        onBlurCapture={leave}
+        onClick={(event) => event.stopPropagation()}
+        className="w-72 p-3"
       >
-        <h4 className="text-sm font-semibold">{label}</h4>
-        {sortable && (
-          <div className="flex gap-2 border-b border-border pb-3">
-            {(["asc", "desc"] as const).map((direction) => (
-              <button
-                type="button"
-                key={direction}
-                aria-pressed={
-                  controls.sort.column === column &&
-                  controls.sort.direction === direction
-                }
-                onClick={() =>
-                  controls.onSort(column as TableSortColumn, direction)
-                }
-                className="rounded border border-input px-2 py-1 text-xs aria-pressed:border-un-blue aria-pressed:bg-un-blue-surface"
-              >
-                Sort {direction === "asc" ? "ascending" : "descending"}
-              </button>
-            ))}
-          </div>
-        )}
-        {(column === "symbol" || column === "title") && (
-          <label className="block text-sm">
-            Contains
-            <input
-              value={controls.filters[column]}
-              onChange={(e) =>
-                controls.setFilters({
-                  ...controls.filters,
-                  [column]: e.target.value,
-                })
+        <p className="mb-2 text-xs font-medium text-foreground">
+          Also cited by
+        </p>
+        <div className="flex max-h-64 flex-wrap gap-1.5 overflow-y-auto">
+          {entities.map((entity) => (
+            <Chip
+              key={entity}
+              density="dense"
+              tone={
+                controls?.filters.others.includes(entity)
+                  ? "selected"
+                  : "neutral"
               }
-              className="mt-1 w-full rounded border border-input bg-white px-2 py-1.5"
-              placeholder={`Filter ${label.toLowerCase()}…`}
-            />
-          </label>
-        )}
-        {column === "year" && (
-          <fieldset>
-            <legend className="mb-2 text-sm">Year range (inclusive)</legend>
-            <div className="flex gap-2">
-              {(["yearFrom", "yearTo"] as const).map((field, i) => (
-                <label key={field} className="min-w-0 flex-1 text-xs">
-                  {i === 0 ? "From" : "To"}
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    max={9999}
-                    value={controls.filters[field]}
-                    onChange={(e) =>
+              title={entityLongMap[entity] || entity}
+              onClick={
+                controls
+                  ? () =>
                       controls.setFilters({
                         ...controls.filters,
-                        [field]: e.target.value.replace(/\D/g, "").slice(0, 4),
+                        others: controls.filters.others.includes(entity)
+                          ? controls.filters.others.filter(
+                              (value) => value !== entity,
+                            )
+                          : [...controls.filters.others, entity],
                       })
-                    }
-                    className="mt-1 w-full rounded border border-input bg-white px-2 py-1.5 text-sm"
-                  />
-                </label>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                controls.setFilters({
-                  ...controls.filters,
-                  yearFrom: "",
-                  yearTo: "",
-                })
+                  : undefined
               }
-              className="mt-2 text-xs text-un-blue-text underline"
             >
-              Clear year range
-            </button>
-          </fieldset>
-        )}
-        {facets.map((facet) => (
-          <Options
-            key={facet}
-            facet={facet}
-            label={FACET_LABELS[facet]}
-            controls={controls}
-          />
-        ))}
+              {entity}
+            </Chip>
+          ))}
+        </div>
       </PopoverContent>
     </Popover>
   );
@@ -344,30 +492,27 @@ export function SubprogrammeContents({
   return (
     <nav
       aria-label="Subprogramme contents"
-      className="rounded-lg border border-border bg-white p-4"
+      className="mt-4 overflow-x-auto border-t border-border pt-3"
     >
-      <h2 className="mb-3 text-sm font-semibold text-foreground">
-        On this page
-      </h2>
-      <ol className="grid gap-x-6 gap-y-2 sm:grid-cols-2 xl:grid-cols-3">
+      <ol className="flex w-max min-w-full flex-nowrap items-center gap-4 whitespace-nowrap">
         {sections.map((section) => (
-          <li key={section.id} className="min-w-0 text-sm">
+          <li key={section.id} className="shrink-0 text-xs">
             {section.count > 0 ? (
               <a
                 href={`#${encodeURIComponent(section.id)}`}
                 aria-current={active === section.id ? "location" : undefined}
-                className="flex items-baseline justify-between gap-2 rounded text-foreground underline-offset-4 hover:text-un-blue-text hover:underline focus-visible:ring-2 focus-visible:ring-un-blue aria-[current=location]:font-semibold"
+                className="inline-flex items-baseline gap-1.5 rounded text-foreground underline-offset-4 hover:text-un-blue-text hover:underline focus-visible:ring-2 focus-visible:ring-un-blue aria-[current=location]:font-semibold"
               >
                 <span>{section.title}</span>
-                <span className="shrink-0 text-xs tabular-nums">
+                <span className="text-muted-foreground tabular-nums">
                   {section.count}
-                  {section.count !== section.total ? ` / ${section.total}` : ""}
+                  {section.count !== section.total ? `/${section.total}` : ""}
                 </span>
               </a>
             ) : (
-              <span className="flex justify-between gap-2 text-muted-foreground">
-                <span>{section.title}</span>
-                <span className="shrink-0 text-xs">0 / {section.total}</span>
+              <span className="text-muted-foreground">
+                {section.title}{" "}
+                <span className="tabular-nums">0/{section.total}</span>
               </span>
             )}
           </li>

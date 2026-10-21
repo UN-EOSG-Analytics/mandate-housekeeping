@@ -57,6 +57,7 @@ export interface FacetOption {
 export interface TableItem {
   mandate: Mandate;
   subprogramme: string | null;
+  entity?: string;
   state?: MandateState;
   tracks?: ReturnType<typeof getDecisionTracks>;
   totalComments: number;
@@ -115,7 +116,13 @@ function values(item: TableItem, facet: TableFacet): string[] {
     case "ages":
       return [getAgeIndicator(m.year).label];
     case "others":
-      return [m.otherEntitiesCount > 0 ? "shared" : "only"];
+      return [
+        ...new Set(
+          m.allEntities.filter(
+            (entity) => entity !== item.entity && entity !== m.entity,
+          ),
+        ),
+      ];
     case "submissions":
       return [submissionValue];
     case "reviews":
@@ -362,6 +369,7 @@ export function compareSubprogrammes(a: string | null, b: string | null) {
 }
 
 export function buildEntityTableView({
+  entity,
   legislativeMandates,
   backgroundMandates,
   states,
@@ -373,6 +381,7 @@ export function buildEntityTableView({
   sort,
   sharedEntity,
 }: {
+  entity: string;
   legislativeMandates: Record<string, Mandate[]>;
   backgroundMandates: Mandate[];
   states: Record<string, MandateState>;
@@ -434,6 +443,7 @@ export function buildEntityTableView({
         return {
           mandate,
           subprogramme,
+          entity,
           state,
           tracks,
           replacements,

@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 interface Props {
+  navigation?: React.ReactNode;
   entity: string;
   entityLong: string | null;
   partName: string | null;
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export function EntityHeader({
+  navigation,
   entity,
   entityLong,
   partName,
@@ -124,6 +126,7 @@ export function EntityHeader({
           </div>
         </div>
       </div>
+      {navigation}
     </div>
   );
 }
