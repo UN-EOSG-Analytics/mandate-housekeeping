@@ -22,7 +22,6 @@ import type { DocumentVersion } from "@/features/mandates/services/documents/doc
 import { DiffModal } from "./DiffModal";
 import { UN_BLUE, DECISION_THEME } from "@/lib/theme";
 import type {
-  CitationInfo,
   Decision,
   DecisionChangeHandler,
   DecisionReasonChangeHandler,
@@ -63,7 +62,6 @@ import type { DecisionType } from "@/features/mandates/services/decision-reasons
 
 interface Props {
   readOnly?: boolean;
-  citationLocations?: CitationInfo[];
   symbol: string;
   subprogramme: string | null;
   link: string | null;
@@ -664,7 +662,6 @@ function FullParagraphTree({
 export function DocumentSymbol({
   subprogramme,
   readOnly = false,
-  citationLocations = [],
   symbol,
   link,
   title,
@@ -2076,28 +2073,6 @@ export function DocumentSymbol({
               )}
 
               {/* Paragraphs Tab */}
-              {citationLocations.length > 0 && activeTab === "info" && (
-                <div
-                  className="mb-4 space-y-1 text-xs text-gray-600"
-                  aria-label="Budget citation locations"
-                >
-                  {citationLocations.map((location, index) => (
-                    <p key={index}>
-                      {[
-                        location.origin_document,
-                        location.budget_part,
-                        location.section ? `Section ${location.section}` : null,
-                        location["sub-programme"] === "All Subprogrammes"
-                          ? null
-                          : location["sub-programme"],
-                        location.component,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
-                  ))}
-                </div>
-              )}
               {activeTab === "paragraphs" && (
                 <div className="space-y-4">
                   {/* Search Box */}
