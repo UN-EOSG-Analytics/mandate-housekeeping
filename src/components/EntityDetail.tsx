@@ -1108,7 +1108,6 @@ function MandateRow({
           <DocumentSymbol
             readOnly={readOnly}
             subprogramme={subprogramme}
-            citationLocations={mandate.citationLocations}
             symbol={mandate.symbol}
             link={mandate.link}
             title={mandate.title}
@@ -1153,7 +1152,6 @@ function MandateRow({
             <DocumentSymbol
               readOnly={readOnly}
               subprogramme={subprogramme}
-              citationLocations={mandate.citationLocations}
               symbol={newMandate.symbol}
               link={newMandate.link}
               title={newMandate.title}

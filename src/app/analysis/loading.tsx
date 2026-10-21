@@ -1,12 +1,10 @@
 import { Header } from "@/components/core/Header";
-import { getBudgetVersion } from "@/lib/db/review-cycle";
 
 /** Analysis routes retain navigation feedback without the global page message. */
-export default async function AnalysisLoading() {
-  const budgetVersion = await getBudgetVersion();
+export default function AnalysisLoading() {
   return (
     <>
-      <Header navigationPending budgetVersion={budgetVersion} />
+      <Header navigationPending />
       <main
         className="mx-auto w-full max-w-7xl px-3 py-8 sm:px-4"
         aria-busy="true"

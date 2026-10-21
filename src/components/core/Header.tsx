@@ -1,12 +1,5 @@
-import { getBudgetVersion } from "@/lib/db/review-cycle";
-import {
-  CURRENT_BUDGET_VERSION,
-  SUBMISSION_CYCLES,
-  type BudgetVersion,
-} from "@/lib/db/budget-version";
 import Link from "next/link";
 import { SiteHeader } from "@un-eosg/ui/components/site-header";
-import { cn } from "@/lib/utils";
 import { typography } from "@un-eosg/ui/typography";
 import { UserMenu } from "./UserMenu";
 import type { EntityOption } from "@/features/mandates/services/data-service";
@@ -18,7 +11,6 @@ interface Props {
   maxWidth?: "6xl" | "7xl";
   hideAbout?: boolean;
   navigationPending?: boolean;
-  budgetVersion?: BudgetVersion;
 }
 
 export const SITE_TITLE = "Mandate Housekeeping Platform";
@@ -31,10 +23,7 @@ export async function Header({
   maxWidth = "7xl",
   hideAbout = false,
   navigationPending = false,
-  budgetVersion,
 }: Props) {
-  const version =
-    budgetVersion ?? (user ? await getBudgetVersion() : CURRENT_BUDGET_VERSION);
   const isLoggedIn = !!user;
   const widthClass = maxWidth === "6xl" ? "max-w-6xl" : "max-w-7xl";
 
@@ -45,22 +34,15 @@ export async function Header({
       href={isLoggedIn || navigationPending ? "/" : "/about"}
       homeLabel={SITE_TITLE}
       badge={
-        <span className="flex items-center gap-2">
-          <span
-            className={`${typography.micro} rounded border border-border bg-secondary px-1.5 py-0.5 text-foreground`}
-          >
-            Beta
-          </span>
-          <span className={cn(typography.caption, "text-foreground")}>
-            {user || navigationPending
-              ? SUBMISSION_CYCLES[version].label
-              : SITE_SUBTITLE}
-          </span>
+        <span
+          className={`${typography.micro} rounded border border-border bg-secondary px-1.5 py-0.5 text-foreground`}
+        >
+          Beta
         </span>
       }
       showMobileMenu={false}
       transparency="none"
-      className="relative top-auto py-4"
+      className="relative top-auto py-4 [&_.text-wordmark>span]:font-light"
       containerClassName={`${widthClass} flex-wrap px-3 sm:px-4`}
     >
       <div className="flex flex-wrap items-center justify-end gap-4">

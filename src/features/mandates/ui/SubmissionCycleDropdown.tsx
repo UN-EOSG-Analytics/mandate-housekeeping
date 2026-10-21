@@ -30,6 +30,7 @@ export function SubmissionCycleDropdown({
       <HierarchicalSingleSelect
         groups={options}
         selected={version}
+        searchable={false}
         className={pending ? "pointer-events-none opacity-60" : undefined}
         onChange={(next) => {
           if (pending || next === version) return;
