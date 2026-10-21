@@ -680,6 +680,7 @@ function reviewControl(props, context = null) {
     react: {
       ...React,
       useContext: () => context,
+      useRef: (current) => ({ current }),
       useState: (initial) => [initial, () => {}],
     },
     "@/features/mandates/actions/decisions": {
@@ -702,6 +703,7 @@ function reviewControl(props, context = null) {
     },
     "lucide-react": {
       Copy: "Copy",
+      Loader2: "Loader2",
       MoreHorizontal: "MoreHorizontal",
       AlertCircle: "AlertCircle",
       ArrowRightLeft: "ArrowRightLeft",

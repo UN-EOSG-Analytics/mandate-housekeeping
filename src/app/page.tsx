@@ -5,7 +5,7 @@ import { EntityOverview } from "@/components/EntityOverview";
 import { FooterFootnote } from "@/components/core/FooterFootnote";
 import { PageHeader } from "@/components/core/PageHeader";
 import { getCurrentUser } from "@/features/auth/auth";
-import { fetchOverviewPageData } from "@/features/mandates/services/data-service";
+import { fetchOverviewSummary } from "@/features/mandates/services/overview";
 
 async function OverviewData({
   budgetVersion,
@@ -13,7 +13,7 @@ async function OverviewData({
   budgetVersion: BudgetVersion;
 }) {
   const [parts, user] = await Promise.all([
-    fetchOverviewPageData(),
+    fetchOverviewSummary(budgetVersion),
     getCurrentUser(),
   ]);
   return (

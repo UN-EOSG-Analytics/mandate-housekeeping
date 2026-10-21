@@ -104,7 +104,10 @@ const toComment = (row: CommentRow): MandateComment => ({
 /**
  * Get all decisions and comments for a specific entity
  */
-export async function getEntityDecisionsAction(entity: string): Promise<
+export async function getEntityDecisionsAction(
+  entity: string,
+  documentSymbols?: string[],
+): Promise<
   ActionResult<{
     states: MandateState[];
     totalComments: Record<string, number>;
@@ -114,85 +117,97 @@ export async function getEntityDecisionsAction(entity: string): Promise<
     return { success: false, error: "entity required" };
   }
 
-  // Get all decisions, comments, and total comment counts per document
-  const [decisionRows, commentRows, totalCommentRows] = await Promise.all([
-    query<DecisionRow>(
-      `SELECT d.*, u.entity as user_entity, approver.entity as approved_by_entity
+  if (
+    documentSymbols &&
+    (documentSymbols.length > 10000 ||
+      documentSymbols.some((symbol) => typeof symbol !== "string"))
+  ) {
+    return { success: false, error: "Invalid document symbols" };
+  }
+  return transaction(async (tx) => {
+    // Related reads share one cycle-scoped transaction, including batch refreshes.
+    const [decisionRows, commentRows, totalCommentRows] = await Promise.all([
+      tx<DecisionRow>(
+        `SELECT d.*, u.entity as user_entity, approver.entity as approved_by_entity
        FROM mandates_housekeeping.mandate_decisions d
        LEFT JOIN mandates_housekeeping.users u ON d.user_email = u.email
        LEFT JOIN mandates_housekeeping.users approver ON d.approved_by = approver.email
-       WHERE d.entity = $1
+       WHERE d.entity = $1 AND ($2::text[] IS NULL OR d.document_symbol = ANY($2))
        ORDER BY d.created_at, d.id`,
-      [entity],
-    ),
-    query<CommentRow>(
-      `SELECT c.*, u.entity as user_entity
+        [entity, documentSymbols ?? null],
+      ),
+      tx<CommentRow>(
+        `SELECT c.*, u.entity as user_entity
        FROM mandates_housekeeping.mandate_comments c
        LEFT JOIN mandates_housekeeping.users u ON c.user_email = u.email
-       WHERE c.entity = $1 
+       WHERE c.entity = $1 AND ($2::text[] IS NULL OR c.document_symbol = ANY($2))
        ORDER BY c.created_at`,
-      [entity],
-    ),
-    query<{ document_symbol: string; count: string }>(
-      `SELECT document_symbol, COUNT(*)::text as count 
-       FROM mandates_housekeeping.mandate_comments 
+        [entity, documentSymbols ?? null],
+      ),
+      tx<{ document_symbol: string; count: string }>(
+        `SELECT document_symbol, COUNT(*)::text as count
+       FROM mandates_housekeeping.mandate_comments
+       WHERE $1::text[] IS NULL OR document_symbol = ANY($1)
        GROUP BY document_symbol`,
-      [],
-    ),
-  ]);
+        [documentSymbols ?? null],
+      ),
+    ]);
 
-  // Build total comments lookup
-  const totalCommentsMap: Record<string, number> = {};
-  for (const row of totalCommentRows) {
-    totalCommentsMap[row.document_symbol] = parseInt(row.count);
-  }
-
-  // Group into MandateState objects
-  const stateMap: Record<string, MandateState> = {};
-
-  for (const row of decisionRows) {
-    const key = `${row.document_symbol}:${row.subprogramme || ""}`;
-    if (!stateMap[key]) {
-      stateMap[key] = {
-        documentSymbol: row.document_symbol,
-        entity: row.entity,
-        subprogramme: row.subprogramme,
-        decision: null,
-        decisions: [],
-        comments: [],
-      };
+    // Build total comments lookup
+    const totalCommentsMap: Record<string, number> = {};
+    for (const row of totalCommentRows) {
+      totalCommentsMap[row.document_symbol] = parseInt(row.count);
     }
-    const decision = toDecision(row);
-    stateMap[key].decisions.push(decision);
-    // Track latest decision (overwrites as we iterate, results are ORDER BY created_at)
-    const tracks = getDecisionTracks(stateMap[key].decisions);
-    stateMap[key].decision = tracks.submission;
-    stateMap[key].reviewDecision = tracks.review;
-    stateMap[key].reviewStale = tracks.reviewStale;
-  }
 
-  for (const row of commentRows) {
-    const key = `${row.document_symbol}:${row.subprogramme || ""}`;
-    if (!stateMap[key]) {
-      stateMap[key] = {
-        documentSymbol: row.document_symbol,
-        entity: row.entity,
-        subprogramme: row.subprogramme,
-        decision: null,
-        decisions: [],
-        comments: [],
-      };
+    // Group into MandateState objects
+    const stateMap: Record<string, MandateState> = {};
+
+    for (const row of decisionRows) {
+      const key = `${row.document_symbol}:${row.subprogramme || ""}`;
+      if (!stateMap[key]) {
+        stateMap[key] = {
+          documentSymbol: row.document_symbol,
+          entity: row.entity,
+          subprogramme: row.subprogramme,
+          decision: null,
+          decisions: [],
+          comments: [],
+        };
+      }
+      const decision = toDecision(row);
+      stateMap[key].decisions.push(decision);
     }
-    stateMap[key].comments.push(toComment(row));
-  }
 
-  return {
-    success: true,
-    data: {
-      states: Object.values(stateMap),
-      totalComments: totalCommentsMap,
-    },
-  };
+    for (const row of commentRows) {
+      const key = `${row.document_symbol}:${row.subprogramme || ""}`;
+      if (!stateMap[key]) {
+        stateMap[key] = {
+          documentSymbol: row.document_symbol,
+          entity: row.entity,
+          subprogramme: row.subprogramme,
+          decision: null,
+          decisions: [],
+          comments: [],
+        };
+      }
+      stateMap[key].comments.push(toComment(row));
+    }
+
+    // Resolve each history once, after grouping, rather than sorting every prefix.
+    for (const state of Object.values(stateMap)) {
+      const tracks = getDecisionTracks(state.decisions);
+      state.decision = tracks.submission;
+      state.reviewDecision = tracks.review;
+      state.reviewStale = tracks.reviewStale;
+    }
+    return {
+      success: true as const,
+      data: {
+        states: Object.values(stateMap),
+        totalComments: totalCommentsMap,
+      },
+    };
+  });
 }
 
 /**

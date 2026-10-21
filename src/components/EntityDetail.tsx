@@ -44,7 +44,6 @@ import {
   clearAllEntityDecisionsAction,
   createDecisionAction,
   getEntityDecisionsAction,
-  getSingleMandateStateAction,
   updateDecisionReasonAction,
 } from "@/features/mandates/actions/decisions";
 import {
@@ -1713,37 +1712,32 @@ export function EntityDetail({
       .finally(() => setReviewModeLoaded(true));
   }, [entity, cycleReadOnly]);
 
-  // Handle real-time changes from other users (via polling)
-  const handleRemoteChange = useCallback(
-    async (change: RealtimeChange) => {
-      // Fetch the updated state for this specific mandate
-      const result = await getSingleMandateStateAction({
-        documentSymbol: change.document_symbol,
-        entity,
-        subprogramme: change.subprogramme,
-      });
-
-      if (result.success) {
-        const key = `${change.document_symbol}:${change.subprogramme || ""}`;
-
-        if (result.data) {
-          // Update or add the state
-          setStates((prev) => ({
-            ...prev,
-            [key]: result.data!,
-          }));
-        }
-
-        // Update total comments count if it was a comment change
-        if (change.table === "mandate_comments") {
-          setTotalComments((prev) => ({
-            ...prev,
-            [change.document_symbol]:
-              (result.data?.comments?.length ?? prev[change.document_symbol]) ||
-              0,
-          }));
-        }
+  // Refresh all changed symbols in one request, including every subprogramme.
+  const handleRemoteChanges = useCallback(
+    async (changes: RealtimeChange[]) => {
+      const symbols = [
+        ...new Set(changes.map((change) => change.document_symbol)),
+      ];
+      const result = await getEntityDecisionsAction(entity, symbols);
+      if (!result.success || !result.data) {
+        throw new Error(
+          result.success ? "Could not refresh decisions" : result.error,
+        );
       }
+      const updates = result.data;
+      setStates((previous) => {
+        const next = { ...previous };
+        for (const state of updates.states) {
+          next[`${state.documentSymbol}:${state.subprogramme || ""}`] = state;
+        }
+        return next;
+      });
+      setTotalComments((previous) => ({
+        ...previous,
+        ...Object.fromEntries(
+          symbols.map((symbol) => [symbol, updates.totalComments[symbol] ?? 0]),
+        ),
+      }));
     },
     [entity],
   );
@@ -1752,7 +1746,7 @@ export function EntityDetail({
   // Polls both decisions/comments AND review mode status
   useRealtimeDecisions({
     entity,
-    onRemoteChange: handleRemoteChange,
+    onRemoteChanges: handleRemoteChanges,
     onReviewModeChange: async (status) => {
       setIsUnderReview(status.isUnderReview);
       setReviewStartedBy(status.reviewStartedBy);
@@ -1771,7 +1765,7 @@ export function EntityDetail({
         }
       }
     },
-    enabled: true,
+    enabled: !cycleReadOnly,
     pollIntervalMs: 3000, // Poll every 3 seconds
   });
 

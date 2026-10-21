@@ -1,6 +1,9 @@
 "use client";
 
-import type { EntityData, PartData } from "@/types";
+import type {
+  EntityOverviewSummary,
+  PartOverviewSummary,
+} from "@/types/overview";
 import { Building2, ChevronRight, Layers, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
@@ -11,7 +14,7 @@ import { SubmissionCycleDropdown } from "@/features/mandates/ui/SubmissionCycleD
 import type { BudgetVersion } from "@/lib/db/budget-version";
 
 interface Props {
-  parts: PartData[];
+  parts: PartOverviewSummary[];
   userEntity?: string | null;
   budgetVersion: BudgetVersion;
 }
@@ -20,22 +23,10 @@ function EntityCard({
   entityData,
   highlight,
 }: {
-  entityData: EntityData;
+  entityData: EntityOverviewSummary;
   highlight?: boolean;
 }) {
-  const mandateCount =
-    entityData.backgroundMandates.length +
-    Object.values(entityData.legislativeMandates).reduce(
-      (sum, arr) => sum + arr.length,
-      0,
-    );
-
-  // Count actions (updates/drops)
-  const allMandates = [
-    ...entityData.backgroundMandates,
-    ...Object.values(entityData.legislativeMandates).flat(),
-  ];
-  const actionCount = allMandates.filter((m) => m.action).length;
+  const mandateCount = entityData.mandateCount;
 
   return (
     <Link
@@ -63,11 +54,6 @@ function EntityCard({
         )}
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        {actionCount > 0 && (
-          <span className="rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-foreground">
-            {actionCount}
-          </span>
-        )}
         <ChevronRight className="h-4 w-4 text-un-blue-text" />
       </div>
     </Link>
@@ -117,10 +103,10 @@ export function EntityOverview({ parts, userEntity, budgetVersion }: Props) {
   );
 
   // Group entities by section within each part
-  const groupEntitiesBySection = (entities: EntityData[]) => {
+  const groupEntitiesBySection = (entities: EntityOverviewSummary[]) => {
     const grouped: Record<
       string,
-      { title: string | null; entities: EntityData[] }
+      { title: string | null; entities: EntityOverviewSummary[] }
     > = {};
     for (const entity of entities) {
       const key = entity.section || "_none";

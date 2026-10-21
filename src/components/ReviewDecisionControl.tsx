@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
-import { Copy, MoreHorizontal, AlertCircle } from "lucide-react";
+import { createContext, useContext, useRef, useState } from "react";
+import { Copy, MoreHorizontal, AlertCircle, Loader2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import type { Decision, MandateDecision, ManualMetadata } from "@/types";
 import {
@@ -31,7 +31,7 @@ export function ReviewDecisionControl({
   symbol,
   subprogramme,
   submission,
-  review,
+  review: persistedReview,
   editable = false,
   compact = false,
   onSaved,
@@ -49,6 +49,24 @@ export function ReviewDecisionControl({
   const canEdit =
     editable && (!context || (context.entity === entity && context.canReview));
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const [preview, setPreview] = useState<MandateDecision | null>(null);
+  const [confirmed, setConfirmed] = useState<MandateDecision | null>(null);
+  // Keep a confirmed response visible until parent props catch up, while allowing
+  // a newer remote event to supersede it. Pending previews never enter history.
+  const confirmedTime = confirmed ? new Date(confirmed.createdAt).getTime() : 0;
+  const persistedTime = persistedReview
+    ? new Date(persistedReview.createdAt).getTime()
+    : 0;
+  const latest =
+    confirmed &&
+    (!persistedReview ||
+      confirmedTime > persistedTime ||
+      (confirmedTime === persistedTime &&
+        confirmed.id.localeCompare(persistedReview.id) > 0))
+      ? confirmed
+      : persistedReview;
+  const review = preview ?? latest;
   const [error, setError] = useState<string | null>(null);
   const [showReplacement, setShowReplacement] = useState(false);
   const [showEditMetadata, setShowEditMetadata] = useState(false);
@@ -58,6 +76,7 @@ export function ReviewDecisionControl({
     ...(review ? [review] : []),
   ]);
   const saved = (event: MandateDecision) => {
+    setConfirmed(event);
     context?.onSaved(event);
     onSaved?.(event);
   };
@@ -66,10 +85,37 @@ export function ReviewDecisionControl({
     newSymbol?: string,
     manualMetadata?: ManualMetadata,
     agree = false,
+    details?: Pick<
+      MandateDecision,
+      "decisionReason" | "otherReason" | "reviewedSubmissionId"
+    >,
   ) => {
-    if (!canEdit || busy) return null;
+    if (!canEdit || busyRef.current) return null;
+    busyRef.current = true;
     setError(null);
     setBusy(true);
+    const copied = agree ? submission : null;
+    setPreview({
+      id: "",
+      documentSymbol: symbol,
+      entity,
+      subprogramme,
+      decision: copied?.decision ?? decision,
+      newSymbol: copied?.newSymbol ?? newSymbol ?? null,
+      manualMetadata: copied?.manualMetadata ?? manualMetadata ?? null,
+      decisionReason: copied?.decisionReason ?? details?.decisionReason ?? null,
+      otherReason: copied?.otherReason ?? details?.otherReason ?? null,
+      decisionTrack: "review",
+      reviewedSubmissionId:
+        details?.reviewedSubmissionId ?? submission?.id ?? null,
+      userEmail: review?.userEmail ?? "",
+      userEntity: review?.userEntity ?? null,
+      createdAt: new Date().toISOString(),
+      approvedBy: null,
+      approvedByEntity: null,
+      approvedAt: null,
+      reviewSessionId: review?.reviewSessionId ?? null,
+    });
     try {
       const result = await createDecisionAction(
         {
@@ -82,6 +128,7 @@ export function ReviewDecisionControl({
           decisionTrack: "review",
           reviewedSubmissionId: submission?.id ?? null,
           agreeWithSubmission: agree,
+          ...details,
         },
         CURRENT_BUDGET_VERSION,
       );
@@ -95,6 +142,8 @@ export function ReviewDecisionControl({
       setError("Could not save review. Please try again.");
       return null;
     } finally {
+      setPreview(null);
+      busyRef.current = false;
       setBusy(false);
     }
   };
@@ -103,8 +152,16 @@ export function ReviewDecisionControl({
     otherReason: string | null,
     event?: MandateDecision,
   ) => {
-    const target = event ?? review;
-    if (!canEdit || !target?.id) return false;
+    const target = event ?? latest;
+    if (!canEdit || !target?.id || busyRef.current) return false;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    setPreview({
+      ...target,
+      decisionReason,
+      otherReason: decisionReason === "other" ? otherReason : null,
+    });
     try {
       const result = await updateDecisionReasonAction(
         { decisionId: target.id, decisionReason, otherReason },
@@ -119,76 +176,51 @@ export function ReviewDecisionControl({
     } catch {
       setError("Could not save reason. Please try again.");
       return false;
-    }
-  };
-  const confirm = async () => {
-    if (!canEdit || !review || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await createDecisionAction(
-        {
-          documentSymbol: symbol,
-          entity,
-          subprogramme,
-          decision: review.decision,
-          newSymbol: review.newSymbol ?? undefined,
-          manualMetadata: review.manualMetadata ?? undefined,
-          decisionReason: review.decisionReason,
-          otherReason: review.otherReason,
-          decisionTrack: "review",
-          reviewedSubmissionId: submission?.id ?? null,
-        },
-        CURRENT_BUDGET_VERSION,
-      );
-      if (result.success && result.data) saved(result.data);
-      else if (!result.success) setError(result.error);
-    } catch {
-      setError("Could not confirm review. Please try again.");
     } finally {
+      setPreview(null);
+      busyRef.current = false;
       setBusy(false);
     }
   };
+  const confirm = async () => {
+    if (!review) return;
+    await save(
+      review.decision,
+      review.newSymbol ?? undefined,
+      review.manualMetadata ?? undefined,
+      false,
+      {
+        decisionReason: review.decisionReason,
+        otherReason: review.otherReason,
+        reviewedSubmissionId: submission?.id ?? null,
+      },
+    );
+  };
   const editMetadata = async (data: ManualEntryData) => {
-    if (!canEdit || !review || busy) return;
+    if (!review) return;
     if (review.decision === "add" && data.symbol !== symbol) {
       setError(
         "To change the symbol, clear this addition and add the correct document.",
       );
       return;
     }
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await createDecisionAction(
-        {
-          documentSymbol: symbol,
-          entity,
-          subprogramme,
-          decision: review.decision,
-          newSymbol: review.decision === "update" ? data.symbol : undefined,
-          manualMetadata: {
-            title: data.title || undefined,
-            body: data.body || undefined,
-            year: data.year ? Number(data.year) : undefined,
-            link: data.link || undefined,
-          },
-          decisionReason: review.decisionReason,
-          otherReason: review.otherReason,
-          decisionTrack: "review",
-          reviewedSubmissionId: review.reviewedSubmissionId ?? null,
-        },
-        CURRENT_BUDGET_VERSION,
-      );
-      if (result.success && result.data) {
-        saved(result.data);
-        setShowEditMetadata(false);
-      } else if (!result.success) setError(result.error);
-    } catch {
-      setError("Could not save metadata. Please try again.");
-    } finally {
-      setBusy(false);
-    }
+    const result = await save(
+      review.decision,
+      review.decision === "update" ? data.symbol : undefined,
+      {
+        title: data.title || undefined,
+        body: data.body || undefined,
+        year: data.year ? Number(data.year) : undefined,
+        link: data.link || undefined,
+      },
+      false,
+      {
+        decisionReason: review.decisionReason,
+        otherReason: review.otherReason,
+        reviewedSubmissionId: review.reviewedSubmissionId ?? null,
+      },
+    );
+    if (result) setShowEditMetadata(false);
   };
   const hasReview = !!review && review.decision !== "cancel";
   const hasMoreActions =
@@ -252,8 +284,19 @@ export function ReviewDecisionControl({
           ? `Replacement: ${review.newSymbol}`
           : undefined
       }
+      aria-busy={busy}
       onClick={(e) => e.stopPropagation()}
     >
+      {busy && (
+        <span
+          role="status"
+          className="inline-flex items-center gap-1 text-xs text-foreground"
+          title="Saving review…"
+        >
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <span className={compact ? "sr-only" : undefined}>Saving…</span>
+        </span>
+      )}
       {(!review || review.decision === "cancel") && (!compact || !canEdit) ? (
         <span className="text-xs whitespace-nowrap text-foreground">
           Not reviewed

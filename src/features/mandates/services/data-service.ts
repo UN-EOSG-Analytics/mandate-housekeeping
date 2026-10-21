@@ -67,11 +67,6 @@ export async function fetchEntityPageData(
   return collectEntityData(parts, entity);
 }
 
-/** Load the overview without separate transaction setup for each related read. */
-export async function fetchOverviewPageData(): Promise<PartData[]> {
-  return transaction((tx) => fetchParts(tx));
-}
-
 async function fetchParts(
   runQuery: TransactionQueryFn,
   entity?: string,

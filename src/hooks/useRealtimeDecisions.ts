@@ -7,161 +7,121 @@ import {
   type ReviewModeStatus,
 } from "@/features/mandates/actions/realtime";
 
-// Re-export types for convenience
 export type { RealtimeChange, ReviewModeStatus };
 
 interface UseRealtimeDecisionsOptions {
-  /** Entity to subscribe to */
   entity: string;
-  /** Called when a change is received from another user */
-  onRemoteChange?: (change: RealtimeChange) => void;
-  /** Called when review mode status changes */
-  onReviewModeChange?: (status: ReviewModeStatus) => void;
-  /** Whether the hook is enabled (default: true) */
+  /** All changed documents are refreshed together before advancing the cursor. */
+  onRemoteChanges?: (changes: RealtimeChange[]) => void | Promise<void>;
+  onReviewModeChange?: (status: ReviewModeStatus) => void | Promise<void>;
   enabled?: boolean;
-  /** Polling interval in ms (default: 3000 = 3 seconds) */
   pollIntervalMs?: number;
 }
 
-interface UseRealtimeDecisionsReturn {
-  /** Whether polling is active */
-  isConnected: boolean;
-  /** Last error message, if any */
-  error: string | null;
-  /** Current review mode status */
-  reviewModeStatus: ReviewModeStatus | null;
-  /** Manually trigger a poll */
-  refresh: () => void;
-}
-
-/**
- * Hook for real-time decision/comment sync and review mode status via polling
- *
- * Polls the server every few seconds for changes and review mode updates.
- * Designed to work with Vercel serverless functions.
- *
- * Changes made by the current user are filtered out via timestamp comparison.
- */
+/** Single-flight polling pauses in hidden tabs and backs off after failures. */
 export function useRealtimeDecisions({
   entity,
-  onRemoteChange,
+  onRemoteChanges,
   onReviewModeChange,
   enabled = true,
   pollIntervalMs = 3000,
-}: UseRealtimeDecisionsOptions): UseRealtimeDecisionsReturn {
+}: UseRealtimeDecisionsOptions) {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reviewModeStatus, setReviewModeStatus] =
     useState<ReviewModeStatus | null>(null);
-
-  // Track last poll time to only fetch new changes
-  const lastPollTimeRef = useRef<string>(new Date().toISOString());
-  // Track IDs we've already processed to avoid duplicates
-  const processedIdsRef = useRef<Set<string>>(new Set());
-  // Polling interval ref
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  // Callback refs to avoid stale closures
-  const onRemoteChangeRef = useRef(onRemoteChange);
-  const onReviewModeChangeRef = useRef(onReviewModeChange);
-
-  // Keep callback refs updated
-  useEffect(() => {
-    onRemoteChangeRef.current = onRemoteChange;
-  }, [onRemoteChange]);
+  const callbacks = useRef({ onRemoteChanges, onReviewModeChange });
+  const inFlight = useRef(false);
+  const pollRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    onReviewModeChangeRef.current = onReviewModeChange;
-  }, [onReviewModeChange]);
+    callbacks.current = { onRemoteChanges, onReviewModeChange };
+  }, [onRemoteChanges, onReviewModeChange]);
 
-  const poll = useCallback(async () => {
-    if (!enabled || !entity) return;
-
-    try {
-      const result = await getRealtimeChangesAction(
-        entity,
-        lastPollTimeRef.current,
-      );
-
-      if (!result.success) {
-        throw new Error(result.error);
-      }
-
-      const data = result.data;
-      if (!data) {
-        throw new Error("No data returned");
-      }
-
-      // Update last poll time from server
-      if (data.serverTime) {
-        lastPollTimeRef.current = data.serverTime;
-      }
-
-      setIsConnected(true);
-      setError(null);
-
-      // Update review mode status if present
-      if (data.reviewMode) {
-        const newStatus: ReviewModeStatus = {
-          isUnderReview: data.reviewMode.isUnderReview,
-          reviewSessionId: data.reviewMode.reviewSessionId,
-          reviewStartedBy: data.reviewMode.reviewStartedBy,
-        };
-        setReviewModeStatus(newStatus);
-        onReviewModeChangeRef.current?.(newStatus);
-      }
-
-      // Process changes
-      if (data.hasChanges && data.changes?.length > 0) {
-        for (const change of data.changes) {
-          // Skip if already processed
-          if (processedIdsRef.current.has(change.id)) continue;
-
-          // Mark as processed
-          processedIdsRef.current.add(change.id);
-
-          // Prune processed set if it grows too large
-          if (processedIdsRef.current.size > 500) {
-            const arr = Array.from(processedIdsRef.current);
-            processedIdsRef.current = new Set(arr.slice(-250));
-          }
-
-          // Notify callback
-          onRemoteChangeRef.current?.(change);
-        }
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Poll failed");
-      setIsConnected(false);
-    }
-  }, [enabled, entity]);
-
-  const refresh = useCallback(() => {
-    poll();
-  }, [poll]);
-
-  // Start polling on mount
   useEffect(() => {
     if (!enabled || !entity) return;
-
-    // Initial poll
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    poll();
-
-    // Set up interval
-    pollIntervalRef.current = setInterval(poll, pollIntervalMs);
-
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cursor: string | undefined;
+    let failures = 0;
+    let previousStatus: ReviewModeStatus | null = null;
+    const processed = new Set<string>();
+    const schedule = () => {
+      clearTimeout(timer);
+      if (!cancelled && document.visibilityState === "visible") {
+        timer = setTimeout(
+          () => void poll(),
+          Math.min(pollIntervalMs * 2 ** Math.min(failures, 4), 30000),
+        );
       }
     };
-  }, [enabled, entity, poll, pollIntervalMs]);
+    const poll = async () => {
+      if (cancelled || document.visibilityState !== "visible") return;
+      if (inFlight.current) {
+        schedule();
+        return;
+      }
+      clearTimeout(timer);
+      inFlight.current = true;
+      try {
+        const result = await getRealtimeChangesAction(entity, cursor);
+        if (cancelled) return;
+        if (!result.success) throw new Error(result.error);
+        const data = result.data;
+        const changes = data.changes.filter(
+          (change) => !processed.has(change.id),
+        );
+        if (changes.length) await callbacks.current.onRemoteChanges?.(changes);
+        if (cancelled) return;
+        const status = data.reviewMode;
+        if (
+          !previousStatus ||
+          previousStatus.isUnderReview !== status.isUnderReview ||
+          previousStatus.reviewSessionId !== status.reviewSessionId ||
+          previousStatus.reviewStartedBy !== status.reviewStartedBy
+        ) {
+          await callbacks.current.onReviewModeChange?.(status);
+          if (cancelled) return;
+          previousStatus = status;
+          setReviewModeStatus(status);
+        }
+        for (const change of changes) processed.add(change.id);
+        // IDs only suppress the bounded overlap window; no unbounded tab growth.
+        if (processed.size > 2000) {
+          const recent = [...processed].slice(-1000);
+          processed.clear();
+          recent.forEach((id) => processed.add(id));
+        }
+        cursor = data.serverTime;
+        failures = 0;
+        setIsConnected(true);
+        setError(null);
+      } catch (err) {
+        if (!cancelled) {
+          failures++;
+          setError(err instanceof Error ? err.message : "Poll failed");
+          setIsConnected(false);
+        }
+      } finally {
+        inFlight.current = false;
+        schedule();
+      }
+    };
+    const refreshVisible = () => {
+      clearTimeout(timer);
+      if (document.visibilityState === "visible") void poll();
+    };
+    pollRef.current = refreshVisible;
+    document.addEventListener("visibilitychange", refreshVisible);
+    void poll();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      pollRef.current = null;
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
+  }, [enabled, entity, pollIntervalMs]);
 
-  return {
-    isConnected,
-    error,
-    reviewModeStatus,
-    refresh,
-  };
+  const refresh = useCallback(() => pollRef.current?.(), []);
+  return { isConnected, error, reviewModeStatus, refresh };
 }
