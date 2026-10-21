@@ -174,6 +174,9 @@ export interface PartData {
 }
 
 // Housekeeping decisions (event log)
+export type DecisionTrack = "entity" | "review";
+export type ExportDecisionMode = "entity" | "reviewed";
+
 export type Decision = "retain" | "remove" | "add" | "update" | "cancel";
 
 /** Returns the persisted event so an early reason choice can target its exact ID. */
@@ -196,6 +199,8 @@ export interface ManualMetadata {
 }
 
 export interface MandateDecision {
+  decisionTrack?: DecisionTrack;
+  reviewedSubmissionId?: string | null;
   id: string;
   documentSymbol: string;
   entity: string;
@@ -259,7 +264,9 @@ export interface MandateState {
   documentSymbol: string;
   entity: string;
   subprogramme: string | null;
-  decision: MandateDecision | null; // latest decision
+  decision: MandateDecision | null; // latest entity submission
+  reviewStale?: boolean;
+  reviewDecision?: MandateDecision | null; // latest reviewer event (including stale/cleared)
   decisions: MandateDecision[]; // all decisions (history)
   comments: MandateComment[]; // comments for this entity
 }

@@ -61,6 +61,7 @@ async function EntityData({
   return (
     <EntityDetail
       key={`${budgetVersion}:${entityData.entity}`}
+      budgetVersion={budgetVersion}
       cycleReadOnly={!isReviewEnabled(budgetVersion)}
       entity={entityData.entity}
       entityLong={entityData.entityLong}

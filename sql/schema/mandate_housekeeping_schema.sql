@@ -263,3 +263,47 @@ CREATE TABLE mandates_housekeeping.document_metadata_fallback (
 CREATE INDEX document_metadata_fallback_normalized_idx
  ON mandates_housekeeping.document_metadata_fallback (symbol_normalized);
 -- Application grants and the DML revocation are defined in app_role.sql.
+
+-- Separate entity submissions and reviewer decisions (migration 010).
+-- Apply after 009_activate_ppb2028_submissions.sql, before deploying the two-column application.
+-- Existing events remain entity submissions, regardless of author/session/approval.
+ALTER TABLE mandates_housekeeping.mandate_decisions
+  ADD COLUMN decision_track text NOT NULL DEFAULT 'entity'
+    CHECK (decision_track IN ('entity', 'review')),
+  ADD COLUMN reviewed_submission_id uuid,
+  ADD CONSTRAINT review_submission_same_cycle_fk
+    FOREIGN KEY (reviewed_submission_id, budget_version)
+    REFERENCES mandates_housekeeping.mandate_decisions (id, budget_version),
+  ADD CONSTRAINT entity_has_no_review_reference
+    CHECK (decision_track = 'review' OR reviewed_submission_id IS NULL);
+CREATE INDEX idx_mandate_decisions_track_latest
+  ON mandates_housekeeping.mandate_decisions
+  (budget_version, entity, document_symbol, COALESCE(subprogramme, ''), decision_track, created_at DESC, id DESC);
+-- A cycle can have only one active review session per entity.
+CREATE UNIQUE INDEX idx_entity_review_mode_one_active
+  ON mandates_housekeeping.entity_review_mode (budget_version, entity)
+  WHERE ended_at IS NULL;
+
+-- Personal per-comment read receipts (migration 011).
+ALTER TABLE mandates_housekeeping.mandate_comments
+  ADD CONSTRAINT mandate_comments_id_cycle_unique UNIQUE (id, budget_version);
+CREATE TABLE mandates_housekeeping.comment_reads (
+  comment_id uuid NOT NULL,
+  budget_version text NOT NULL CHECK (budget_version IN ('ppb2026', 'ppb2027')),
+  user_email text NOT NULL REFERENCES mandates_housekeeping.users(email) ON DELETE CASCADE,
+  read_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_email, budget_version, comment_id),
+  FOREIGN KEY (comment_id, budget_version)
+    REFERENCES mandates_housekeeping.mandate_comments(id, budget_version) ON DELETE CASCADE
+);
+CREATE INDEX idx_mandate_comments_conversation
+  ON mandates_housekeeping.mandate_comments(budget_version, document_symbol, created_at DESC, id DESC);
+ALTER TABLE mandates_housekeeping.comment_reads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mandates_housekeeping.comment_reads FORCE ROW LEVEL SECURITY;
+-- Every action sets app.user_email locally from the authenticated session.
+CREATE POLICY personal_cycle_read ON mandates_housekeeping.comment_reads FOR SELECT
+  USING (budget_version = current_setting('app.budget_version', true)
+    AND user_email = current_setting('app.user_email', true));
+CREATE POLICY personal_cycle_insert ON mandates_housekeeping.comment_reads FOR INSERT
+  WITH CHECK (budget_version = current_setting('app.budget_version', true)
+    AND user_email = current_setting('app.user_email', true));

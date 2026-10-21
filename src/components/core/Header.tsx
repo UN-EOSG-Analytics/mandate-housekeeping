@@ -9,6 +9,7 @@ import { SiteHeader } from "@un-eosg/ui/components/site-header";
 import { cn } from "@/lib/utils";
 import { typography } from "@un-eosg/ui/typography";
 import { UserMenu } from "./UserMenu";
+import { CommentNotifications } from "@/components/CommentNotifications";
 import type { EntityOption } from "@/features/mandates/services/data-service";
 
 interface Props {
@@ -91,12 +92,18 @@ export async function Header({
             <span className="sr-only">Loading account navigation</span>
           </span>
         ) : isLoggedIn ? (
-          <UserMenu
-            email={user.email}
-            entity={user.entity}
-            isReviewer={user.isReviewer}
-            entities={entities}
-          />
+          <>
+            <CommentNotifications
+              key={`${user.email}:${version}`}
+              budgetVersion={version}
+            />
+            <UserMenu
+              email={user.email}
+              entity={user.entity}
+              isReviewer={user.isReviewer}
+              entities={entities}
+            />
+          </>
         ) : (
           <Link
             href="/login"

@@ -160,14 +160,16 @@ export function ReviewInProgressBanner({
     <Banner
       variant="review"
       onDismiss={isReviewer && onEndReview ? onEndReview : undefined}
-      dismissLabel={isReviewer && onEndReview ? "End Review" : undefined}
+      dismissLabel={
+        isReviewer && onEndReview
+          ? "End review and unlock submission"
+          : undefined
+      }
     >
       <div>
         <p className="font-medium">This submission is currently under review</p>
         <p className="text-xs text-amber-600">
-          Changes by entity users are temporarily disabled and will not be
-          saved.
-          {!isReviewer && " However, you can continue exploring all features."}
+          Your submission is locked while review is in progress.
           {isReviewer && startedBy && (
             <span className="ml-1">
               Review started by <span className="font-medium">{startedBy}</span>

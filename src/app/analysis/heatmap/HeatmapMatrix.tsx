@@ -74,7 +74,7 @@ const LAYERS: LayerDef[] = [
     label: "After decisions",
     kind: "sequential",
     description:
-      "2026 source data after applying reviewers' housekeeping decisions (remove/add).",
+      "2026 source data after applying current review decisions, with entity submissions as fallback (remove/add).",
   },
   {
     id: "projectedDelta",

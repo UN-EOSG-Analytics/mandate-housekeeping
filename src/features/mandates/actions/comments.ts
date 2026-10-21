@@ -8,7 +8,7 @@
 
 import { getReviewWriteError } from "@/lib/db/review-cycle";
 import { revalidatePath } from "next/cache";
-import { query } from "@/lib/db/db";
+import { query, transaction } from "@/lib/db/db";
 import { getCurrentUser } from "@/features/auth/auth";
 import type { MandateComment } from "@/types";
 
@@ -61,51 +61,51 @@ export async function createCommentAction(
   const cycleError = await getReviewWriteError(expectedBudgetVersion);
   if (cycleError) return { success: false, error: cycleError };
 
-  const user = await getCurrentUser();
-  if (!user) {
-    return { success: false, error: "unauthorized" };
-  }
-
   const { documentSymbol, entity, subprogramme, comment } = params;
-
   if (/^\d+\/\d+$/.test(documentSymbol?.trim())) {
     return {
       success: false,
       error: "An issuer-scoped document identity is required",
     };
   }
-  if (!documentSymbol || !entity || !comment?.trim()) {
+  if (
+    !documentSymbol?.trim() ||
+    !entity ||
+    !comment?.trim() ||
+    comment.length > 20000
+  ) {
     return { success: false, error: "invalid request" };
   }
+  return transaction(async (tx) => {
+    const user = await getCurrentUser(tx);
+    if (!user) return { success: false, error: "unauthorized" };
+    if (!user.canReviewAnyEntity && user.entity !== entity)
+      return {
+        success: false,
+        error: "You can only comment on your own entity",
+      };
+    if (!user.entity && !user.canReviewAnyEntity)
+      return { success: false, error: "You must have an entity assigned" };
 
-  // Reviewers (DMSPC entity + in allowed_reviewers list) can comment on any entity
-  if (!user.canReviewAnyEntity && user.entity !== entity) {
-    return { success: false, error: "You can only comment on your own entity" };
-  }
-
-  if (!user.entity && !user.canReviewAnyEntity) {
-    return { success: false, error: "You must have an entity assigned" };
-  }
-
-  // Note: Comments are always allowed, even during review mode
-  // Only decisions are blocked during review
-
-  const rows = await query<CommentRow>(
-    `WITH inserted AS (
-      INSERT INTO mandates_housekeeping.mandate_comments 
-        (document_symbol, entity, subprogramme, comment, user_email)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING *
-    )
-    SELECT i.*, u.entity as user_entity
-    FROM inserted i
-    LEFT JOIN mandates_housekeeping.users u ON i.user_email = u.email`,
-    [documentSymbol, entity, subprogramme || null, comment.trim(), user.email],
-  );
-
-  revalidatePath(`/entity/${entity}`);
-
-  return { success: true, data: toComment(rows[0]) };
+    // Comments stay available while a review session locks submission edits.
+    const rows = await tx<CommentRow>(
+      `WITH inserted AS (
+        INSERT INTO mandates_housekeeping.mandate_comments
+          (document_symbol, entity, subprogramme, comment, user_email)
+        VALUES ($1, $2, $3, $4, $5) RETURNING *
+      ) SELECT i.*, u.entity AS user_entity FROM inserted i
+        LEFT JOIN mandates_housekeeping.users u ON i.user_email = u.email`,
+      [
+        documentSymbol.trim(),
+        entity,
+        subprogramme || null,
+        comment.trim(),
+        user.email,
+      ],
+    );
+    // The returned comment updates the client; polling informs collaborators.
+    return { success: true, data: toComment(rows[0]) };
+  });
 }
 
 /**

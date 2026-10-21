@@ -38,8 +38,8 @@ export default async function AnalysisPage() {
               Decision Analysis
             </h1>
             <p className="mt-2 text-base text-gray-500">
-              Overview of mandate decisions and their projected impact on
-              citation counts
+              Review decisions, with entity submissions as fallback, and their
+              projected impact on citation counts
             </p>
           </div>
           <a
