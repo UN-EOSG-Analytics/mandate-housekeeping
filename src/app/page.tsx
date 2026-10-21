@@ -1,18 +1,28 @@
 import { Suspense } from "react";
 import { getBudgetVersion } from "@/lib/db/review-cycle";
-import { SubmissionCycleControl } from "@/features/mandates/ui/SubmissionCycleControl";
+import type { BudgetVersion } from "@/lib/db/budget-version";
 import { EntityOverview } from "@/components/EntityOverview";
 import { FooterFootnote } from "@/components/core/FooterFootnote";
 import { PageHeader } from "@/components/core/PageHeader";
 import { getCurrentUser } from "@/features/auth/auth";
 import { fetchOverviewPageData } from "@/features/mandates/services/data-service";
 
-async function OverviewData() {
+async function OverviewData({
+  budgetVersion,
+}: {
+  budgetVersion: BudgetVersion;
+}) {
   const [parts, user] = await Promise.all([
     fetchOverviewPageData(),
     getCurrentUser(),
   ]);
-  return <EntityOverview parts={parts} userEntity={user?.entity} />;
+  return (
+    <EntityOverview
+      parts={parts}
+      userEntity={user?.entity}
+      budgetVersion={budgetVersion}
+    />
+  );
 }
 
 function OverviewSkeleton() {
@@ -52,9 +62,8 @@ export default async function Home() {
       <PageHeader />
       <main className="mx-auto w-full max-w-7xl px-3 py-8 sm:px-4">
         <h1 className="sr-only">Entities</h1>
-        <SubmissionCycleControl />
         <Suspense key={budgetVersion} fallback={<OverviewSkeleton />}>
-          <OverviewData />
+          <OverviewData budgetVersion={budgetVersion} />
         </Suspense>
       </main>
       <FooterFootnote />

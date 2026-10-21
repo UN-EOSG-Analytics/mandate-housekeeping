@@ -492,7 +492,7 @@ export default async function AboutPage() {
             <FeatureCard
               icon={ArrowLeftRight}
               title="Compare Document Versions"
-              description="Not sure what changed? Use the built-in comparison viewer to see what text was added, removed, or modified between document versions."
+              description="Not sure what changed? Open document comparisons on diff.un-two-zero.org to see what text was added, removed, or modified between versions."
             >
               <div className="grid grid-cols-2 gap-2 text-[10px]">
                 <div className="space-y-1.5">

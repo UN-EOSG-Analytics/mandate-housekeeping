@@ -1,7 +1,5 @@
-import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/features/auth/auth";
-import FeedbackFormClient from "./FeedbackFormClient";
 
 export default async function FeedbackPage() {
   // Check authentication
@@ -12,15 +10,6 @@ export default async function FeedbackPage() {
     redirect("/login");
   }
 
-  return (
-    <Suspense
-      fallback={
-        <div className="flex h-screen items-center justify-center">
-          Loading...
-        </div>
-      }
-    >
-      <FeedbackFormClient />
-    </Suspense>
-  );
+  // Keep old feedback bookmarks working with the site's Sentry widget.
+  redirect("/");
 }

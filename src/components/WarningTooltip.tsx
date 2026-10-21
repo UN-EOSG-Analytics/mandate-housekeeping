@@ -8,9 +8,15 @@ import {
 } from "@/components/ui/popover";
 import type { MandateWarning } from "@/features/mandates/services/mandate-warnings";
 import { getWarningIcon } from "@/features/mandates/services/mandate-warnings";
-import { WARNING_THEME, DECISION_THEME, UN_BLUE } from "@/lib/theme";
+import {
+  WARNING_THEME,
+  DECISION_THEME,
+  UN_BLUE,
+  POPUP_STYLES,
+} from "@/lib/theme";
 import { ArrowLeftRight } from "lucide-react";
 import { WarningIcon } from "./WarningIcon";
+import { getDocumentComparisonUrl } from "@/features/mandates/services/documents/comparison-link";
 
 interface WarningTooltipProps {
   warnings: MandateWarning[];
@@ -20,15 +26,6 @@ interface WarningTooltipProps {
   disabled?: boolean;
   /** Current document symbol for diff comparison */
   currentSymbol?: string;
-  /** Current document year for diff comparison */
-  currentYear?: number;
-  /** Callback when diff is requested */
-  onDiff?: (
-    originalSymbol: string,
-    originalYear: number,
-    compareSymbol: string,
-    compareYear: number,
-  ) => void;
 }
 
 const severityStyles = {
@@ -62,8 +59,6 @@ export function WarningTooltip({
   onPrimaryClick,
   disabled,
   currentSymbol,
-  currentYear,
-  onDiff,
 }: WarningTooltipProps) {
   const [open, setOpen] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -98,8 +93,8 @@ export function WarningTooltip({
         {children}
       </PopoverTrigger>
       <PopoverContent
-        className={`w-80 overflow-hidden p-0 ${disabled ? "grayscale" : ""}`}
-        side="left"
+        className={`${POPUP_STYLES.tooltipSize} overflow-hidden p-0 ${disabled ? "grayscale" : ""}`}
+        side="top"
         sideOffset={8}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -161,28 +156,25 @@ export function WarningTooltip({
                           </a>
                         </>
                       )}
-                      {onDiff &&
-                        currentSymbol &&
-                        currentYear &&
-                        warning.linkedSymbol &&
-                        warning.linkedYear && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDiff(
-                                currentSymbol,
-                                currentYear,
-                                warning.linkedSymbol!,
-                                warning.linkedYear!,
-                              );
-                              setOpen(false);
-                            }}
-                            className={`ml-2 inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-colors ${UN_BLUE.badge}`}
-                          >
-                            <ArrowLeftRight className="h-3 w-3" />
-                            Compare
-                          </button>
-                        )}
+                      {currentSymbol && warning.linkedSymbol && (
+                        <a
+                          href={getDocumentComparisonUrl(
+                            currentSymbol,
+                            warning.linkedSymbol,
+                          )}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`Compare ${currentSymbol} with ${warning.linkedSymbol} in a new tab`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpen(false);
+                          }}
+                          className={`ml-2 inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-colors ${UN_BLUE.badge}`}
+                        >
+                          <ArrowLeftRight className="h-3 w-3" />
+                          Compare
+                        </a>
+                      )}
                     </p>
                     {warning.action && onAction && !disabled && (
                       <button

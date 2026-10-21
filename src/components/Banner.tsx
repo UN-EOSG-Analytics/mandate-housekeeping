@@ -2,6 +2,7 @@
 
 import { AlertCircle, Check, Info, Lock, X } from "lucide-react";
 import { ReactNode } from "react";
+import Link from "next/link";
 
 type BannerVariant =
   | "info"
@@ -121,9 +122,20 @@ export function ReadOnlyNoticeBanner({
   return (
     <Banner variant="info" icon={false}>
       You are viewing{" "}
-      <span className="font-medium text-un-blue">{viewingEntity}</span> but your
-      entity is <span className="font-medium text-un-blue">{userEntity}</span>.
-      You can only make housekeeping decisions for your own entity.
+      <Link
+        href={`/entity/${encodeURIComponent(viewingEntity)}`}
+        className="rounded font-medium text-un-blue-text underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-un-blue"
+      >
+        {viewingEntity}
+      </Link>{" "}
+      but your entity is{" "}
+      <Link
+        href={`/entity/${encodeURIComponent(userEntity)}`}
+        className="rounded font-medium text-un-blue-text underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-un-blue"
+      >
+        {userEntity}
+      </Link>
+      . You can only make housekeeping decisions for your own entity.
     </Banner>
   );
 }

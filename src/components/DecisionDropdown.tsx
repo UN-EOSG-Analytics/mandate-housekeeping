@@ -332,7 +332,7 @@ export function DecisionDropdown({
             </button>
           </PopoverTrigger>
           <PopoverContent
-            className="w-auto overflow-hidden p-0"
+            className={`${POPUP_STYLES.tooltipSize} overflow-hidden p-0`}
             side="top"
             sideOffset={8}
             onMouseEnter={() => {
@@ -427,7 +427,7 @@ export function DecisionDropdown({
             </button>
           </PopoverTrigger>
           <PopoverContent
-            className="w-80 overflow-hidden p-0"
+            className={`${POPUP_STYLES.tooltipSize} overflow-hidden p-0`}
             side="top"
             sideOffset={8}
             onMouseEnter={() => {

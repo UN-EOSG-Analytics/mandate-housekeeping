@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import {
   Download,
   ChevronDown,
@@ -17,6 +17,15 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface Props {
   entity?: string;
@@ -41,16 +50,6 @@ export function ExportDropdown({ entity, label = "Export Mandates" }: Props) {
     href: string;
     count: number;
   } | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClick = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node))
-        setOpen(false);
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
 
   const basePath = entity
     ? `/api/export/${encodeURIComponent(entity)}`
@@ -83,48 +82,47 @@ export function ExportDropdown({ entity, label = "Export Mandates" }: Props) {
   }
 
   return (
-    <div ref={ref} className="relative inline-flex flex-col items-end">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        disabled={checking}
-        aria-expanded={open}
-        aria-label={checking ? "Checking review status" : label}
-        className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-black transition-colors hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-un-blue disabled:cursor-wait"
-      >
-        <Download className="h-3.5 w-3.5" />
-        {checking ? "Checking review…" : label}
-        <ChevronDown
-          className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`}
-        />
-      </button>
-      {open && (
-        <div
-          className="absolute top-full right-0 z-10 mt-2 min-w-52 rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
-          onKeyDown={(event) => {
-            if (event.key === "Escape") setOpen(false);
-          }}
+    <div className="inline-flex flex-col items-end">
+      <DropdownMenu open={open} onOpenChange={setOpen}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            disabled={checking}
+            aria-label={checking ? "Checking review status" : label}
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-black transition-colors hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-un-blue disabled:cursor-wait"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {checking ? "Checking review…" : label}
+            <ChevronDown
+              className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`}
+            />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          sideOffset={8}
+          className="min-w-52 rounded-lg bg-white shadow-lg"
         >
-          {MODES.map((mode) => (
-            <div key={mode.id}>
-              <p className="px-4 pt-3 pb-1 text-xs font-semibold text-black">
+          {MODES.map((mode, index) => (
+            <DropdownMenuGroup key={mode.id}>
+              {index > 0 && <DropdownMenuSeparator />}
+              <DropdownMenuLabel className="px-3 pt-3 pb-1 text-xs font-semibold text-black">
                 {mode.label}
-              </p>
+              </DropdownMenuLabel>
               {FORMATS.map(({ id, label: formatLabel, icon: Icon }) => (
-                <button
+                <DropdownMenuItem
                   key={id}
-                  type="button"
-                  onClick={() => void download(id, mode.id)}
-                  className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-black hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-un-blue"
+                  onSelect={() => void download(id, mode.id)}
+                  className="gap-2.5 px-3 py-2 text-sm text-black focus:bg-gray-50"
                 >
                   <Icon className="h-4 w-4" />
                   {formatLabel}
-                </button>
+                </DropdownMenuItem>
               ))}
-            </div>
+            </DropdownMenuGroup>
           ))}
-        </div>
-      )}
+        </DropdownMenuContent>
+      </DropdownMenu>
       {error && (
         <p role="alert" className="mt-2 max-w-64 text-xs text-red-700">
           {error}

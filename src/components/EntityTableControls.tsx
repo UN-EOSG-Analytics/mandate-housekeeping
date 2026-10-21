@@ -13,6 +13,7 @@ import {
 import { ChevronDown, ChevronUp, Filter, Search, X } from "lucide-react";
 import { Chip, ChipCount } from "@un-eosg/ui/components/chip";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { POPUP_STYLES } from "@/lib/theme";
 import type {
   FacetOption,
   TableFacet,
@@ -363,7 +364,7 @@ export function OtherEntitiesCell({
         onFocusCapture={enter}
         onBlurCapture={leave}
         onClick={(event) => event.stopPropagation()}
-        className="w-72 p-3"
+        className={`${POPUP_STYLES.tooltipSize} p-3`}
       >
         <p className="mb-2 text-xs font-medium text-foreground">
           Also cited by
@@ -500,21 +501,18 @@ export function SubprogrammeContents({
     };
   }, [sections]);
   return (
-    <nav
-      aria-label="Subprogramme contents"
-      className="mt-4 overflow-x-auto border-t border-border pt-3"
-    >
-      <ol className="flex w-max min-w-full flex-nowrap items-center gap-4 whitespace-nowrap">
+    <nav aria-label="Subprogramme contents" className="mt-3">
+      <ul className="list-disc space-y-1.5 ps-4">
         {sections.map((section) => (
-          <li key={section.id} className="shrink-0 text-xs">
+          <li key={section.id} className="text-xs">
             {section.count > 0 ? (
               <a
                 href={`#${encodeURIComponent(section.id)}`}
                 aria-current={active === section.id ? "location" : undefined}
-                className="inline-flex items-baseline gap-1.5 rounded text-foreground underline-offset-4 hover:text-un-blue-text hover:underline focus-visible:ring-2 focus-visible:ring-un-blue aria-[current=location]:font-semibold"
+                className="inline-flex max-w-full items-baseline gap-1.5 rounded text-foreground underline-offset-4 hover:text-un-blue-text hover:underline focus-visible:ring-2 focus-visible:ring-un-blue"
               >
                 <span>{section.title}</span>
-                <span className="text-muted-foreground tabular-nums">
+                <span className="shrink-0 whitespace-nowrap text-muted-foreground tabular-nums">
                   {section.count}
                   {section.count !== section.total ? `/${section.total}` : ""}
                 </span>
@@ -527,7 +525,7 @@ export function SubprogrammeContents({
             )}
           </li>
         ))}
-      </ol>
+      </ul>
     </nav>
   );
 }

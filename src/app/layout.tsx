@@ -6,6 +6,7 @@ import { AnimatedLogo } from "@/components/AnimatedLogo";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import type { Metadata, Viewport } from "next";
 import { Roboto } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 
 // https://fonts.google.com/specimen/Roboto
@@ -56,6 +57,20 @@ export default function RootLayout({
         </Suspense>
         {process.env.NEXT_PUBLIC_GA_ID && (
           <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_ID} />
+        )}
+        {process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID && (
+          <Script
+            id="umami"
+            src={
+              process.env.NEXT_PUBLIC_UMAMI_SCRIPT_URL ||
+              "https://cloud.umami.is/script.js"
+            }
+            strategy="afterInteractive"
+            data-website-id={process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID}
+            data-domains={process.env.NEXT_PUBLIC_UMAMI_DOMAINS || undefined}
+            data-exclude-search="true"
+            data-exclude-hash="true"
+          />
         )}
       </body>
     </html>

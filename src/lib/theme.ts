@@ -88,6 +88,9 @@ export const DECISION_BADGE_STYLES = {
  * Use these for consistent elevation and appearance across all floating UI
  */
 export const POPUP_STYLES = {
+  // Fit short hover content; wrap longer content within the viewport.
+  tooltipSize:
+    "w-max max-w-[min(20rem,calc(100vw-1rem))] [overflow-wrap:anywhere]",
   // Standard popup (dropdowns, menus)
   popup: "rounded-lg border border-gray-200 bg-white shadow-lg",
 

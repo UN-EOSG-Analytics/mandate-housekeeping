@@ -21,7 +21,7 @@ import { fetchParagraphs } from "@/features/mandates/services/documents/client-d
 import { getDocumentDecisionsAction } from "@/features/mandates/actions/decisions";
 import { getDocumentVersionsAction } from "@/features/mandates/services/documents/document-fetching";
 import type { DocumentVersion } from "@/features/mandates/services/documents/document-versions";
-import { DiffModal } from "./DiffModal";
+import { getDocumentComparisonUrl } from "@/features/mandates/services/documents/comparison-link";
 import { UN_BLUE } from "@/lib/theme";
 import type {
   DecisionChangeHandler,
@@ -662,17 +662,6 @@ export function DocumentSymbol({
   const [documentVersions, setDocumentVersions] = useState<DocumentVersion[]>(
     [],
   );
-  const [diffModalOpen, setDiffModalOpen] = useState(false);
-  const [diffCompareSymbol, setDiffCompareSymbol] = useState<{
-    symbol: string;
-    year: number;
-    title?: string | null;
-  } | null>(null);
-  const [diffOriginalOverride, setDiffOriginalOverride] = useState<{
-    symbol: string;
-    year: number;
-    title?: string | null;
-  } | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
   // Close on Escape key
@@ -1072,11 +1061,6 @@ export function DocumentSymbol({
                                   idx === 0
                                     ? symbol
                                     : newerVersions[idx - 1].symbol;
-                                const previousYear =
-                                  idx === 0
-                                    ? (year ?? 0)
-                                    : newerVersions[idx - 1].year;
-
                                 return (
                                   <React.Fragment key={version.symbol}>
                                     {/* Year */}
@@ -1090,41 +1074,33 @@ export function DocumentSymbol({
                                     </span>
 
                                     {/* Compare with Original */}
-                                    <button
-                                      onClick={() => {
-                                        setDiffOriginalOverride(null); // Use main document as original
-                                        setDiffCompareSymbol({
-                                          symbol: version.symbol,
-                                          year: version.year,
-                                          title: version.title,
-                                        });
-                                        setDiffModalOpen(true);
-                                      }}
+                                    <a
+                                      href={getDocumentComparisonUrl(
+                                        symbol,
+                                        version.symbol,
+                                      )}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
                                       className={`inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${UN_BLUE.badge}`}
-                                      title={`Compare ${version.symbol} with ${symbol}`}
+                                      title={`Compare ${version.symbol} with ${symbol} in a new tab`}
                                     >
                                       <ArrowLeftRight className="h-3 w-3" />
-                                    </button>
+                                    </a>
 
                                     {/* Compare with Previous */}
-                                    <button
-                                      onClick={() => {
-                                        // For comparing with previous version
-                                        setDiffOriginalOverride({
-                                          symbol: previousSymbol,
-                                          year: previousYear,
-                                          title:
-                                            idx === 0
-                                              ? title
-                                              : newerVersions[idx - 1].title,
-                                        });
-                                        setDiffCompareSymbol({
-                                          symbol: version.symbol,
-                                          year: version.year,
-                                          title: version.title,
-                                        });
-                                        setDiffModalOpen(true);
-                                      }}
+                                    <a
+                                      href={
+                                        idx === 0
+                                          ? undefined
+                                          : getDocumentComparisonUrl(
+                                              previousSymbol,
+                                              version.symbol,
+                                            )
+                                      }
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      aria-disabled={idx === 0}
+                                      tabIndex={idx === 0 ? -1 : undefined}
                                       className={`inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
                                         idx === 0
                                           ? "cursor-not-allowed bg-gray-100 text-gray-400"
@@ -1133,12 +1109,11 @@ export function DocumentSymbol({
                                       title={
                                         idx === 0
                                           ? "Same as original"
-                                          : `Compare ${version.symbol} with ${previousSymbol}`
+                                          : `Compare ${version.symbol} with ${previousSymbol} in a new tab`
                                       }
-                                      disabled={idx === 0}
                                     >
                                       <ArrowLeftRight className="h-3 w-3" />
-                                    </button>
+                                    </a>
 
                                     {/* View PDF */}
                                     <a
@@ -1365,24 +1340,6 @@ export function DocumentSymbol({
             </div>
           </div>
         </div>
-      )}
-
-      {/* Diff Modal */}
-      {diffCompareSymbol && (
-        <DiffModal
-          isOpen={diffModalOpen}
-          onClose={() => {
-            setDiffModalOpen(false);
-            setDiffCompareSymbol(null);
-            setDiffOriginalOverride(null);
-          }}
-          originalSymbol={diffOriginalOverride?.symbol ?? symbol}
-          originalYear={diffOriginalOverride?.year ?? year ?? 0}
-          originalTitle={diffOriginalOverride?.title ?? title}
-          compareSymbol={diffCompareSymbol.symbol}
-          compareYear={diffCompareSymbol.year}
-          compareTitle={diffCompareSymbol.title ?? undefined}
-        />
       )}
     </>
   );

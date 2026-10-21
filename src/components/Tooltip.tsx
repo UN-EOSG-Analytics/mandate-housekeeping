@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import { POPUP_STYLES } from "@/lib/theme";
 
 interface Props {
   content: string | React.ReactNode;
@@ -23,11 +24,11 @@ export function Tooltip({ content, children }: Props) {
       // Vertical position
       setPosition(rect.top < 80 ? "bottom" : "top");
 
-      // Horizontal alignment - estimate tooltip width (max 384px for max-w-sm)
+      // Horizontal alignment - estimate the shared 320px maximum width.
       const tooltipWidth =
         typeof content === "string"
           ? Math.min(320, content.length * 6 + 16)
-          : 384;
+          : 320;
       const centerX = rect.left + rect.width / 2;
 
       if (centerX - tooltipWidth / 2 < 8) {
@@ -64,7 +65,7 @@ export function Tooltip({ content, children }: Props) {
       {show && (
         <span
           ref={tooltipRef}
-          className={`absolute z-50 w-max max-w-sm rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-left text-xs text-gray-700 shadow-lg ${alignClasses[align]} ${
+          className={`absolute z-50 ${POPUP_STYLES.tooltipSize} rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-left text-xs text-gray-700 shadow-lg ${alignClasses[align]} ${
             position === "top" ? "bottom-full mb-1.5" : "top-full mt-1.5"
           }`}
         >

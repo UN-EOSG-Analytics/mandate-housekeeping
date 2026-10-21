@@ -136,33 +136,12 @@
   }
 }
 
-/**
- * Scrollbar Management
- * 
- * Purpose: Prevent layout shifts when navigating between pages with different content heights
- * 
- * Strategy:
- * 1. Always show scrollbar gutter (reserved space) on <html> to prevent horizontal shifts
- * 2. Force scrollbar on <body> to ensure consistent spacing
- * 3. Hide visual scrollbar in Webkit browsers while maintaining functionality
- * 
- * Result: Smooth navigation without content jumping left/right
- * Browser Support: Works across all modern browsers
- */
-
-/* Prevent layout shifts by always showing scrollbar */
+/* Reserve scrollbar space without creating a second scroll container on body.
+ * A body overflow rule traps sticky table headers instead of letting them
+ * follow viewport scrolling. */
 html {
   overflow-y: scroll;
   scrollbar-gutter: stable;
-}
-
-body {
-  overflow-y: scroll;
-}
-
-/* Hide scrollbar for Webkit browsers (Chrome, Safari) */
-body::-webkit-scrollbar {
-  display: none;
 }
 
 /* Accessible focus indicators - subtle styling */

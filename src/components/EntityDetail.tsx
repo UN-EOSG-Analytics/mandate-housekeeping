@@ -124,7 +124,6 @@ import {
 } from "./ReviewDecisionControl";
 import { getDecisionTracks } from "@/features/mandates/services/decision-tracks";
 import { DecisionDropdown } from "./DecisionDropdown";
-import { DiffModal } from "./DiffModal";
 import { DocumentSymbol } from "./DocumentModal";
 import { DocumentSearchInput } from "../features/mandates/ui/DocumentSearchInput";
 import { ManualDocumentForm } from "../features/mandates/ui/ManualDocumentForm";
@@ -435,7 +434,6 @@ function MandateRowContent({
   onUpdateClick,
   showReasonPopup,
   onReasonPopupClose,
-  onDiff,
   onEdit,
 }: {
   mandate: Mandate;
@@ -458,12 +456,6 @@ function MandateRowContent({
   onUpdateClick?: (prefillSymbol?: string) => void;
   showReasonPopup?: boolean;
   onReasonPopupClose?: () => void;
-  onDiff?: (
-    originalSymbol: string,
-    originalYear: number,
-    compareSymbol: string,
-    compareYear: number,
-  ) => void;
   onEdit?: () => void;
   onAcceptChange?: () => void;
   onRevertChange?: () => void;
@@ -476,9 +468,6 @@ function MandateRowContent({
   const canEditSubmission = !readOnly && !!trackContext?.canEditSubmission;
   const ageInfo = getAgeIndicator(mandate.year);
   const currentDecision = state?.decision;
-
-  // Keep original document content legible while identifying replaced/removed rows.
-  const hasRemove = currentDecision?.decision === "remove";
 
   const bgColorClass = isUpdateTarget ? "bg-secondary/40" : "";
 
@@ -532,14 +521,7 @@ function MandateRowContent({
               </Tooltip>
             )}
           </span>
-          <span
-            className={cn(
-              "min-w-0 flex-1 truncate",
-              hasRemove &&
-                !isUpdateTarget &&
-                "line-through decoration-neutral-control",
-            )}
-          >
+          <span className="min-w-0 flex-1 truncate">
             {mandate.title || (
               <span className="text-muted-foreground italic">No title</span>
             )}
@@ -635,8 +617,6 @@ function MandateRowContent({
                   onPrimaryClick={handlePrimaryClick}
                   disabled={isAddressed || !canEditSubmission}
                   currentSymbol={mandate.symbol}
-                  currentYear={mandate.year ?? undefined}
-                  onDiff={onDiff}
                 >
                   <button
                     className={`group relative inline-flex h-6 min-w-6 items-center justify-center rounded-full transition-all ${
@@ -676,9 +656,7 @@ function MandateRowContent({
                 </button>
               </Tooltip>
             )}
-          {isUpdateTarget ? (
-            <span className="text-xs text-gray-400">—</span>
-          ) : (
+          {!isUpdateTarget && (
             <DecisionDropdown
               decision={currentDecision?.decision ?? null}
               userEmail={currentDecision?.userEmail ?? null}
@@ -711,33 +689,37 @@ function MandateRowContent({
             />
           )}
         </div>
-        <Tooltip
-          content={
-            unreadCommentCount > 0
-              ? `${unreadCommentCount} unread comments`
-              : displayedCommentCount > 0
-                ? "Click to view comments"
-                : "Click to add a comment"
-          }
-        >
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpenActivityTab?.();
-            }}
-            aria-label={`${displayedCommentCount} comments${unreadCommentCount ? `, ${unreadCommentCount} unread` : ""}`}
-            className={`inline-flex cursor-pointer items-center gap-1 text-xs ${displayedCommentCount > 0 ? "font-medium text-un-blue-text" : "text-foreground"}`}
-          >
-            {displayedCommentCount > 0 ? displayedCommentCount : "—"}
-            {unreadCommentCount > 0 && (
-              <span
-                className="h-2 w-2 rounded-full bg-un-blue-text"
-                aria-hidden="true"
-              />
-            )}
-          </button>
-        </Tooltip>
+        <div>
+          {!isUpdateTarget && (
+            <Tooltip
+              content={
+                unreadCommentCount > 0
+                  ? `${unreadCommentCount} unread comments`
+                  : displayedCommentCount > 0
+                    ? "Click to view comments"
+                    : "Click to add a comment"
+              }
+            >
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenActivityTab?.();
+                }}
+                aria-label={`${displayedCommentCount} comments${unreadCommentCount ? `, ${unreadCommentCount} unread` : ""}`}
+                className={`inline-flex cursor-pointer items-center gap-1 text-xs ${displayedCommentCount > 0 ? "font-medium text-un-blue-text" : "text-foreground"}`}
+              >
+                {displayedCommentCount > 0 ? displayedCommentCount : "—"}
+                {unreadCommentCount > 0 && (
+                  <span
+                    className="h-2 w-2 rounded-full bg-un-blue-text"
+                    aria-hidden="true"
+                  />
+                )}
+              </button>
+            </Tooltip>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -815,24 +797,6 @@ function MandateRow({
   const [updatePrefillSymbol, setUpdatePrefillSymbol] = useState<
     string | undefined
   >(undefined);
-  const [diffModalOpen, setDiffModalOpen] = useState(false);
-  const [diffParams, setDiffParams] = useState<{
-    originalSymbol: string;
-    originalYear: number;
-    compareSymbol: string;
-    compareYear: number;
-  } | null>(null);
-
-  const handleDiff = (
-    originalSymbol: string,
-    originalYear: number,
-    compareSymbol: string,
-    compareYear: number,
-  ) => {
-    setDiffParams({ originalSymbol, originalYear, compareSymbol, compareYear });
-    setDiffModalOpen(true);
-  };
-
   // Get suggested update symbol from warnings (for newer-available)
   const isNewestForNewerVersion = newestWithNewerVersion?.has(mandate.symbol);
   const warnings = getMandateWarnings(
@@ -952,7 +916,6 @@ function MandateRow({
             }}
             showReasonPopup={showReasonPopup}
             onReasonPopupClose={() => setShowReasonPopup(false)}
-            onDiff={handleDiff}
             onEdit={handleEdit}
             onAcceptChange={onAcceptChange}
             onRevertChange={onRevertChange}
@@ -1099,21 +1062,6 @@ function MandateRow({
             />
           )}
         </div>
-
-        {/* Diff Modal */}
-        {diffParams && (
-          <DiffModal
-            isOpen={diffModalOpen}
-            onClose={() => {
-              setDiffModalOpen(false);
-              setDiffParams(null);
-            }}
-            originalSymbol={diffParams.originalSymbol}
-            originalYear={diffParams.originalYear}
-            compareSymbol={diffParams.compareSymbol}
-            compareYear={diffParams.compareYear}
-          />
-        )}
       </div>
 
       {/* Review change indicator - positioned outside the card as a speech bubble */}
@@ -1171,7 +1119,7 @@ function MandateRow({
               {/* Tooltip content - flows out of the circle with corner covered by circle */}
               <div className="pointer-events-none absolute right-0 bottom-0 mr-3.5 mb-3.5 opacity-0 transition-opacity duration-200 group-hover/change:pointer-events-auto group-hover/change:opacity-100">
                 <div
-                  className={`${POPUP_STYLES.tooltip} max-w-md min-w-70 space-y-2.5 p-3`}
+                  className={`${POPUP_STYLES.tooltip} ${POPUP_STYLES.tooltipSize} space-y-2.5 p-3`}
                 >
                   <div
                     className={`text-xs font-semibold tracking-wide whitespace-nowrap uppercase ${
@@ -3018,10 +2966,10 @@ export function EntityDetail({
               role="region"
               aria-label="Resolution review sections"
               tabIndex={0}
-              className="max-h-[75vh] overflow-auto rounded-lg border border-border bg-white focus-visible:ring-2 focus-visible:ring-un-blue xl:max-h-none xl:overflow-visible"
+              className="isolate max-h-[75vh] overflow-auto rounded-lg border border-border bg-white focus-visible:ring-2 focus-visible:ring-un-blue xl:max-h-none xl:overflow-clip"
             >
               <div className="min-w-[960px]">
-                <div className="sticky top-0 z-20 rounded-t-lg border-b border-border bg-muted">
+                <div className="sticky top-0 z-20 border-b border-border bg-muted">
                   <ColumnHeaders controls={tableControls} />
                 </div>
                 {sectionViews.map((section) => (

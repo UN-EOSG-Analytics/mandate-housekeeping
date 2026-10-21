@@ -7,10 +7,13 @@ import { useState, useEffect } from "react";
 import { typography } from "@un-eosg/ui/typography";
 import { cn } from "@/lib/utils";
 import { ExportDropdown } from "./ExportDropdown";
+import { SubmissionCycleDropdown } from "@/features/mandates/ui/SubmissionCycleDropdown";
+import type { BudgetVersion } from "@/lib/db/budget-version";
 
 interface Props {
   parts: PartData[];
   userEntity?: string | null;
+  budgetVersion: BudgetVersion;
 }
 
 function EntityCard({
@@ -71,7 +74,7 @@ function EntityCard({
   );
 }
 
-export function EntityOverview({ parts, userEntity }: Props) {
+export function EntityOverview({ parts, userEntity, budgetVersion }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [showSections, setShowSections] = useState(false);
 
@@ -150,9 +153,9 @@ export function EntityOverview({ parts, userEntity }: Props) {
       )}
 
       {/* Search box and controls */}
-      <div className="flex w-full items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <div className="w-80">
+      <div className="flex w-full flex-wrap items-start justify-between gap-4">
+        <div className="flex max-w-full flex-wrap items-start gap-3">
+          <div className="w-80 max-w-full">
             <div className="relative">
               <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
@@ -191,7 +194,13 @@ export function EntityOverview({ parts, userEntity }: Props) {
             View Sections
           </button>
         </div>
-        <ExportDropdown label="Export All" />
+        <div className="ms-auto flex max-w-full flex-wrap items-center justify-end gap-3">
+          <SubmissionCycleDropdown
+            key={budgetVersion}
+            version={budgetVersion}
+          />
+          <ExportDropdown label="Export All" />
+        </div>
       </div>
 
       {filteredParts.map((partData) => (

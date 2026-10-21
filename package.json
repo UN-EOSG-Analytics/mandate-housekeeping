@@ -29,6 +29,7 @@
     "@remotion/eslint-config": "^4.0.482",
     "@remotion/google-fonts": "^4.0.482",
     "@remotion/media-utils": "^4.0.482",
+    "@sentry/nextjs": "^10.76.2",
     "@un-eosg/ui": "github:UN-EOSG-Analytics/ui#c050bb6e6bf18c4058bd481e738458558484b12f",
     "axios": "^1.18.1",
     "class-variance-authority": "^0.7.1",
@@ -47,8 +48,7 @@
     "react-dom": "^19.2.7",
     "recharts": "3.9.0",
     "remotion": "^4.0.482",
-    "tailwind-merge": "^3.6.0",
-    "undifferent": "github:united-nations/diff#release"
+    "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
     "@svgr/webpack": "^8.1.0",

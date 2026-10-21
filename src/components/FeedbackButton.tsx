@@ -1,30 +1,40 @@
 "use client";
 
-import { MessageSquare } from "lucide-react";
-import { usePathname } from "next/navigation";
+import * as Sentry from "@sentry/nextjs";
+import { useEffect } from "react";
+import { connectFeedbackToModals } from "@/lib/feedback-modal";
 
 export function FeedbackButton() {
-  const pathname = usePathname();
+  useEffect(() => {
+    const feedback = Sentry.getFeedback();
+    if (!feedback) return;
 
-  // Don't show on the feedback page itself
-  if (pathname === "/feedback" || pathname?.startsWith("/feedback")) {
-    return null;
-  }
+    const widget = feedback.createWidget();
+    const host = document.getElementById("sentry-feedback");
+    if (!host) {
+      widget.removeFromDom();
+      feedback.remove();
+      return;
+    }
 
-  const handleClick = () => {
-    const currentUrl = window.location.href;
-    const feedbackUrl = `/feedback?prefill_context_url=${encodeURIComponent(currentUrl)}`;
-    window.open(feedbackUrl, "_blank", "noopener,noreferrer");
-  };
+    const style = document.createElement("style");
+    style.textContent =
+      ".widget__actor { border-radius: 0.5rem; } " +
+      ".widget__actor svg { display: none; } " +
+      ".form__label__text--required { font-size: 1em; } " +
+      // Keep the icon on small screens, where Sentry hides the text label.
+      "@media (max-width: 639px) { .widget__actor svg { display: block; } }";
+    host.shadowRoot?.appendChild(style);
 
-  return (
-    <button
-      onClick={handleClick}
-      className="fixed right-6 bottom-6 z-40 flex items-center gap-2 rounded-full bg-un-blue px-4 py-3 text-sm font-medium text-white shadow-lg transition-all hover:scale-105 hover:bg-un-blue/90 hover:shadow-xl focus:ring-2 focus:ring-un-blue focus:ring-offset-2 focus:outline-none"
-      aria-label="Provide feedback"
-    >
-      <MessageSquare className="h-5 w-5" />
-      <span className="hidden sm:inline">Feedback</span>
-    </button>
-  );
+    const disconnect = connectFeedbackToModals(host);
+    return () => {
+      disconnect();
+      widget.removeFromDom();
+      feedback.remove();
+      host.remove();
+      style.remove();
+    };
+  }, []);
+
+  return null;
 }
