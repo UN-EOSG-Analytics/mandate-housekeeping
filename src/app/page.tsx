@@ -49,7 +49,7 @@ export default async function Home() {
   const budgetVersion = await getBudgetVersion();
   return (
     <>
-      <PageHeader budgetVersion={budgetVersion} />
+      <PageHeader />
       <main className="mx-auto w-full max-w-7xl px-3 py-8 sm:px-4">
         <h1 className="sr-only">Entities</h1>
         <SubmissionCycleControl />

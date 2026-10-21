@@ -79,7 +79,7 @@ export default async function EntityPage({ params }: PageProps) {
   const entityCode = decodeURIComponent(entityParam);
   return (
     <>
-      <PageHeader budgetVersion={budgetVersion} />
+      <PageHeader />
       <main className="mx-auto max-w-7xl px-3 py-8 sm:px-4">
         <SubmissionCycleControl>
           <Link

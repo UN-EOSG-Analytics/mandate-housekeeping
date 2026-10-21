@@ -18,6 +18,10 @@ import {
 } from "lucide-react";
 import { getCurrentUser } from "@/features/auth/auth";
 import { Header } from "@/components/core/Header";
+import {
+  CURRENT_BUDGET_VERSION,
+  SUBMISSION_CYCLES,
+} from "@/lib/db/budget-version";
 
 // Feature card component
 function FeatureCard({
@@ -152,6 +156,7 @@ export default async function AboutPage() {
   const user = await getCurrentUser();
   const isLoggedIn = !!user;
   const ctaHref = isLoggedIn ? "/" : "/login";
+  const submissionYear = SUBMISSION_CYCLES[CURRENT_BUDGET_VERSION].year;
 
   return (
     <>
@@ -165,7 +170,8 @@ export default async function AboutPage() {
           <p className="mx-auto mb-8 max-w-2xl text-lg text-gray-600">
             The Mandate Housekeeping Platform is being tested as a pilot tool to
             support UN Secretariat entities review and update mandate citations
-            for the 2027 Proposed Programme Budget (PPB) – Programme Plan.
+            for the {submissionYear} Proposed Programme Budget (PPB) – Programme
+            Plan.
           </p>
           <div className="flex items-center justify-center gap-4">
             <Link
@@ -571,7 +577,7 @@ export default async function AboutPage() {
             <FeatureCard
               icon={Download}
               title="Export Your Data"
-              description="Export mandate citations in CSV, Excel, or Word formats. The Word files are formatted in line with publication standards for seamless integration into the 2027 PPB (Programme Plan)."
+              description={`Export mandate citations in CSV, Excel, or Word formats. The Word files are formatted in line with publication standards for seamless integration into the ${submissionYear} PPB (Programme Plan).`}
             >
               <div className="flex items-center gap-2">
                 <button className="flex items-center gap-1.5 rounded border border-gray-200 px-2 py-1 text-xs text-gray-600">
