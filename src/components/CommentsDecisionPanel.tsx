@@ -20,6 +20,7 @@ import type {
 import type { BudgetVersion } from "@/lib/db/budget-version";
 import { DECISION_BADGE_STYLES } from "@/lib/theme";
 import { typography } from "@un-eosg/ui/typography";
+import { cn } from "@/lib/utils";
 import {
   conversationGroups,
   conversationGroupKey,
@@ -442,7 +443,12 @@ export function CommentsDecisionPanel({
                             data-comment-id={entry.comment.id}
                             data-author={entry.comment.userEmail}
                             tabIndex={-1}
-                            className={`${COMMENT_BUBBLE} focus-visible:ring-2 focus-visible:ring-un-blue ${entry.comment.id === targetCommentId ? "ring-1 ring-un-blue" : ""}`}
+                            className={cn(
+                              COMMENT_BUBBLE,
+                              "focus-visible:border-un-blue focus-visible:outline-none focus-visible:before:border-un-blue",
+                              entry.comment.id === targetCommentId &&
+                                "border-un-blue before:border-un-blue",
+                            )}
                           >
                             <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-foreground">
                               <strong>{entry.comment.userEmail}</strong>

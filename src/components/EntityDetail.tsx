@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  buildEntityCitationIndex,
+  type EntityCitationIndex,
+} from "@/features/mandates/services/citation-locations";
 import { CommentConversationContext } from "./CommentConversationContext";
 import {
   useCommentNotifications,
@@ -421,10 +425,11 @@ function MandateRowContent({
   state,
   commentCount,
   isUpdateTarget,
+  sourceSymbol,
   readOnly,
   isFoundational,
   allSymbols,
-  allEntitySymbols,
+  citationIndex,
   newestWithNewerVersion,
   onOpenSidebar,
   onOpenActivityTab,
@@ -440,11 +445,12 @@ function MandateRowContent({
   state?: MandateState;
   commentCount: number;
   isReviewer: boolean;
+  sourceSymbol?: string;
   isUpdateTarget?: boolean; // True for the "new" row in update view (no dropdowns)
   readOnly?: boolean; // True for background section (no interactivity)
   isFoundational?: boolean; // True if mandate is also in background mandates
   allSymbols?: Set<string>; // All symbols in current section for warning system
-  allEntitySymbols?: Set<string>; // All symbols across entire entity for newer-already-cited detection
+  citationIndex?: EntityCitationIndex; // Unfiltered, effective citations across this entity
   newestWithNewerVersion?: Set<string>; // Symbols that are newest among those with same newer version
   reviewChangeInfo?: ReviewChangeInfo | null; // Review change info from server
   isUnderReview?: boolean; // Whether entity is currently under review
@@ -560,24 +566,36 @@ function MandateRowContent({
           symbol={mandate.symbol}
         />
         <div className="flex items-center justify-start pr-2">
-          {!isUpdateTarget &&
+          {(!isUpdateTarget || !!citationIndex) &&
             (() => {
               const isNewestWithNewerVersion = newestWithNewerVersion?.has(
                 mandate.symbol,
               );
               const warnings = getMandateWarnings(
                 mandate,
-                allEntitySymbols || allSymbols,
+                allSymbols,
                 isNewestWithNewerVersion,
+                citationIndex
+                  ? { citations: citationIndex, subprogramme, sourceSymbol }
+                  : undefined,
+              ).filter(
+                (warning) =>
+                  !isUpdateTarget || warning.id === "duplicate-citation",
               );
               if (warnings.length === 0) return null;
 
               const actionableWarnings = warnings.filter((w) => w.action);
+              const primaryWarning =
+                warnings.find(
+                  (warning) => warning.id === "duplicate-citation",
+                ) ||
+                actionableWarnings[0] ||
+                warnings[0];
               const isAddressed =
+                !!primaryWarning.action &&
                 currentDecision?.decision != null &&
                 currentDecision.decision !== "cancel";
 
-              const primaryWarning = actionableWarnings[0] || warnings[0];
               const icon =
                 primaryWarning.icon || getWarningIcon(primaryWarning.severity);
               const colorScheme = primaryWarning.colorScheme || "amber";
@@ -613,11 +631,14 @@ function MandateRowContent({
                 <WarningTooltip
                   warnings={warnings}
                   onAction={handleAction}
-                  onPrimaryClick={handlePrimaryClick}
+                  onPrimaryClick={
+                    primaryWarning.action ? handlePrimaryClick : undefined
+                  }
                   disabled={isAddressed || !canEditSubmission}
                   currentSymbol={mandate.symbol}
                 >
                   <button
+                    aria-label="View citation warnings"
                     className={`group relative inline-flex h-6 min-w-6 items-center justify-center rounded-full transition-all ${
                       isAddressed
                         ? "cursor-default bg-gray-100 text-gray-400"
@@ -743,7 +764,7 @@ function MandateRow({
   isFoundational,
   updateTargetMetadata,
   allSymbols,
-  allEntitySymbols,
+  citationIndex,
   newestWithNewerVersion,
   reviewChangeInfo,
   isUnderReview,
@@ -777,7 +798,7 @@ function MandateRow({
     body: string | null;
   } | null;
   allSymbols?: Set<string>;
-  allEntitySymbols?: Set<string>;
+  citationIndex?: EntityCitationIndex;
   newestWithNewerVersion?: Set<string>;
   reviewChangeInfo?: ReviewChangeInfo | null;
   isUnderReview?: boolean;
@@ -800,8 +821,9 @@ function MandateRow({
   const isNewestForNewerVersion = newestWithNewerVersion?.has(mandate.symbol);
   const warnings = getMandateWarnings(
     mandate,
-    allEntitySymbols || allSymbols,
+    allSymbols,
     isNewestForNewerVersion,
+    citationIndex ? { citations: citationIndex, subprogramme } : undefined,
   );
   const suggestedUpdateSymbol = warnings.find(
     (w) => w.suggestedUpdate,
@@ -895,7 +917,7 @@ function MandateRow({
             readOnly={readOnly}
             isFoundational={isFoundational}
             allSymbols={allSymbols}
-            allEntitySymbols={allEntitySymbols}
+            citationIndex={citationIndex}
             newestWithNewerVersion={newestWithNewerVersion}
             reviewChangeInfo={reviewChangeInfo}
             isUnderReview={isUnderReview}
@@ -971,11 +993,13 @@ function MandateRow({
           {hasCompletedUpdate && newMandate && (
             <MandateRowContent
               mandate={newMandate}
+              subprogramme={subprogramme}
+              sourceSymbol={mandate.symbol}
               state={undefined}
               commentCount={0}
               isReviewer={false}
               isUpdateTarget
-              allEntitySymbols={allEntitySymbols}
+              citationIndex={citationIndex}
               newestWithNewerVersion={newestWithNewerVersion}
               onOpenSidebar={() => setNewDocSidebarOpen(true)}
               onDecision={async () => null}
@@ -1315,7 +1339,7 @@ function MandateSection({
   userEntity,
   readOnly,
   foundationalSymbols,
-  allEntitySymbols,
+  citationIndex,
   reviewChanges,
   isUnderReview,
   onDecision,
@@ -1357,7 +1381,7 @@ function MandateSection({
   userEntity: string | null;
   readOnly?: boolean;
   foundationalSymbols?: Set<string>;
-  allEntitySymbols?: Set<string>;
+  citationIndex?: EntityCitationIndex;
   reviewChanges?: Record<string, ReviewChangeInfo>;
   isUnderReview?: boolean;
   reviewSessionId?: string | null;
@@ -1501,7 +1525,7 @@ function MandateSection({
               readOnly={readOnly}
               isFoundational={foundationalSymbols?.has(m.symbol)}
               allSymbols={allSymbols}
-              allEntitySymbols={allEntitySymbols}
+              citationIndex={citationIndex}
               newestWithNewerVersion={newestWithNewerVersion}
               reviewChangeInfo={reviewChanges?.[stateKey(m.symbol)]}
               isUnderReview={isUnderReview}
@@ -2640,6 +2664,10 @@ export function EntityDetail({
     ],
   );
   const { tableStates, tableItems, visibleItems, sectionViews } = tableView;
+  const citationIndex = useMemo(
+    () => buildEntityCitationIndex(tableItems, entity),
+    [tableItems, entity],
+  );
   // Notification links use the same unfiltered citation data as row sidebars,
   // including additions. Filters must not strip metadata from a deep link.
   const notificationMandate = notificationOpen
@@ -2683,23 +2711,6 @@ export function EntityDetail({
     visibleItems.map((item) => item.mandate.symbol),
   ).size;
 
-  // Entity-wide set of all symbols (including added mandates) for "newer-already-cited" detection
-  const allEntitySymbols = useMemo(() => {
-    const symbols = new Set<string>();
-    // Add all existing mandates
-    for (const m of backgroundMandates) symbols.add(m.symbol);
-    for (const mandates of Object.values(legislativeMandates)) {
-      for (const m of mandates) symbols.add(m.symbol);
-    }
-    // Add symbols from "add" decisions
-    for (const s of Object.values(states)) {
-      if (isVisibleAddedState(s)) {
-        symbols.add(s.documentSymbol);
-      }
-    }
-    return symbols;
-  }, [backgroundMandates, legislativeMandates, states]);
-
   function onTrackSaved(event: MandateDecision) {
     const key = `${event.documentSymbol}:${event.subprogramme || ""}`;
     setStates((prev) => {
@@ -2737,7 +2748,7 @@ export function EntityDetail({
     canReviewAnyEntity,
     userEmail,
     userEntity,
-    allEntitySymbols,
+    citationIndex,
     // Only pass review changes if feature is enabled
     ...(FEATURE_FLAGS.reviewChangeIndicator ? { reviewChanges } : {}),
     isUnderReview,
@@ -2968,7 +2979,10 @@ export function EntityDetail({
                   placeholder="Search across all mandates by symbol, title, or body..."
                   value={tableFilters.search}
                   onChange={(e) =>
-                    setTableFilters({ ...tableFilters, search: e.target.value })
+                    setTableFilters({
+                      ...tableFilters,
+                      search: e.target.value,
+                    })
                   }
                   className="w-full rounded-lg border border-gray-300 py-2 pr-10 pl-10 text-sm focus:border-un-blue focus:ring-1 focus:ring-un-blue focus:outline-none"
                 />

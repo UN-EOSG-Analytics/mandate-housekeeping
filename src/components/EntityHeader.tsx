@@ -100,7 +100,7 @@ export function EntityHeader({
             )}
             <ExportDropdown entity={entity} />
             {canReviewAnyEntity && !isUnderReview && onClearAll && (
-              <DropdownMenu>
+              <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                   <button
                     disabled={isClearingAll}

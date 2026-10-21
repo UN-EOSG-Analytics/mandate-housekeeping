@@ -93,7 +93,7 @@ export function WarningTooltip({
         {children}
       </PopoverTrigger>
       <PopoverContent
-        className={`${POPUP_STYLES.tooltipSize} overflow-hidden p-0 ${disabled ? "grayscale" : ""}`}
+        className={`${POPUP_STYLES.tooltipSize} overflow-hidden p-0`}
         side="top"
         sideOffset={8}
         onMouseEnter={handleMouseEnter}
@@ -176,6 +176,21 @@ export function WarningTooltip({
                         </a>
                       )}
                     </p>
+                    {!!warning.locations?.length && (
+                      <ul className="mt-2 space-y-1.5 text-xs text-foreground">
+                        {warning.locations.map((location, index) => (
+                          <li key={`${location.label}:${index}`}>
+                            <div className="font-medium">{location.label}</div>
+                            <div>{location.detail}</div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {warning.advice && (
+                      <p className="mt-2 text-xs text-foreground">
+                        {warning.advice}
+                      </p>
+                    )}
                     {warning.action && onAction && !disabled && (
                       <button
                         onClick={(e) => {

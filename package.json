@@ -30,7 +30,7 @@
     "@remotion/google-fonts": "^4.0.482",
     "@remotion/media-utils": "^4.0.482",
     "@sentry/nextjs": "^10.76.2",
-    "@un-eosg/ui": "github:UN-EOSG-Analytics/ui#c050bb6e6bf18c4058bd481e738458558484b12f",
+    "@un-eosg/ui": "github:UN-EOSG-Analytics/ui#551f1990f884c237f284351d37d6d08050ab8bd9",
     "axios": "^1.18.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
