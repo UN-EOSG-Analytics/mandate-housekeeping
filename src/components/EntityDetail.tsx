@@ -359,14 +359,14 @@ function getDecisionChange(
 // }
 
 const GRID_COLS =
-  "grid-cols-[130px_minmax(180px,1fr)_76px_76px_52px_92px_72px_112px_176px_36px]";
+  "grid-cols-[130px_minmax(180px,1fr)_68px_64px_48px_80px_56px_108px_140px_32px]";
 
 function ColumnHeaders({ controls }: { controls: EntityTableViewControls }) {
   return (
     <div
       className={cn(
         typography.tableHeader,
-        `grid ${GRID_COLS} h-10 items-center gap-x-2 tracking-normal text-foreground normal-case`,
+        `grid ${GRID_COLS} h-10 items-center gap-x-1 tracking-normal text-foreground normal-case`,
       )}
     >
       <div className="pl-3">
@@ -485,7 +485,7 @@ function MandateRowContent({
   return (
     <div className="relative">
       <div
-        className={`grid ${GRID_COLS} min-h-10 cursor-pointer items-center gap-x-2 border-b border-border py-1 text-sm transition-colors ${
+        className={`grid ${GRID_COLS} min-h-10 cursor-pointer items-center gap-x-1 border-b border-border py-1 text-sm transition-colors ${
           bgColorClass || "hover:bg-muted"
         }`}
         onClick={onOpenSidebar}
@@ -3020,7 +3020,7 @@ export function EntityDetail({
               tabIndex={0}
               className="max-h-[75vh] overflow-auto rounded-lg border border-border bg-white focus-visible:ring-2 focus-visible:ring-un-blue xl:max-h-none xl:overflow-visible"
             >
-              <div className="min-w-[1120px]">
+              <div className="min-w-[960px]">
                 <div className="sticky top-0 z-20 rounded-t-lg border-b border-border bg-muted">
                   <ColumnHeaders controls={tableControls} />
                 </div>

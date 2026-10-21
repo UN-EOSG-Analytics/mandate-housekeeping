@@ -1,12 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState } from "react";
-import {
-  Check,
-  MoreHorizontal,
-  AlertCircle,
-  ArrowRightLeft,
-} from "lucide-react";
+import { Check, MoreHorizontal, AlertCircle } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import type { Decision, MandateDecision, ManualMetadata } from "@/types";
 import {
@@ -195,8 +190,27 @@ export function ReviewDecisionControl({
       setBusy(false);
     }
   };
+  const hasReview = !!review && review.decision !== "cancel";
+  const agreeWithSubmission = () => {
+    if (submission)
+      return save(submission.decision, undefined, undefined, true);
+  };
   const moreActions = (
     <>
+      {compact &&
+        hasReview &&
+        canEdit &&
+        submission &&
+        submission.decision !== "cancel" && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={agreeWithSubmission}
+            className="text-left text-xs text-un-blue-text underline underline-offset-2 disabled:opacity-60"
+          >
+            Agree with submission
+          </button>
+        )}
       {canEdit && reviewStale && (
         <button
           type="button"
@@ -252,6 +266,11 @@ export function ReviewDecisionControl({
           ? "flex min-w-0 flex-nowrap items-center gap-1"
           : "flex min-w-0 flex-col items-start gap-1"
       }
+      title={
+        compact && review?.decision === "update"
+          ? `Replacement: ${review.newSymbol}`
+          : undefined
+      }
       onClick={(e) => e.stopPropagation()}
     >
       {(!review || review.decision === "cancel") && (!compact || !canEdit) ? (
@@ -276,56 +295,53 @@ export function ReviewDecisionControl({
           onReasonPopupClose={() => setShowReason(false)}
         />
       )}
-      {review?.decision === "update" && (
+      {review?.decision === "update" && !compact && (
         <span className="text-xs break-all text-un-blue-text">
-          {compact ? (
-            <span title={`Replacement: ${review.newSymbol}`}>
-              <ArrowRightLeft className="h-3 w-3" />
-              <span className="sr-only">Replacement: {review.newSymbol}</span>
-            </span>
-          ) : (
-            <>→ {review.newSymbol}</>
-          )}
+          → {review.newSymbol}
         </span>
       )}
-      {reviewStale && (
-        <span className="text-xs text-amber-800">
+      {reviewStale && (!compact || !canEdit) && (
+        <span
+          className="text-xs text-amber-800"
+          title="Submission changed — review needed"
+        >
           {compact ? (
-            <span title="Submission changed — review needed">
+            <>
               <AlertCircle className="h-3.5 w-3.5" />
               <span className="sr-only">
                 Submission changed — review needed
               </span>
-            </span>
+            </>
           ) : (
             "Submission changed — review needed"
           )}
         </span>
       )}
-      {canEdit && submission && submission.decision !== "cancel" && (
-        <button
-          type="button"
-          disabled={busy}
-          title="Agree with submission"
-          aria-label="Agree with submission"
-          className={
-            compact
-              ? "flex h-6 w-6 shrink-0 items-center justify-center rounded text-un-blue-text hover:bg-un-blue-surface disabled:opacity-60"
-              : "text-left text-xs text-un-blue-text underline underline-offset-2 disabled:opacity-60"
-          }
-          onClick={() =>
-            void save(submission.decision, undefined, undefined, true)
-          }
-        >
-          {compact ? (
-            <Check className="h-3.5 w-3.5" />
-          ) : busy ? (
-            "Saving…"
-          ) : (
-            "Agree with submission"
-          )}
-        </button>
-      )}
+      {canEdit &&
+        submission &&
+        submission.decision !== "cancel" &&
+        (!compact || !hasReview) && (
+          <button
+            type="button"
+            disabled={busy}
+            title="Agree with submission"
+            aria-label="Agree with submission"
+            className={
+              compact
+                ? "flex h-6 w-6 shrink-0 items-center justify-center rounded text-un-blue-text hover:bg-un-blue-surface disabled:opacity-60"
+                : "text-left text-xs text-un-blue-text underline underline-offset-2 disabled:opacity-60"
+            }
+            onClick={agreeWithSubmission}
+          >
+            {compact ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : busy ? (
+              "Saving…"
+            ) : (
+              "Agree with submission"
+            )}
+          </button>
+        )}
       {compact
         ? canEdit &&
           ((review && review.decision !== "cancel") ||
@@ -336,15 +352,34 @@ export function ReviewDecisionControl({
                   type="button"
                   disabled={busy}
                   aria-label="More review actions"
+                  title={
+                    reviewStale
+                      ? "Submission changed — review needed"
+                      : "More review actions"
+                  }
                   className="flex h-6 w-5 shrink-0 items-center justify-center rounded text-foreground hover:bg-secondary"
                 >
-                  <MoreHorizontal className="h-3.5 w-3.5" />
+                  {reviewStale ? (
+                    <AlertCircle className="h-3.5 w-3.5 text-amber-800" />
+                  ) : (
+                    <MoreHorizontal className="h-3.5 w-3.5" />
+                  )}
                 </button>
               </PopoverTrigger>
               <PopoverContent
                 align="end"
                 className="flex w-56 flex-col items-start gap-3 p-3"
               >
+                {review?.decision === "update" && (
+                  <span className="text-xs break-all text-un-blue-text">
+                    Replacement: {review.newSymbol}
+                  </span>
+                )}
+                {reviewStale && (
+                  <span className="text-xs text-amber-800">
+                    Submission changed — review needed
+                  </span>
+                )}
                 {moreActions}
               </PopoverContent>
             </Popover>

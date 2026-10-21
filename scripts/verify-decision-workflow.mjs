@@ -848,3 +848,51 @@ test("compact review keeps agreement available without a second line of status t
   await agree.props.onClick();
   assert.equal(ui.calls[0].params.agreeWithSubmission, true);
 });
+
+test("compact reviewed rows keep agreement and stale confirmation in the actions menu", async () => {
+  const submission = event("s2", "entity", "remove", null, 3);
+  const review = {
+    ...event("r1", "review", "update", "s1", 2),
+    newSymbol: "A/RES/80/2",
+  };
+  const ui = reviewControl({
+    submission,
+    review,
+    editable: true,
+    compact: true,
+  });
+  assert.equal(
+    find(
+      ui.tree,
+      (node) =>
+        node.type === "button" &&
+        node.props["aria-label"] === "Agree with submission",
+    ),
+    undefined,
+  );
+  const more = find(
+    ui.tree,
+    (node) =>
+      node.type === "button" &&
+      node.props["aria-label"] === "More review actions",
+  );
+  assert.equal(more.props.title, "Submission changed — review needed");
+  assert.equal(ui.tree.props.title, "Replacement: A/RES/80/2");
+  assert.ok(
+    find(
+      ui.tree,
+      (node) =>
+        node.type === "button" &&
+        node.props.children === "Confirm review decision",
+    ),
+  );
+  const agree = find(
+    ui.tree,
+    (node) =>
+      node.type === "button" && node.props.children === "Agree with submission",
+  );
+  assert.ok(agree);
+  await agree.props.onClick();
+  assert.equal(ui.calls[0].params.agreeWithSubmission, true);
+  assert.equal(ui.calls[0].params.reviewedSubmissionId, "s2");
+});
