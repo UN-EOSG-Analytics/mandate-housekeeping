@@ -366,10 +366,10 @@ export async function createDecisionAction(
     const track = params.decisionTrack ?? "entity";
     if (track !== "entity" && track !== "review")
       return { success: false, error: "Invalid decision track" };
-    if (track === "entity" && user.isReviewer)
+    if (track === "entity" && user.entity !== entity)
       return {
         success: false,
-        error: "Reviewers can edit only review decisions",
+        error: "Entity submissions can only be edited by their own entity",
       };
     if (track === "review" && !user.isReviewer)
       return {
@@ -566,10 +566,14 @@ export async function updateDecisionReasonAction(
       };
     }
 
-    if ((existing.decision_track ?? "entity") === "entity" && user.isReviewer)
+    if (
+      (existing.decision_track ?? "entity") === "entity" &&
+      user.entity !== existing.entity
+    )
       return {
         success: false,
-        error: "Reviewers can edit only review decisions",
+        error:
+          "Entity submission reasons can only be edited by their own entity",
       };
     if (existing.decision_track === "review" && !user.isReviewer)
       return {

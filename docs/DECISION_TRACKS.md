@@ -5,13 +5,17 @@ are entity submissions, regardless of their author, approval, or review session.
 There is no historical role reconstruction. Both columns appear for all cycles;
 PPB 2027 submissions remain read-only and PPB 2028 submissions remain active.
 
-Entity users edit only submissions; authorized reviewers edit only review decisions.
-Review decisions can be made outside sessions. “Agree with submission” atomically
-copies the exact latest submission's decision, reasons, replacement and metadata.
+Users can edit their own entity's submissions, including when they are reviewers.
+Reviewer permissions separately allow review decisions within their review scope;
+they never grant access to another entity's primary submissions. An active review
+session locks submissions even for reviewers belonging to that entity. Outside a
+session, additions by someone editing their own entity go to the submission;
+reviewers working on a locked or another entity's submission add to the review.
+Review decisions can be made outside sessions. Before a review decision is set,
+“Copy submission decision” atomically copies the exact latest submission's decision, reasons, replacement and metadata.
 Every review records that submission event's ID (or null if none exists). Changes
 to a submission, including its reason or clearing it, make earlier reviews stale.
-The old review remains visible. Reviewers can agree with the new submission or
-confirm/change their previous review. Editing a stale review's reason alone does
+The old review remains visible. Reviewers can confirm/change their previous review. Editing a stale review's reason alone does
 not confirm the new submission. Clearing review appends a cancel event; it never
 deletes entity submissions or history. The old approval fields remain stored but
 are no longer editable or used as the review workflow.

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState } from "react";
-import { Check, MoreHorizontal, AlertCircle } from "lucide-react";
+import { Copy, MoreHorizontal, AlertCircle } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import type { Decision, MandateDecision, ManualMetadata } from "@/types";
 import {
@@ -191,26 +191,17 @@ export function ReviewDecisionControl({
     }
   };
   const hasReview = !!review && review.decision !== "cancel";
+  const hasMoreActions =
+    reviewStale ||
+    review?.decision === "update" ||
+    (submission?.decision === "add" && review?.decision !== "remove") ||
+    (!!review?.manualMetadata && review.decision === "add");
   const agreeWithSubmission = () => {
     if (submission)
       return save(submission.decision, undefined, undefined, true);
   };
   const moreActions = (
     <>
-      {compact &&
-        hasReview &&
-        canEdit &&
-        submission &&
-        submission.decision !== "cancel" && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={agreeWithSubmission}
-            className="text-left text-xs text-un-blue-text underline underline-offset-2 disabled:opacity-60"
-          >
-            Agree with submission
-          </button>
-        )}
       {canEdit && reviewStale && (
         <button
           type="button"
@@ -235,16 +226,6 @@ export function ReviewDecisionControl({
             Reject addition
           </button>
         )}
-      {canEdit && review && review.decision !== "cancel" && (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void save("cancel")}
-          className="text-left text-xs text-un-blue-text underline underline-offset-2"
-        >
-          Clear review
-        </button>
-      )}
       {canEdit &&
         review?.manualMetadata &&
         (review.decision === "add" || review.decision === "update") && (
@@ -320,12 +301,12 @@ export function ReviewDecisionControl({
       {canEdit &&
         submission &&
         submission.decision !== "cancel" &&
-        (!compact || !hasReview) && (
+        !hasReview && (
           <button
             type="button"
             disabled={busy}
-            title="Agree with submission"
-            aria-label="Agree with submission"
+            title="Copy submission decision"
+            aria-label="Copy submission decision"
             className={
               compact
                 ? "flex h-6 w-6 shrink-0 items-center justify-center rounded text-un-blue-text hover:bg-un-blue-surface disabled:opacity-60"
@@ -334,18 +315,17 @@ export function ReviewDecisionControl({
             onClick={agreeWithSubmission}
           >
             {compact ? (
-              <Check className="h-3.5 w-3.5" />
+              <Copy className="h-3.5 w-3.5" />
             ) : busy ? (
               "Saving…"
             ) : (
-              "Agree with submission"
+              "Copy submission decision"
             )}
           </button>
         )}
       {compact
         ? canEdit &&
-          ((review && review.decision !== "cancel") ||
-            submission?.decision === "add") && (
+          hasMoreActions && (
             <Popover>
               <PopoverTrigger asChild>
                 <button

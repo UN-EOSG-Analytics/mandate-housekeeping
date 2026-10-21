@@ -127,6 +127,7 @@ function composerHarness(
       "react/jsx-runtime": { jsx, jsxs: jsx },
       "lucide-react": new Proxy({}, { get: (_, name) => name }),
       "@/lib/theme": { DECISION_BADGE_STYLES: {} },
+      "@un-eosg/ui/typography": { typography: { eyebrow: "" } },
       "@/features/mandates/services/comment-conversation": service,
       "@/features/mandates/actions/comment-notifications": {
         markCommentsReadAction: markRead,
@@ -339,5 +340,86 @@ test("read receipts include only displayed other-author messages, never collapse
     globalThis.IntersectionObserver = savedObserver;
     globalThis.setTimeout = savedTimeout;
     globalThis.clearTimeout = savedClear;
+  }
+});
+
+test("composer stays within its current group and retains a draft across collapse", () => {
+  const harness = composerHarness(async () => null);
+  let tree = harness.render();
+  const group = harness.find(tree, "section");
+  assert.ok(harness.find(group, "form"));
+  harness
+    .find(group, "textarea")
+    .props.onChange({ target: { value: "Keep this draft" } });
+  harness.find(group, "button").props.onClick();
+  tree = harness.render();
+  assert.equal(harness.find(tree, "form"), undefined);
+  harness.find(harness.find(tree, "section"), "button").props.onClick();
+  assert.equal(
+    harness.find(harness.render(), "textarea").props.value,
+    "Keep this draft",
+  );
+});
+
+test("the timeline includes persisted local decisions before polling, without duplicate history", () => {
+  const earlier = decision("earlier", 1, "entity");
+  const latest = decision("latest", 2, "entity");
+  const harness = composerHarness(undefined, {
+    decisions: [earlier],
+    state: { decisions: [earlier, latest], decision: latest },
+  });
+  function collect(node) {
+    if (!node || typeof node !== "object") return [];
+    return [
+      ...(node.type?.name === "DecisionLine" ? [node.props.decision.id] : []),
+      ...[node.props?.children].flat(Infinity).flatMap(collect),
+    ];
+  }
+  assert.deepEqual(collect(harness.render()).sort(), ["earlier", "latest"]);
+});
+
+test("history counts exclude the visible update and expanded changes remain chronological", () => {
+  const walk = (node) =>
+    !node || typeof node !== "object"
+      ? []
+      : [node, ...[node.props?.children].flat(Infinity).flatMap(walk)];
+  const text = (node) =>
+    Array.isArray(node)
+      ? node.map(text).join("")
+      : node && typeof node === "object"
+        ? text(node.props?.children)
+        : node == null || typeof node === "boolean"
+          ? ""
+          : String(node);
+  for (const count of [1, 2, 3]) {
+    const decisions = Array.from({ length: count }, (_, index) =>
+      decision(`change-${index}`, index + 1, index % 2 ? "review" : "entity"),
+    );
+    const nodes = walk(composerHarness(undefined, { decisions }).render());
+    const history = nodes.find((node) => node.type === "details");
+    const lines = nodes.filter((node) => node.type?.name === "DecisionLine");
+    assert.deepEqual(
+      lines.map((node) => node.props.decision.id),
+      decisions.map((event) => event.id),
+    );
+    const run = nodes.find(
+      (node) =>
+        node.type === "div" &&
+        [node.props.children]
+          .flat(Infinity)
+          .some((child) => child?.type?.name === "DecisionLine"),
+    );
+    const direct = [run.props.children]
+      .flat(Infinity)
+      .filter((child) => child && typeof child === "object");
+    assert.equal(direct.at(-1).props.decision.id, decisions.at(-1).id);
+    if (count === 1) assert.equal(history, undefined);
+    else {
+      assert.equal(direct[0], history);
+      assert.equal(
+        text(nodes.find((node) => node.type === "summary")),
+        `Show history (${count - 1} earlier ${count === 2 ? "change" : "changes"})`,
+      );
+    }
   }
 });

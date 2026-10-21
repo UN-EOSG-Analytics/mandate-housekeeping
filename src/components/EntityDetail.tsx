@@ -1634,6 +1634,12 @@ export function EntityDetail({
     return !cycleReadOnly && (userEntity === entity || canReviewAnyEntity);
   }, [userEntity, entity, canReviewAnyEntity, cycleReadOnly]);
 
+  const canEditSubmission =
+    !cycleReadOnly && userEntity === entity && !isUnderReview;
+  // Additions belong to the entity submission when the viewer can edit it.
+  // Reviewers working on a locked or another entity's submission add to review.
+  const additionTrack = canEditSubmission ? "entity" : "review";
+
   // Set of background mandate symbols (for foundational highlighting in legislative sections)
   const foundationalSymbols = useMemo(
     () => new Set(backgroundMandates.map((m) => m.symbol)),
@@ -1867,9 +1873,11 @@ export function EntityDetail({
       subprogramme: string | null,
       decision: Decision,
       newSymbol?: string,
+      decisionTrack: "entity" | "review" = "entity",
     ) => {
-      if (!userEmail) return null;
-      if (isReviewer) {
+      if (!userEmail || (decisionTrack === "entity" && !canEditSubmission))
+        return null;
+      if (decisionTrack === "review") {
         const result = await createDecisionAction(
           {
             documentSymbol: symbol,
@@ -1970,7 +1978,7 @@ export function EntityDetail({
     [
       entity,
       userEmail,
-      isReviewer,
+      canEditSubmission,
       states,
       userEntity,
       reviewSessionId,
@@ -2179,7 +2187,7 @@ export function EntityDetail({
   const handleAddManual = useCallback(
     async (subprogramme: string | null, data: ManualEntryData) => {
       if (!userEmail) return;
-      if (isReviewer) {
+      if (isReviewer && additionTrack === "review") {
         const result = await createDecisionAction(
           {
             documentSymbol: data.symbol,
@@ -2201,6 +2209,7 @@ export function EntityDetail({
         else if (!result.success) showError(result.error);
         return;
       }
+      if (!canEditSubmission) return;
       const key = `${data.symbol}:${subprogramme || ""}`;
       const now = new Date().toISOString();
       const manualMetadata = {
@@ -2296,6 +2305,8 @@ export function EntityDetail({
       entity,
       userEmail,
       isReviewer,
+      additionTrack,
+      canEditSubmission,
       userEntity,
       reviewSessionId,
       refreshReviewChanges,
@@ -2635,6 +2646,21 @@ export function EntityDetail({
     ],
   );
   const { tableStates, tableItems, visibleItems, sectionViews } = tableView;
+  // Notification links use the same unfiltered citation data as row sidebars,
+  // including additions. Filters must not strip metadata from a deep link.
+  const notificationMandate = notificationOpen
+    ? (
+        tableItems.find(
+          (item) =>
+            item.mandate.symbol === notificationSymbol &&
+            item.subprogramme === notificationSubprogramme,
+        ) ??
+        tableItems.find((item) => item.mandate.symbol === notificationSymbol)
+      )?.mandate
+    : undefined;
+  const notificationMetadata =
+    notificationMandate ?? addedMetadata[notificationSymbol || ""];
+
   const tableControls: EntityTableViewControls = {
     filters: tableFilters,
     setFilters: setTableFilters,
@@ -2750,7 +2776,8 @@ export function EntityDetail({
       handleEditManual(symbol, subprog, data),
     onComment: (symbol: string, comment: string) =>
       handleComment(symbol, subprog, comment),
-    onAdd: (symbol: string) => handleDecision(symbol, subprog, "add"),
+    onAdd: (symbol: string) =>
+      handleDecision(symbol, subprog, "add", undefined, additionTrack),
     onAddManual: (data: ManualEntryData) => handleAddManual(subprog, data),
     // Only include accept/revert handlers if feature is enabled
     ...(FEATURE_FLAGS.reviewChangeIndicator
@@ -2776,11 +2803,7 @@ export function EntityDetail({
       <DecisionTracksContext.Provider
         value={{
           entity,
-          canEditSubmission:
-            !cycleReadOnly &&
-            !isReviewer &&
-            userEntity === entity &&
-            !isUnderReview,
+          canEditSubmission,
           canReview:
             !cycleReadOnly &&
             isReviewer &&
@@ -2796,11 +2819,23 @@ export function EntityDetail({
                 entity={entity}
                 entityLong={entityLong}
                 subprogramme={notificationSubprogramme}
-                link={null}
-                relevanceCount={0}
-                relevanceIndices={[]}
-                aiComments={{}}
-                allEntityRelevance={{}}
+                title={notificationMetadata?.title || undefined}
+                link={notificationMetadata?.link ?? null}
+                year={notificationMetadata?.year}
+                body={notificationMetadata?.body}
+                docType={notificationMetadata?.docType}
+                otherEntitiesCount={notificationMandate?.otherEntitiesCount}
+                allEntities={notificationMandate?.allEntities}
+                entitySubprogrammes={notificationMandate?.entitySubprogrammes}
+                entityLongMap={notificationMandate?.entityLongMap}
+                relevanceCount={notificationMandate?.relevanceCount ?? 0}
+                relevanceIndices={notificationMandate?.relevanceIndices ?? []}
+                aiComments={notificationMandate?.aiComments ?? {}}
+                allEntityRelevance={
+                  notificationMandate?.allEntityRelevance ?? {}
+                }
+                metadataFromDb={notificationMandate?.metadataFromDb}
+                isFoundational={foundationalSymbols.has(notificationSymbol)}
                 budgetVersion={budgetVersion}
                 targetCommentId={notificationId}
                 isOpen

@@ -538,6 +538,7 @@ test("stale submission references and cross-track ownership reject before insert
     { reviewer: true, decisionTrack: "review", reviewedSubmissionId: "older" },
     {
       reviewer: true,
+      ownEntity: "OTHER",
       decisionTrack: "entity",
       reviewedSubmissionId: "submission",
     },
@@ -700,7 +701,7 @@ function reviewControl(props, context = null) {
       DocumentSearchInput: "DocumentSearchInput",
     },
     "lucide-react": {
-      Check: "Check",
+      Copy: "Copy",
       MoreHorizontal: "MoreHorizontal",
       AlertCircle: "AlertCircle",
       ArrowRightLeft: "ArrowRightLeft",
@@ -741,23 +742,26 @@ test("review controls snapshot agreement, offer stale confirmation, and remain r
     manualMetadata: { title: "Replacement" },
   };
   const ui = reviewControl({ submission, review, editable: true });
-  const agree = find(
-    ui.tree,
-    (n) => n.type === "button" && n.props.children === "Agree with submission",
+  const initial = reviewControl({ submission, review: null, editable: true });
+  const copy = find(
+    initial.tree,
+    (n) =>
+      n.type === "button" &&
+      n.props["aria-label"] === "Copy submission decision",
   );
-  await agree.props.onClick();
-  assert.equal(ui.calls[0].params.agreeWithSubmission, true);
-  assert.equal(ui.calls[0].params.reviewedSubmissionId, "s2");
+  await copy.props.onClick();
+  assert.equal(initial.calls[0].params.agreeWithSubmission, true);
+  assert.equal(initial.calls[0].params.reviewedSubmissionId, "s2");
   const confirm = find(
     ui.tree,
     (n) =>
       n.type === "button" && n.props.children === "Confirm review decision",
   );
   await confirm.props.onClick();
-  assert.equal(ui.calls[1].params.newSymbol, "A/RES/80/2");
-  assert.equal(ui.calls[1].params.otherReason, "Review rationale");
-  assert.deepEqual(ui.calls[1].params.manualMetadata, { title: "Replacement" });
-  assert.equal(ui.calls[1].params.reviewedSubmissionId, "s2");
+  assert.equal(ui.calls[0].params.newSymbol, "A/RES/80/2");
+  assert.equal(ui.calls[0].params.otherReason, "Review rationale");
+  assert.deepEqual(ui.calls[0].params.manualMetadata, { title: "Replacement" });
+  assert.equal(ui.calls[0].params.reviewedSubmissionId, "s2");
   const readonly = reviewControl({ submission, review, editable: false });
   assert.equal(
     find(readonly.tree, (n) => n.type === "button"),
@@ -842,14 +846,14 @@ test("compact review keeps agreement available without a second line of status t
     ui.tree,
     (node) =>
       node.type === "button" &&
-      node.props["aria-label"] === "Agree with submission",
+      node.props["aria-label"] === "Copy submission decision",
   );
   assert.ok(agree);
   await agree.props.onClick();
   assert.equal(ui.calls[0].params.agreeWithSubmission, true);
 });
 
-test("compact reviewed rows keep agreement and stale confirmation in the actions menu", async () => {
+test("reviewed rows omit copy while keeping stale confirmation in the actions menu", async () => {
   const submission = event("s2", "entity", "remove", null, 3);
   const review = {
     ...event("r1", "review", "update", "s1", 2),
@@ -866,7 +870,7 @@ test("compact reviewed rows keep agreement and stale confirmation in the actions
       ui.tree,
       (node) =>
         node.type === "button" &&
-        node.props["aria-label"] === "Agree with submission",
+        node.props["aria-label"] === "Copy submission decision",
     ),
     undefined,
   );
@@ -886,13 +890,97 @@ test("compact reviewed rows keep agreement and stale confirmation in the actions
         node.props.children === "Confirm review decision",
     ),
   );
-  const agree = find(
-    ui.tree,
-    (node) =>
-      node.type === "button" && node.props.children === "Agree with submission",
+  assert.equal(
+    find(
+      ui.tree,
+      (node) =>
+        node.type === "button" &&
+        node.props.children === "Copy submission decision",
+    ),
+    undefined,
   );
-  assert.ok(agree);
-  await agree.props.onClick();
-  assert.equal(ui.calls[0].params.agreeWithSubmission, true);
-  assert.equal(ui.calls[0].params.reviewedSubmissionId, "s2");
+  const current = reviewControl({
+    submission,
+    review: { ...event("r2", "review", "retain", "s2", 4) },
+    editable: true,
+    compact: true,
+  });
+  assert.equal(
+    find(
+      current.tree,
+      (node) =>
+        node.type === "button" &&
+        node.props["aria-label"] === "More review actions",
+    ),
+    undefined,
+  );
+});
+
+test("reviewers can edit their own submission and reasons while review sessions still lock both", async () => {
+  for (const activeReview of [false, true]) {
+    const fixture = actions({
+      reviewer: true,
+      activeReview,
+      sourceTrack: "entity",
+    });
+    const created = await fixture.api.createDecisionAction(
+      {
+        documentSymbol: "A/RES/80/1",
+        entity: "UNOMS",
+        subprogramme: "Programme 1",
+        decision: "retain",
+        decisionTrack: "entity",
+      },
+      "ppb2027",
+    );
+    const reason = await fixture.api.updateDecisionReasonAction(
+      {
+        decisionId: "old",
+        decisionReason: "other",
+        otherReason: "Own entity rationale",
+      },
+      "ppb2027",
+    );
+    assert.equal(created.success, !activeReview);
+    assert.equal(reason.success, !activeReview);
+    if (activeReview) {
+      assert.equal(created.error, "review_mode_blocked");
+      assert.equal(reason.error, "review_mode_blocked");
+      assert.ok(!fixture.statements.some((x) => x.sql.includes("INSERT INTO")));
+    } else {
+      assert.equal(created.data.decisionTrack, "entity");
+      assert.equal(reason.data.decisionTrack, "entity");
+    }
+  }
+});
+
+test("global reviewers cannot edit another entity's primary submission or its reason", async () => {
+  const fixture = actions({
+    reviewer: true,
+    ownEntity: "OTHER",
+    canReviewAny: true,
+    activeReview: false,
+    sourceTrack: "entity",
+  });
+  const created = await fixture.api.createDecisionAction(
+    {
+      documentSymbol: "A/RES/80/1",
+      entity: "UNOMS",
+      subprogramme: null,
+      decision: "retain",
+      decisionTrack: "entity",
+    },
+    "ppb2027",
+  );
+  const reason = await fixture.api.updateDecisionReasonAction(
+    {
+      decisionId: "old",
+      decisionReason: "other",
+      otherReason: "Other entity",
+    },
+    "ppb2027",
+  );
+  assert.equal(created.success, false);
+  assert.equal(reason.success, false);
+  assert.ok(!fixture.statements.some((x) => x.sql.includes("INSERT INTO")));
 });

@@ -20,9 +20,9 @@ The existing sidebar poll fetches decisions, comments, and personal read IDs in 
 
 ## Deployment
 
-Apply migrations **010**, then **011_comment_reads.sql**, with the migration owner before deploying this application. Neither is applied automatically. Migration 011 adds the `comment_reads` table, a same-cycle foreign key to comments, the conversation index, and forced RLS that requires both selected cycle and authenticated transaction-local user email.
+Apply migrations **010**, **011_comment_reads.sql**, then **012_comment_read_grants.sql**, with the migration owner before deploying this application. These migrations are not applied automatically. Migration 011 adds the `comment_reads` table, a same-cycle foreign key to comments, the conversation index, and forced RLS that requires both selected cycle and authenticated transaction-local user email.
 
-Ensure the runtime role has SELECT and INSERT on `mandates_housekeeping.comment_reads`. Existing default grants in `sql/schema/app_role.sql` cover it when the same migration owner creates the table; installations with a different owner must grant these privileges explicitly. UPDATE and DELETE are not needed by the application and have no RLS policies.
+Migration 012 explicitly grants the runtime role SELECT and INSERT on `mandates_housekeeping.comment_reads`; apply it as the table owner or an administrator to repair existing installations. Existing default grants in `sql/schema/app_role.sql` cover it when the same migration owner creates the table; installations with a different owner must grant these privileges explicitly. UPDATE and DELETE are not needed by the application and have no RLS policies.
 
 All existing comments initially appear unread because there are no historic per-user receipts. No comments, decisions, or historical resolved flags are rewritten. Notification dropdown results are bounded to the most recent 100 messages; total unread and resolution counts include all matching comments.
 
