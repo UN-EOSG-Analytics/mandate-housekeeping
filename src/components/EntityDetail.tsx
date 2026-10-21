@@ -85,6 +85,7 @@ import {
   Layers,
   Lightbulb,
   MoreHorizontal,
+  MessageSquare,
   Pencil,
   RefreshCw,
   Search,
@@ -358,14 +359,14 @@ function getDecisionChange(
 // }
 
 const GRID_COLS =
-  "grid-cols-[130px_minmax(180px,1fr)_76px_76px_52px_92px_72px_154px_180px_94px]";
+  "grid-cols-[130px_minmax(180px,1fr)_76px_76px_52px_92px_72px_112px_176px_36px]";
 
 function ColumnHeaders({ controls }: { controls: EntityTableViewControls }) {
   return (
     <div
       className={cn(
         typography.tableHeader,
-        `grid ${GRID_COLS} h-10 items-center gap-x-2 text-foreground`,
+        `grid ${GRID_COLS} h-10 items-center gap-x-2 tracking-normal text-foreground normal-case`,
       )}
     >
       <div className="pl-3">
@@ -397,17 +398,18 @@ function ColumnHeaders({ controls }: { controls: EntityTableViewControls }) {
       />
       <EntityTableColumnHeader
         column="submissions"
-        label="Entity submission"
+        label="Decision"
         controls={controls}
       />
       <EntityTableColumnHeader
         column="reviews"
-        label="Review decision"
+        label="Reviewer"
         controls={controls}
       />
       <EntityTableColumnHeader
         column="comments"
         label="Comments"
+        icon={<MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />}
         controls={controls}
       />
     </div>
@@ -3018,7 +3020,7 @@ export function EntityDetail({
               tabIndex={0}
               className="max-h-[75vh] overflow-auto rounded-lg border border-border bg-white focus-visible:ring-2 focus-visible:ring-un-blue xl:max-h-none xl:overflow-visible"
             >
-              <div className="min-w-[1220px]">
+              <div className="min-w-[1120px]">
                 <div className="sticky top-0 z-20 rounded-t-lg border-b border-border bg-muted">
                   <ColumnHeaders controls={tableControls} />
                 </div>

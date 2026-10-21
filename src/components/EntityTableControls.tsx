@@ -2,7 +2,14 @@
 
 // Adapted from mandates/website/src/components/table/ColumnHeaderFilter.tsx.
 // Keep its separate sort/funnel controls, searchable pill choices and year range.
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { ChevronDown, ChevronUp, Filter, Search, X } from "lucide-react";
 import { Chip, ChipCount } from "@un-eosg/ui/components/chip";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
@@ -193,10 +200,12 @@ function YearRangeFilter({
 export function EntityTableColumnHeader({
   column,
   label,
+  icon,
   controls,
 }: {
   column: string;
   label: string;
+  icon?: ReactNode;
   controls: EntityTableViewControls;
 }) {
   const [open, setOpen] = useState(false);
@@ -234,16 +243,17 @@ export function EntityTableColumnHeader({
           )}
         </button>
       ) : (
-        <span>{label}</span>
+        !icon && <span>{label}</span>
       )}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"
             aria-label={`Filter by ${label}`}
+            title={label}
             className={`flex h-5 w-5 items-center justify-center rounded transition-colors focus-visible:ring-2 focus-visible:ring-un-blue ${active ? "bg-un-blue-text text-white" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
           >
-            <Filter className="h-3 w-3" />
+            {icon ?? <Filter className="h-3 w-3" />}
           </button>
         </PopoverTrigger>
         <PopoverContent

@@ -216,7 +216,7 @@ export function DocumentSearchInput({
   }
 
   return (
-    <div ref={containerRef} className="relative rounded-lg bg-white shadow-sm">
+    <div ref={containerRef} className="relative">
       <div className="flex items-center gap-3 py-2.5 pr-2 pl-3">
         <div
           className={`flex flex-1 items-center gap-2 rounded-lg border-2 border-dashed px-3 py-1.5 transition-colors ${
