@@ -94,6 +94,7 @@ function composerHarness(
   onComment,
   extraProps = {},
   markRead = async () => ({ success: true }),
+  renderHistory = false,
 ) {
   const slots = [];
   let cursor = 0;
@@ -119,14 +120,31 @@ function composerHarness(
     },
     useEffect: (effect) => effects.push(effect),
   };
-  const jsx = (type, props) => ({ type, props });
+  const jsx = (type, props) =>
+    renderHistory && typeof type === "function" ? type(props) : { type, props };
+  const icons = new Proxy({}, { get: (_, name) => name });
+  const utils = { cn: (...classes) => classes.filter(Boolean).join(" ") };
+  const theme = load("src/lib/theme.ts");
+  const reasons = load("src/features/mandates/ui/ReasonsModal.tsx", {
+    react,
+    "react-dom": { createPortal: (node) => node },
+    "react/jsx-runtime": { jsx, jsxs: jsx },
+    "lucide-react": icons,
+    "@/features/mandates/services/decision-reasons": load(
+      "src/features/mandates/services/decision-reasons.ts",
+    ),
+    "@un-eosg/ui/typography": { typography: {} },
+    "@/lib/utils": utils,
+    "@/lib/theme": theme,
+  });
   const { CommentsDecisionPanel } = load(
     "src/components/CommentsDecisionPanel.tsx",
     {
       react,
       "react/jsx-runtime": { jsx, jsxs: jsx },
-      "lucide-react": new Proxy({}, { get: (_, name) => name }),
-      "@/lib/theme": { DECISION_BADGE_STYLES: {} },
+      "lucide-react": icons,
+      "@/lib/theme": theme,
+      "@/lib/utils": utils,
       "@un-eosg/ui/typography": { typography: { eyebrow: "" } },
       "@/features/mandates/services/comment-conversation": service,
       "@/features/mandates/actions/comment-notifications": {
@@ -139,6 +157,8 @@ function composerHarness(
         getDecisionTracks: () => ({}),
       },
       "./DecisionDropdown": {},
+      "./ui/popover": {},
+      "@/features/mandates/ui/ReasonsModal": reasons,
       "./ReviewDecisionControl": {},
     },
   );
@@ -422,4 +442,136 @@ test("history counts exclude the visible update and expanded changes remain chro
       );
     }
   }
+});
+
+test("initial decision and reason saves become one history line per decision", () => {
+  const events = [
+    decision("retain", 1, "entity"),
+    {
+      ...decision("retain-reason", 2, "entity"),
+      decisionReason: "influences_work",
+    },
+    { ...decision("remove", 3, "entity"), decision: "remove" },
+    {
+      ...decision("remove-reason", 4, "entity"),
+      decision: "remove",
+      decisionReason: "other",
+      otherReason: "Completed work",
+    },
+  ];
+  const [run] = service.conversationTimeline([], events);
+  assert.equal(run.decisions.length, 2);
+  assert.deepEqual(
+    run.decisions.map((d) => d.id),
+    ["retain-reason", "remove-reason"],
+  );
+  assert.equal(run.decisions[0].createdAt, events[0].createdAt);
+  assert.equal(run.decisions[1].otherReason, "Completed work");
+  assert.equal(run.latest[0].id, "remove-reason");
+  assert.equal(events[0].decisionReason, undefined); // Raw audit events stay intact.
+});
+test("later reason edits and cleared reasons remain separate history entries", () => {
+  const [run] = service.conversationTimeline(
+    [],
+    [
+      decision("a", 1, "entity"),
+      { ...decision("b", 2, "entity"), decisionReason: "direct_request" },
+      { ...decision("c", 3, "entity"), decisionReason: "influences_work" },
+      decision("d", 4, "entity"),
+    ],
+  );
+  assert.deepEqual(
+    run.decisions.map((d) => d.id),
+    ["b", "c", "d"],
+  );
+});
+test("a comment between a decision and a reason preserves both events", () => {
+  const entries = service.conversationTimeline(
+    [comment("c", 2)],
+    [
+      decision("a", 1, "entity"),
+      { ...decision("b", 3, "entity"), decisionReason: "direct_request" },
+    ],
+  );
+  assert.deepEqual(
+    entries.map((entry) => entry.type),
+    ["decisions", "comment", "decisions"],
+  );
+  assert.equal(entries[0].decisions[0].id, "a");
+});
+test("different authors, tracks, sessions, replacements, metadata or submission references never merge", () => {
+  for (const changes of [
+    { userEmail: "other@un.org" },
+    { decisionTrack: "review" },
+    { reviewSessionId: "different-session" },
+    { reviewedSubmissionId: "different-submission" },
+    { newSymbol: "A/RES/80/1" },
+    { manualMetadata: { title: "Corrected title" } },
+    { entity: "DESA" },
+    { subprogramme: "4" },
+    { documentSymbol: "A/RES/80/2" },
+  ]) {
+    const [run] = service.conversationTimeline(
+      [],
+      [
+        decision("a", 1, "entity"),
+        {
+          ...decision("b", 2, "entity"),
+          decisionReason: "direct_request",
+          ...changes,
+        },
+      ],
+    );
+    assert.equal(run.decisions.length, 2, JSON.stringify(changes));
+  }
+});
+
+test("history shows one line per decision with its actual reason icon and the corrected earlier-change count", () => {
+  const harness = composerHarness(
+    async () => null,
+    {
+      decisions: [
+        decision("retain", 1, "entity"),
+        {
+          ...decision("retain-reason", 2, "entity"),
+          decisionReason: "influences_work",
+        },
+        { ...decision("remove", 3, "entity"), decision: "remove" },
+        {
+          ...decision("remove-reason", 4, "entity"),
+          decision: "remove",
+          decisionReason: "other",
+          otherReason: "Completed work",
+        },
+      ],
+    },
+    undefined,
+    true,
+  );
+  const walk = (node) =>
+    Array.isArray(node)
+      ? node.flatMap(walk)
+      : node && typeof node === "object"
+        ? [node, ...walk(node.props?.children)]
+        : [];
+  const text = (node) =>
+    Array.isArray(node)
+      ? node.map(text).join("")
+      : node && typeof node === "object"
+        ? text(node.props?.children)
+        : (node ?? "");
+  const tree = harness.render(),
+    all = walk(tree);
+  const buttons = all.filter(
+    (node) =>
+      node.type === "button" && node.props["aria-label"]?.startsWith("Reason:"),
+  );
+  assert.equal(buttons.length, 2);
+  assert.equal(buttons[0].props.children.type, "Lightbulb");
+  assert.equal(buttons[1].props.children.type, "MessageSquare");
+  assert.equal(buttons[1].props["aria-label"], "Reason: Completed work");
+  assert.match(
+    text(all.find((node) => node.type === "summary")),
+    /Show history \(1 earlier change\)/,
+  );
 });

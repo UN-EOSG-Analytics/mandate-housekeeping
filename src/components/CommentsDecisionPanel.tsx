@@ -18,7 +18,7 @@ import type {
   MandateState,
 } from "@/types";
 import type { BudgetVersion } from "@/lib/db/budget-version";
-import { DECISION_BADGE_STYLES } from "@/lib/theme";
+import { DECISION_THEME } from "@/lib/theme";
 import { typography } from "@un-eosg/ui/typography";
 import { cn } from "@/lib/utils";
 import {
@@ -30,6 +30,12 @@ import { markCommentsReadAction } from "@/features/mandates/actions/comment-noti
 import { dispatchCommentNotificationsRefresh } from "@/hooks/useCommentNotifications";
 import { getDecisionTracks } from "@/features/mandates/services/decision-tracks";
 import { DecisionDropdown } from "./DecisionDropdown";
+import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
+import {
+  getReasonDisplayLabel,
+  renderReasonIcon,
+  renderLabelWithBold,
+} from "@/features/mandates/ui/ReasonsModal";
 import {
   DecisionTracksContext,
   ReviewDecisionControl,
@@ -52,30 +58,59 @@ function DecisionLine({ decision }: { decision: MandateDecision }) {
         : decision.decision === "add"
           ? Plus
           : ArrowRightLeft;
-  const style =
-    DECISION_BADGE_STYLES[
-      decision.decision === "cancel" ? "no decision" : decision.decision
+  const colors =
+    DECISION_THEME[
+      decision.decision === "cancel" ? "default" : decision.decision
     ];
+  const style = `${colors.bg} ${colors.text} ${colors.border}`;
+  const reasonLabel =
+    decision.decision !== "cancel" && decision.decisionReason
+      ? (getReasonDisplayLabel(
+          decision.decision,
+          decision.decisionReason,
+          decision.otherReason,
+        ) ?? decision.decisionReason)
+      : null;
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 py-1 text-xs text-foreground">
       <span className="font-medium" title={decision.userEmail}>
         {decision.userEmail}
       </span>
       <time dateTime={decision.createdAt}>{dateLabel(decision.createdAt)}</time>
-      <span
-        className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 ${style}`}
-        title={
-          decision.decisionTrack === "review"
-            ? "Reviewer decision"
-            : "Entity submission"
-        }
-      >
-        <Icon className="h-3 w-3" />
-        {decision.decision === "cancel"
-          ? "Cleared"
-          : decision.decision.charAt(0).toUpperCase() +
-            decision.decision.slice(1)}
-        {decision.newSymbol ? ` → ${decision.newSymbol}` : ""}
+      <span className="inline-flex items-center gap-0.5">
+        <span
+          className={`inline-flex h-6 items-center gap-1 rounded border px-1.5 ${style}`}
+          title={
+            decision.decisionTrack === "review"
+              ? "Reviewer decision"
+              : "Entity submission"
+          }
+        >
+          <Icon className="h-3 w-3" />
+          {decision.decision === "cancel"
+            ? "Cleared"
+            : decision.decision.charAt(0).toUpperCase() +
+              decision.decision.slice(1)}
+          {decision.newSymbol ? ` → ${decision.newSymbol}` : ""}
+        </span>
+        {reasonLabel && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label={`Reason: ${reasonLabel.replace(/\*\*/g, "")}`}
+                title={reasonLabel.replace(/\*\*/g, "")}
+                className={`flex h-6 w-6 items-center justify-center rounded border ${style} ${colors.hover}`}
+                onClick={(event) => event.stopPropagation()}
+              >
+                {renderReasonIcon(decision.decisionReason, "h-3.5 w-3.5")}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent side="top" className="w-80 text-sm">
+              {renderLabelWithBold(reasonLabel)}
+            </PopoverContent>
+          </Popover>
+        )}
       </span>
     </div>
   );

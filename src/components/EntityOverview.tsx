@@ -34,7 +34,7 @@ function EntityCard({
       className={`group flex items-center justify-between gap-2 rounded-lg border px-3 py-2.5 transition-colors hover:bg-un-blue-surface focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 ${
         highlight
           ? "border-un-blue-text/30 bg-un-blue-surface"
-          : "border-border bg-white"
+          : "border-border bg-gray-50"
       }`}
       title={entityData.entityLong || entityData.entity}
     >

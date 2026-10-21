@@ -13,6 +13,35 @@ export type ConversationEntry =
       latest: MandateDecision[];
     };
 
+/** The initial reason is saved as a second append-only event. Present that
+ * adjacent save as part of the decision, without hiding later reason edits. */
+function isInitialReasonSave(
+  previous: MandateDecision,
+  next: MandateDecision,
+): boolean {
+  return (
+    previous.decision !== "cancel" &&
+    !previous.decisionReason &&
+    !previous.otherReason &&
+    !!next.decisionReason &&
+    previous.decision === next.decision &&
+    previous.userEmail === next.userEmail &&
+    previous.entity === next.entity &&
+    previous.documentSymbol === next.documentSymbol &&
+    (previous.subprogramme ?? null) === (next.subprogramme ?? null) &&
+    (previous.decisionTrack ?? "entity") === (next.decisionTrack ?? "entity") &&
+    (previous.newSymbol ?? null) === (next.newSymbol ?? null) &&
+    (previous.reviewedSubmissionId ?? null) ===
+      (next.reviewedSubmissionId ?? null) &&
+    (previous.reviewSessionId ?? null) === (next.reviewSessionId ?? null) &&
+    (["title", "body", "year", "link"] as const).every(
+      (key) =>
+        (previous.manualMetadata?.[key] ?? null) ===
+        (next.manualMetadata?.[key] ?? null),
+    )
+  );
+}
+
 /** Collapse decision runs, retaining the last event in each independent track. */
 export function conversationTimeline(
   comments: MandateComment[],
@@ -46,11 +75,18 @@ export function conversationTimeline(
         run = { type: "decisions", decisions: [], latest: [] };
         result.push(run);
       }
-      run.decisions.push(event.decision);
+      const previous = run.decisions.at(-1);
+      const displayDecision =
+        previous && isInitialReasonSave(previous, event.decision)
+          ? { ...event.decision, createdAt: previous.createdAt }
+          : event.decision;
+      if (displayDecision !== event.decision)
+        run.decisions[run.decisions.length - 1] = displayDecision;
+      else run.decisions.push(displayDecision);
       const track = event.decision.decisionTrack || "entity";
       run.latest = [
         ...run.latest.filter((d) => (d.decisionTrack || "entity") !== track),
-        event.decision,
+        displayDecision,
       ];
     }
   }
