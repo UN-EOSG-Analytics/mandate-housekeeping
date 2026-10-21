@@ -1,7 +1,10 @@
+import { getBudgetVersion } from "@/lib/db/review-cycle";
+import { CURRENT_BUDGET_VERSION } from "@/lib/db/budget-version";
 import Link from "next/link";
 import { SiteHeader } from "@un-eosg/ui/components/site-header";
 import { typography } from "@un-eosg/ui/typography";
 import { UserMenu } from "./UserMenu";
+import { CommentNotifications } from "@/components/CommentNotifications";
 import type { EntityOption } from "@/features/mandates/services/data-service";
 
 interface Props {
@@ -24,6 +27,7 @@ export async function Header({
   hideAbout = false,
   navigationPending = false,
 }: Props) {
+  const version = user ? await getBudgetVersion() : CURRENT_BUDGET_VERSION;
   const isLoggedIn = !!user;
   const widthClass = maxWidth === "6xl" ? "max-w-6xl" : "max-w-7xl";
 
@@ -73,12 +77,18 @@ export async function Header({
             <span className="sr-only">Loading account navigation</span>
           </span>
         ) : isLoggedIn ? (
-          <UserMenu
-            email={user.email}
-            entity={user.entity}
-            isReviewer={user.isReviewer}
-            entities={entities}
-          />
+          <>
+            <CommentNotifications
+              key={`${user.email}:${version}`}
+              budgetVersion={version}
+            />
+            <UserMenu
+              email={user.email}
+              entity={user.entity}
+              isReviewer={user.isReviewer}
+              entities={entities}
+            />
+          </>
         ) : (
           <Link
             href="/login"

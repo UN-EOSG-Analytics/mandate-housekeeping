@@ -12,8 +12,6 @@
  * - Change: Difference between baseline and in-review decision
  */
 
-import { getReviewWriteError } from "@/lib/db/review-cycle";
-import { getCurrentUser } from "@/features/auth/auth";
 import { query } from "@/lib/db/db";
 import type {
   Decision,
@@ -21,7 +19,6 @@ import type {
   ReviewChangeInfo,
   ReviewChangeResponse,
 } from "@/types";
-import { revalidatePath } from "next/cache";
 
 type ActionResult<T = void> =
   | { success: true; data?: T }
@@ -322,47 +319,12 @@ export async function acceptReviewChangeAction(
   },
   expectedBudgetVersion?: string,
 ): Promise<ActionResult<ReviewChangeResponse>> {
-  const cycleError = await getReviewWriteError(expectedBudgetVersion);
-  if (cycleError) return { success: false, error: cycleError };
-
-  const user = await getCurrentUser();
-  if (!user) {
-    return { success: false, error: "unauthorized" };
-  }
-
-  const { entity, documentSymbol, subprogramme, reviewSessionId, comment } =
-    params;
-
-  if (!entity || !documentSymbol || !reviewSessionId) {
-    return { success: false, error: "missing required fields" };
-  }
-
-  // Insert or update the response
-  const rows = await query<ResponseRow>(
-    `INSERT INTO mandates_housekeeping.review_change_responses 
-       (entity, document_symbol, subprogramme, review_session_id, response_type, responded_by, comment)
-     VALUES ($1, $2, $3, $4, 'accept', $5, $6)
-     ON CONFLICT (budget_version, entity, document_symbol, COALESCE(subprogramme, ''), review_session_id) 
-     DO UPDATE SET 
-       response_type = 'accept',
-       responded_by = EXCLUDED.responded_by,
-       responded_at = NOW(),
-       comment = EXCLUDED.comment,
-       revert_decision_id = NULL
-     RETURNING *`,
-    [
-      entity,
-      documentSymbol,
-      subprogramme || null,
-      reviewSessionId,
-      user.email,
-      comment || null,
-    ],
-  );
-
-  revalidatePath(`/entity/${entity}`);
-
-  return { success: true, data: toResponse(rows[0]) };
+  void params;
+  void expectedBudgetVersion;
+  return {
+    success: false,
+    error: "Use the separate submission and review columns.",
+  };
 }
 
 /**
@@ -378,119 +340,10 @@ export async function revertReviewChangeAction(
   },
   expectedBudgetVersion?: string,
 ): Promise<ActionResult<ReviewChangeResponse>> {
-  const cycleError = await getReviewWriteError(expectedBudgetVersion);
-  if (cycleError) return { success: false, error: cycleError };
-
-  const user = await getCurrentUser();
-  if (!user) {
-    return { success: false, error: "unauthorized" };
-  }
-
-  const { entity, documentSymbol, subprogramme, reviewSessionId, comment } =
-    params;
-
-  if (!entity || !documentSymbol || !reviewSessionId) {
-    return { success: false, error: "missing required fields" };
-  }
-
-  // Get the review session start time
-  const sessionRows = await query<{ started_at: string }>(
-    `SELECT started_at FROM mandates_housekeeping.entity_review_mode WHERE id = $1`,
-    [reviewSessionId],
-  );
-
-  if (sessionRows.length === 0) {
-    return { success: false, error: "review session not found" };
-  }
-
-  const reviewStartedAt = sessionRows[0].started_at;
-
-  // Get the baseline decision to restore
-  const subprogrammeCondition = subprogramme
-    ? `AND d.subprogramme = $4`
-    : `AND d.subprogramme IS NULL`;
-
-  const baselineRows = await query<DecisionRow>(
-    `SELECT d.*, u.entity as user_entity, approver.entity as approved_by_entity
-     FROM mandates_housekeeping.mandate_decisions d
-     LEFT JOIN mandates_housekeeping.users u ON d.user_email = u.email
-     LEFT JOIN mandates_housekeeping.users approver ON d.approved_by = approver.email
-     WHERE d.entity = $1 
-       AND d.document_symbol = $2
-       AND d.created_at < $3
-       AND (d.review_session_id IS NULL OR d.review_session_id != $5)
-       ${subprogrammeCondition}
-     ORDER BY d.created_at DESC
-     LIMIT 1`,
-    subprogramme
-      ? [entity, documentSymbol, reviewStartedAt, subprogramme, reviewSessionId]
-      : [entity, documentSymbol, reviewStartedAt, reviewSessionId],
-  );
-
-  let revertDecisionId: string | null = null;
-
-  if (baselineRows.length > 0) {
-    // Create a new decision that restores the baseline
-    const baseline = baselineRows[0];
-    const insertRows = await query<{ id: string }>(
-      `INSERT INTO mandates_housekeeping.mandate_decisions 
-         (document_symbol, entity, subprogramme, decision, new_symbol, manual_metadata, 
-          decision_reason, other_reason, user_email, review_session_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL)
-       RETURNING id`,
-      [
-        documentSymbol,
-        entity,
-        subprogramme || null,
-        baseline.decision,
-        baseline.new_symbol,
-        baseline.manual_metadata
-          ? JSON.stringify(baseline.manual_metadata)
-          : null,
-        baseline.decision_reason,
-        baseline.other_reason,
-        user.email,
-      ],
-    );
-    revertDecisionId = insertRows[0].id;
-  } else {
-    // No baseline existed - create a "cancel" decision to effectively remove the in-review decision
-    const insertRows = await query<{ id: string }>(
-      `INSERT INTO mandates_housekeeping.mandate_decisions 
-         (document_symbol, entity, subprogramme, decision, user_email, review_session_id)
-       VALUES ($1, $2, $3, 'cancel', $4, NULL)
-       RETURNING id`,
-      [documentSymbol, entity, subprogramme || null, user.email],
-    );
-    revertDecisionId = insertRows[0].id;
-  }
-
-  // Record the response
-  const responseRows = await query<ResponseRow>(
-    `INSERT INTO mandates_housekeeping.review_change_responses 
-       (entity, document_symbol, subprogramme, review_session_id, response_type, 
-        responded_by, comment, revert_decision_id)
-     VALUES ($1, $2, $3, $4, 'revert', $5, $6, $7)
-     ON CONFLICT (budget_version, entity, document_symbol, COALESCE(subprogramme, ''), review_session_id) 
-     DO UPDATE SET 
-       response_type = 'revert',
-       responded_by = EXCLUDED.responded_by,
-       responded_at = NOW(),
-       comment = EXCLUDED.comment,
-       revert_decision_id = EXCLUDED.revert_decision_id
-     RETURNING *`,
-    [
-      entity,
-      documentSymbol,
-      subprogramme || null,
-      reviewSessionId,
-      user.email,
-      comment || null,
-      revertDecisionId,
-    ],
-  );
-
-  revalidatePath(`/entity/${entity}`);
-
-  return { success: true, data: toResponse(responseRows[0]) };
+  void params;
+  void expectedBudgetVersion;
+  return {
+    success: false,
+    error: "Use the separate submission and review columns.",
+  };
 }

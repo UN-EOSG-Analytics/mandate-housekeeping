@@ -4,6 +4,7 @@
  */
 
 import { query } from "@/lib/db/db";
+import { effectiveDecisionsCteSql } from "./decision-tracks-sql";
 import { versionPredicateSql } from "@/lib/db/budget-version";
 
 export interface DecisionStats {
@@ -82,23 +83,17 @@ export async function fetchAnalysisData(): Promise<AnalysisData> {
     decision: string;
     count: string;
   }>(`
-    WITH latest_decisions AS (
-      SELECT DISTINCT ON (document_symbol, entity, COALESCE(subprogramme, ''))
-        document_symbol,
-        entity,
-        subprogramme,
-        decision,
-        created_at
-      FROM mandates_housekeeping.mandate_decisions
-      ORDER BY document_symbol, entity, COALESCE(subprogramme, ''), created_at DESC
-    )
+    WITH ${effectiveDecisionsCteSql()}
     SELECT 
       entity,
-      decision,
+      CASE WHEN has_addition THEN
+        CASE WHEN decision IN ('add', 'retain', 'update') THEN 'add' ELSE 'cancel' END
+        ELSE decision END AS decision,
       COUNT(*) as count
     FROM latest_decisions
-    WHERE decision != 'cancel' AND entity IS NOT NULL AND entity != 'NA'
-    GROUP BY entity, decision
+    WHERE decision != 'cancel' AND NOT (has_addition AND decision = 'remove')
+      AND entity IS NOT NULL AND entity != 'NA'
+    GROUP BY entity, 2
     ORDER BY entity, decision
   `);
 
@@ -107,26 +102,17 @@ export async function fetchAnalysisData(): Promise<AnalysisData> {
     decision: string;
     count: string;
   }>(`
-    WITH latest_decisions AS (
-      SELECT DISTINCT ON (document_symbol, entity, COALESCE(subprogramme, ''))
-        decision,
-        entity
-      FROM mandates_housekeeping.mandate_decisions
-      ORDER BY document_symbol, entity, COALESCE(subprogramme, ''), created_at DESC
-    )
+    WITH ${effectiveDecisionsCteSql()}
     SELECT 
-      decision,
+      CASE WHEN has_addition THEN
+        CASE WHEN decision IN ('add', 'retain', 'update') THEN 'add' ELSE 'cancel' END
+        ELSE decision END AS decision,
       COUNT(*) as count
     FROM latest_decisions
-    WHERE decision != 'cancel' AND entity IS NOT NULL AND entity != 'NA'
-    GROUP BY decision
-    ORDER BY 
-      CASE decision 
-        WHEN 'retain' THEN 1 
-        WHEN 'remove' THEN 2 
-        WHEN 'update' THEN 3 
-        WHEN 'add' THEN 4 
-      END
+    WHERE decision != 'cancel' AND NOT (has_addition AND decision = 'remove')
+      AND entity IS NOT NULL AND entity != 'NA'
+    GROUP BY 1
+    ORDER BY 1
   `);
 
   // Build decision maps for faster lookup
@@ -172,7 +158,10 @@ export async function fetchAnalysisData(): Promise<AnalysisData> {
       removeCount,
       updateCount,
       addCount,
-      noDecisionCount: totalCitations - decisionsCount,
+      noDecisionCount: Math.max(
+        0,
+        totalCitations - retainCount - removeCount - updateCount,
+      ),
       projectedCitations,
       absoluteDecrease,
       percentageDecrease,
@@ -202,16 +191,7 @@ export async function fetchAnalysisData(): Promise<AnalysisData> {
   // Calculate projected unique documents
   // Documents that will remain after applying all decisions
   const projectedDocsResult = await query<{ count: string }>(`
-    WITH latest_decisions AS (
-      SELECT DISTINCT ON (document_symbol, entity, COALESCE(subprogramme, ''))
-        document_symbol,
-        entity,
-        subprogramme,
-        decision
-      FROM mandates_housekeeping.mandate_decisions
-      WHERE entity IS NOT NULL AND entity != 'NA'
-      ORDER BY document_symbol, entity, COALESCE(subprogramme, ''), created_at DESC
-    ),
+    WITH ${effectiveDecisionsCteSql()},
     -- Documents with at least one non-removed citation
     retained_docs AS (
       SELECT DISTINCT c.ppb_full_document_symbol
@@ -223,14 +203,14 @@ export async function fetchAnalysisData(): Promise<AnalysisData> {
           WHERE d.document_symbol = c.ppb_full_document_symbol
             AND d.entity = c.entity
             AND COALESCE(d.subprogramme, '') = COALESCE(c.sub_programme, '')
-            AND d.decision = 'remove'
+            AND d.decision = 'remove' AND NOT d.has_addition
         )
     ),
     -- New documents from add decisions
     added_docs AS (
-      SELECT DISTINCT document_symbol as ppb_full_document_symbol
+      SELECT DISTINCT CASE WHEN decision = 'update' THEN new_symbol ELSE document_symbol END as ppb_full_document_symbol
       FROM latest_decisions
-      WHERE decision = 'add'
+      WHERE decision = 'add' OR (has_addition AND decision IN ('retain', 'update'))
     )
     SELECT COUNT(DISTINCT ppb_full_document_symbol) as count
     FROM (
@@ -269,8 +249,11 @@ export async function fetchAnalysisData(): Promise<AnalysisData> {
     totalEntities: citationsByEntity.length,
     decisionsBreakdown,
     totalDecisions,
-    citationsWithDecisions: totalDecisionsCount,
-    citationsWithoutDecisions: totalCitations - totalDecisionsCount,
+    citationsWithDecisions: totalDecisionsCount - totalAdded,
+    citationsWithoutDecisions: Math.max(
+      0,
+      totalCitations - totalDecisionsCount + totalAdded,
+    ),
     projectedCitations,
     absoluteDecrease,
     percentageDecrease,

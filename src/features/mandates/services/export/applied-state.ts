@@ -1,5 +1,15 @@
 import { query } from "@/lib/db/db";
-import type { PPBRecord, CitationInfo, ManualMetadata } from "@/types";
+import type {
+  PPBRecord,
+  CitationInfo,
+  ManualMetadata,
+  MandateDecision,
+  ExportDecisionMode,
+} from "@/types";
+import {
+  getDecisionTracks,
+  getEffectiveDecision,
+} from "@/features/mandates/services/decision-tracks";
 import { fetchPPBRecords } from "@/features/mandates/services/data-service";
 import {
   fetchDocumentMetadata,
@@ -19,30 +29,18 @@ export interface AppliedMandateRow {
   part: string | null;
 }
 
-export interface LatestDecisionRow {
-  id: string;
-  documentSymbol: string;
-  entity: string;
-  subprogramme: string | null;
-  decision: string;
-  newSymbol: string | null;
-  manualMetadata: ManualMetadata | null;
-  decisionReason: string | null;
-  otherReason: string | null;
-  userEmail: string;
-  userEntity: string | null;
-  createdAt: string;
-  approvedBy: string | null;
-  approvedByEntity: string | null;
-  approvedAt: string | null;
-}
+export type LatestDecisionRow = MandateDecision;
 
 interface DecisionRow {
   id: string;
   document_symbol: string;
   entity: string;
   subprogramme: string | null;
-  decision: string;
+  decision: MandateDecision["decision"];
+  decision_track: MandateDecision["decisionTrack"];
+  reviewed_submission_id: string | null;
+  review_session_id: string | null;
+  has_addition: boolean;
   new_symbol: string | null;
   manual_metadata: ManualMetadata | null;
   decision_reason: string | null;
@@ -122,17 +120,23 @@ function compareAppliedRows(
   return compareSymbolsNatural(a.symbol, b.symbol);
 }
 
-async function fetchLatestDecisions(
+type ExportDecisionHistory = MandateDecision[] & { hasAddition: boolean };
+
+async function fetchDecisionHistories(
   entity?: string,
-): Promise<LatestDecisionRow[]> {
+): Promise<Map<string, ExportDecisionHistory>> {
   const rows = await query<DecisionRow>(
     `
-      SELECT DISTINCT ON (d.entity, d.document_symbol, d.subprogramme)
+      SELECT DISTINCT ON (d.entity, d.document_symbol, d.subprogramme, d.decision_track)
+        bool_or(d.decision = 'add') OVER (PARTITION BY d.entity, d.document_symbol, d.subprogramme) AS has_addition,
         d.id,
         d.document_symbol,
         d.entity,
         d.subprogramme,
         d.decision,
+        d.decision_track,
+        d.reviewed_submission_id,
+        d.review_session_id,
         d.new_symbol,
         d.manual_metadata,
         d.decision_reason,
@@ -147,28 +151,41 @@ async function fetchLatestDecisions(
       LEFT JOIN mandates_housekeeping.users u ON d.user_email = u.email
       LEFT JOIN mandates_housekeeping.users approver ON d.approved_by = approver.email
       WHERE ($1::text IS NULL OR d.entity = $1)
-      ORDER BY d.entity, d.document_symbol, d.subprogramme, d.created_at DESC, d.id DESC
+      ORDER BY d.entity, d.document_symbol, d.subprogramme, d.decision_track, d.created_at DESC, d.id DESC
     `,
     [entity || null],
   );
 
-  return rows.map((row) => ({
-    id: row.id,
-    documentSymbol: row.document_symbol,
-    entity: row.entity,
-    subprogramme: row.subprogramme,
-    decision: row.decision,
-    newSymbol: row.new_symbol,
-    manualMetadata: row.manual_metadata,
-    decisionReason: row.decision_reason,
-    otherReason: row.other_reason,
-    userEmail: row.user_email,
-    userEntity: row.user_entity,
-    createdAt: row.created_at,
-    approvedBy: row.approved_by,
-    approvedByEntity: row.approved_by_entity,
-    approvedAt: row.approved_at,
-  }));
+  const histories = new Map<string, ExportDecisionHistory>();
+  for (const row of rows) {
+    const event: MandateDecision = {
+      id: row.id,
+      documentSymbol: row.document_symbol,
+      entity: row.entity,
+      subprogramme: row.subprogramme,
+      decision: row.decision,
+      decisionTrack: row.decision_track,
+      reviewedSubmissionId: row.reviewed_submission_id,
+      reviewSessionId: row.review_session_id,
+      newSymbol: row.new_symbol,
+      manualMetadata: row.manual_metadata,
+      decisionReason: row.decision_reason,
+      otherReason: row.other_reason,
+      userEmail: row.user_email,
+      userEntity: row.user_entity,
+      createdAt: row.created_at,
+      approvedBy: row.approved_by,
+      approvedByEntity: row.approved_by_entity,
+      approvedAt: row.approved_at,
+    };
+    const key = decisionKey(row.entity, row.document_symbol, row.subprogramme);
+    const history =
+      histories.get(key) ??
+      Object.assign([], { hasAddition: row.has_addition });
+    history.push(event);
+    histories.set(key, history);
+  }
+  return histories;
 }
 
 function resolveDecisionMetadata(
@@ -198,12 +215,93 @@ function buildEntityLongMap(records: PPBRecord[]): Map<string, string | null> {
   return map;
 }
 
-export async function getAppliedExportData(entity?: string): Promise<{
+/** Count only submissions that participate in the legislative export. */
+function countFallbacks(
+  records: PPBRecord[],
+  histories: Map<string, ExportDecisionHistory>,
+  entity?: string,
+): number {
+  const included = new Set<string>();
+  for (const record of records)
+    for (const citation of record.citation_info) {
+      if (
+        citation.entity &&
+        (!entity || citation.entity === entity) &&
+        isLegislative(citation.part_in_document)
+      ) {
+        included.add(
+          decisionKey(
+            citation.entity,
+            record.full_document_symbol,
+            getSubprogramme(citation),
+          ),
+        );
+      }
+    }
+  let count = 0;
+  for (const [key, history] of histories) {
+    const { submission, currentReview } = getDecisionTracks(history);
+    if (
+      submission &&
+      submission.decision !== "cancel" &&
+      !currentReview &&
+      (included.has(key) || submission.decision === "add")
+    )
+      count++;
+  }
+  return count;
+}
+
+export async function getExportFallbackCount(entity?: string): Promise<number> {
+  const [records, histories] = await Promise.all([
+    fetchPPBRecords(),
+    fetchDecisionHistories(entity),
+  ]);
+  return countFallbacks(records, histories, entity);
+}
+
+export async function getAppliedExportData(
+  entity?: string,
+  mode: ExportDecisionMode = "reviewed",
+): Promise<{
   rows: AppliedMandateRow[];
   decisions: LatestDecisionRow[];
 }> {
-  const records = await fetchPPBRecords();
-  const decisions = await fetchLatestDecisions(entity);
+  const [records, histories] = await Promise.all([
+    fetchPPBRecords(),
+    fetchDecisionHistories(entity),
+  ]);
+  const decisions = [...histories.values()].flatMap((history) => {
+    const decision = getEffectiveDecision(history, mode);
+    if (!decision) return [];
+    // Retaining an entity's manual addition accepts its original metadata too.
+    // A replacement uses only the reviewer's metadata and the new catalogue entry.
+    if (
+      history.hasAddition &&
+      decision.decisionTrack === "review" &&
+      decision.decision === "retain" &&
+      !decision.manualMetadata
+    ) {
+      const { submission } = getDecisionTracks(history);
+      return [
+        { ...decision, manualMetadata: submission?.manualMetadata ?? null },
+      ];
+    }
+    return [decision];
+  });
+  const baselineKeys = new Set<string>();
+  for (const record of records)
+    for (const citation of record.citation_info) {
+      if (citation.entity && isLegislative(citation.part_in_document)) {
+        baselineKeys.add(
+          decisionKey(
+            citation.entity,
+            record.full_document_symbol,
+            getSubprogramme(citation),
+          ),
+        );
+      }
+    }
   const decisionsMap = new Map<string, LatestDecisionRow>();
   const symbolsToResolve = new Set<string>();
 
@@ -219,7 +317,7 @@ export async function getAppliedExportData(entity?: string): Promise<{
     if (decision.decision === "update" && decision.newSymbol) {
       symbolsToResolve.add(decision.newSymbol);
     }
-    if (decision.decision === "add") {
+    if (decision.decision === "add" || decision.decision === "retain") {
       symbolsToResolve.add(decision.documentSymbol);
     }
   }
@@ -311,23 +409,40 @@ export async function getAppliedExportData(entity?: string): Promise<{
   }
 
   for (const decision of decisions) {
-    if (decision.decision !== "add") continue;
     if (entity && decision.entity !== entity) continue;
-
-    const appliedKey = decisionKey(
+    const originalKey = decisionKey(
       decision.entity,
       decision.documentSymbol,
+      decision.subprogramme,
+    );
+    const wasAdded =
+      histories.get(originalKey)?.hasAddition || decision.decision === "add";
+    if (
+      baselineKeys.has(originalKey) ||
+      !wasAdded ||
+      decision.decision === "remove" ||
+      decision.decision === "cancel"
+    )
+      continue;
+    const targetSymbol =
+      decision.decision === "update" && decision.newSymbol
+        ? decision.newSymbol
+        : decision.documentSymbol;
+    const appliedKey = decisionKey(
+      decision.entity,
+      targetSymbol,
       decision.subprogramme,
     );
     if (seen.has(appliedKey)) continue;
 
     const resolved = resolveDecisionMetadata(
-      decision.documentSymbol,
+      targetSymbol,
       decision.manualMetadata || null,
       metadataLookup,
     );
+    seen.add(appliedKey);
     rows.push({
-      symbol: decision.documentSymbol,
+      symbol: targetSymbol,
       title: cleanTitle(resolved.title),
       body: resolved.body || "",
       docType: resolved.docType || null,

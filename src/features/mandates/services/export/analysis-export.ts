@@ -12,6 +12,7 @@
  */
 
 import ExcelJS from "exceljs";
+import { effectiveDecisionsCteSql } from "@/features/mandates/services/decision-tracks-sql";
 import { query } from "@/lib/db/db";
 import { fetchDocumentMetadata } from "@/features/mandates/services/documents/metadata";
 import {
@@ -90,12 +91,10 @@ export async function exportAnalysisXlsx(): Promise<Buffer> {
          COUNT(*) FILTER (WHERE ver = 'ppb2027')::int AS c27
        FROM src GROUP BY entity, symbol, subprogramme
      ),
+     ${effectiveDecisionsCteSql()},
      raw_latest AS (
-       -- Preserve each audit key first, then make generic compatibility explicit.
-       SELECT DISTINCT ON (entity, document_symbol, COALESCE(subprogramme, '')) *
-       FROM mandates_housekeeping.mandate_decisions
+       SELECT * FROM latest_decisions
        WHERE entity IS NOT NULL AND entity != 'NA'
-       ORDER BY entity, document_symbol, COALESCE(subprogramme, ''), created_at DESC, id DESC
      ),
      normalized AS (
        SELECT *, upper(regexp_replace(document_symbol, '[[:space:]]', '', 'g')) AS symbol,
@@ -158,7 +157,7 @@ export async function exportAnalysisXlsx(): Promise<Buffer> {
   cover.getCell("A1").font = { bold: true, size: 16 };
   cover.getCell("A3").value = `Generated: ${new Date().toISOString()}`;
   cover.getCell("A5").value =
-    "One row per (entity, mandate symbol, subprogramme) across the 2026 and 2027 source citations plus housekeeping decisions. in_2026 / in_2027 = present in that fascicle (PPB + PKM; Plan Outline excluded). decision_2026 = latest active housekeeping decision (cancelled = none); add decisions appear even when the mandate is in neither fascicle.";
+    "One row per (entity, mandate symbol, subprogramme) across the 2026 and 2027 source citations plus housekeeping decisions. in_2026 / in_2027 = present in that fascicle (PPB + PKM; Plan Outline excluded). decision_2026 = current review decision, falling back to the entity submission (cancelled = none); add decisions appear even when the mandate is in neither fascicle.";
   cover.getCell("A6").value =
     "Pivot decision_2026 against presence to see outcomes: e.g. remove + only_2026 = removal realized; remove + both = still cited in 2027; add + only_2027 = addition realized; add + neither = added but not (yet) in the 2027 fascicle.";
   cover.getCell("A7").value =

@@ -1,3 +1,4 @@
+import type { ExportDecisionMode } from "@/types";
 import ExcelJS from "exceljs";
 import {
   getAppliedExportData,
@@ -10,19 +11,25 @@ import {
   cleanTitle as cleanMetadataTitle,
 } from "@/features/mandates/services/documents/metadata";
 
-async function getAppliedRows(entityFilter?: string): Promise<{
+async function getAppliedRows(
+  entityFilter?: string,
+  mode: ExportDecisionMode = "reviewed",
+): Promise<{
   rows: AppliedMandateRow[];
   decisions: LatestDecisionRow[];
 }> {
-  const data = await getAppliedExportData(entityFilter);
+  const data = await getAppliedExportData(entityFilter, mode);
   if (entityFilter && data.rows.length === 0) {
     throw new Error(`No mandates found for entity: ${entityFilter}`);
   }
   return data;
 }
 
-export async function exportToCsv(entity?: string): Promise<string> {
-  const { rows } = await getAppliedRows(entity);
+export async function exportToCsv(
+  entity?: string,
+  mode: ExportDecisionMode = "reviewed",
+): Promise<string> {
+  const { rows } = await getAppliedRows(entity, mode);
 
   const headers = [
     "Symbol",
@@ -175,8 +182,11 @@ function addSheetHeaders(
   });
 }
 
-export async function exportToXlsx(entity?: string): Promise<Buffer> {
-  const { rows, decisions } = await getAppliedRows(entity);
+export async function exportToXlsx(
+  entity?: string,
+  mode: ExportDecisionMode = "reviewed",
+): Promise<Buffer> {
+  const { rows, decisions } = await getAppliedRows(entity, mode);
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "UN Mandates Housekeeping";
@@ -192,7 +202,8 @@ export async function exportToXlsx(entity?: string): Promise<Buffer> {
   cover.getCell("A1").font = { bold: true, size: 16 };
   cover.getCell("A2").value =
     `Generated: ${new Date().toISOString().split("T")[0]}`;
-  cover.getCell("A3").value = `Total records: ${rows.length}`;
+  cover.getCell("A3").value =
+    `Total records: ${rows.length} (${mode === "entity" ? "Entity submission" : "Reviewed outcome"})`;
   cover.getCell("A4").value = "Source:";
   cover.getCell("B4").value = { text: sourceUrl, hyperlink: sourceUrl };
   cover.getCell("B4").font = { underline: true };

@@ -14,6 +14,7 @@ interface Props {
   entityLong: string | null;
   partName: string | null;
   filterEntity: string | null;
+  filtersActive?: boolean;
   filteredCitations: number;
   totalCitations: number;
   filteredUniqueDocuments: number;
@@ -30,6 +31,7 @@ export function EntityHeader({
   entityLong,
   partName,
   filterEntity,
+  filtersActive = !!filterEntity,
   filteredCitations,
   totalCitations,
   filteredUniqueDocuments,
@@ -40,10 +42,10 @@ export function EntityHeader({
   onClearAll,
   isClearingAll,
 }: Props) {
-  const uniqueDocs = filterEntity
+  const uniqueDocs = filtersActive
     ? filteredUniqueDocuments
     : totalUniqueDocuments;
-  const citations = filterEntity ? filteredCitations : totalCitations;
+  const citations = filtersActive ? filteredCitations : totalCitations;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white px-6 py-5 shadow-sm">
@@ -64,7 +66,7 @@ export function EntityHeader({
                 {uniqueDocs}
               </div>
               <div className="-mt-0.5 text-sm text-foreground">
-                {filterEntity && (
+                {filtersActive && (
                   <span className="text-muted-foreground">
                     of {totalUniqueDocuments}{" "}
                   </span>
@@ -77,7 +79,7 @@ export function EntityHeader({
                 {citations}
               </div>
               <div className="-mt-0.5 text-xs text-foreground">
-                {filterEntity && <>of {totalCitations} </>}
+                {filtersActive && <>of {totalCitations} </>}
                 Citation{totalCitations !== 1 ? "s" : ""}
               </div>
             </div>

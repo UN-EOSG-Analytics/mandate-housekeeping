@@ -1,3 +1,4 @@
+import type { ExportDecisionMode } from "@/types";
 import JSZip from "jszip";
 import { readFile } from "fs/promises";
 import { join } from "path";
@@ -632,6 +633,7 @@ function citationTable(
 
 export async function exportEntityToDocx(
   entityAbbrev: string,
+  mode: ExportDecisionMode = "reviewed",
 ): Promise<Buffer> {
   // Load template
   const templatePath = join(
@@ -642,7 +644,7 @@ export async function exportEntityToDocx(
   const zip = await JSZip.loadAsync(templateBuffer);
 
   const [{ rows }, bodyFullNames, bracketDescs] = await Promise.all([
-    getAppliedExportData(entityAbbrev),
+    getAppliedExportData(entityAbbrev, mode),
     fetchBodyFullNames(),
     fetchBracketDescriptions(),
   ]);
@@ -829,7 +831,9 @@ function buildEntityContent(
   return content;
 }
 
-export async function exportAllToDocx(): Promise<Buffer> {
+export async function exportAllToDocx(
+  mode: ExportDecisionMode = "reviewed",
+): Promise<Buffer> {
   const templatePath = join(
     process.cwd(),
     "data/references/un_styles_template.docx",
@@ -837,7 +841,7 @@ export async function exportAllToDocx(): Promise<Buffer> {
   const templateBuffer = await readFile(templatePath);
   const zip = await JSZip.loadAsync(templateBuffer);
   const [{ rows }, bodyFullNames, bracketDescs] = await Promise.all([
-    getAppliedExportData(),
+    getAppliedExportData(undefined, mode),
     fetchBodyFullNames(),
     fetchBracketDescriptions(),
   ]);

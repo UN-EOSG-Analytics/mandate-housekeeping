@@ -6,17 +6,20 @@
  * Handles the core workflow for mandate housekeeping:
  * - Entities make decisions about each mandate
  * - Decisions include optional justifications and replacement document symbols
- * - DMSPC reviewers approve decisions before finalization
- * - Decisions are blocked during review mode (entity in read-only state)
+ * - Reviewers record independent review decisions
+ * - Review sessions lock entity submissions; review edits remain available
  *
  * Each decision represents an entity's proposed action on a specific mandate citation.
  */
 
+import { getCommentReadState } from "../services/comment-notifications";
+import { getBudgetVersion } from "@/lib/db/review-cycle";
 import { getReviewWriteError } from "@/lib/db/review-cycle";
 import { getCurrentUser } from "@/features/auth/auth";
+import { lockEntityReview } from "@/lib/db/review-lock";
+import { getDecisionTracks } from "../services/decision-tracks";
 import { query, transaction } from "@/lib/db/db";
 import type { MandateComment, MandateDecision, MandateState } from "@/types";
-import { revalidatePath } from "next/cache";
 
 // Return type for actions
 type ActionResult<T = void> =
@@ -31,6 +34,8 @@ interface ManualMetadata {
 }
 
 interface DecisionRow {
+  decision_track: "entity" | "review";
+  reviewed_submission_id: string | null;
   id: string;
   document_symbol: string;
   entity: string;
@@ -63,6 +68,8 @@ interface CommentRow {
 }
 
 const toDecision = (row: DecisionRow): MandateDecision => ({
+  decisionTrack: row.decision_track ?? "entity",
+  reviewedSubmissionId: row.reviewed_submission_id ?? null,
   id: row.id,
   documentSymbol: row.document_symbol,
   entity: row.entity,
@@ -115,7 +122,7 @@ export async function getEntityDecisionsAction(entity: string): Promise<
        LEFT JOIN mandates_housekeeping.users u ON d.user_email = u.email
        LEFT JOIN mandates_housekeeping.users approver ON d.approved_by = approver.email
        WHERE d.entity = $1
-       ORDER BY d.created_at`,
+       ORDER BY d.created_at, d.id`,
       [entity],
     ),
     query<CommentRow>(
@@ -158,7 +165,10 @@ export async function getEntityDecisionsAction(entity: string): Promise<
     const decision = toDecision(row);
     stateMap[key].decisions.push(decision);
     // Track latest decision (overwrites as we iterate, results are ORDER BY created_at)
-    stateMap[key].decision = decision;
+    const tracks = getDecisionTracks(stateMap[key].decisions);
+    stateMap[key].decision = tracks.submission;
+    stateMap[key].reviewDecision = tracks.review;
+    stateMap[key].reviewStale = tracks.reviewStale;
   }
 
   for (const row of commentRows) {
@@ -219,7 +229,7 @@ export async function getSingleMandateStateAction(params: {
        LEFT JOIN mandates_housekeeping.users u ON d.user_email = u.email
        LEFT JOIN mandates_housekeeping.users approver ON d.approved_by = approver.email
        WHERE d.document_symbol = $1 AND d.entity = $2 ${decisionSubprogrammeCondition}
-       ORDER BY d.created_at`,
+       ORDER BY d.created_at, d.id`,
       queryParams,
     ),
     query<CommentRow>(
@@ -245,7 +255,9 @@ export async function getSingleMandateStateAction(params: {
       documentSymbol,
       entity,
       subprogramme,
-      decision: decisions.length > 0 ? decisions[decisions.length - 1] : null,
+      decision: getDecisionTracks(decisions).submission,
+      reviewDecision: getDecisionTracks(decisions).review,
+      reviewStale: getDecisionTracks(decisions).reviewStale,
       decisions,
       comments,
     },
@@ -257,40 +269,55 @@ export async function getSingleMandateStateAction(params: {
  */
 export async function getDocumentDecisionsAction(
   symbol: string,
+  expectedBudgetVersion?: string,
 ): Promise<
-  ActionResult<{ decisions: MandateDecision[]; comments: MandateComment[] }>
+  ActionResult<{
+    decisions: MandateDecision[];
+    comments: MandateComment[];
+    readCommentIds: string[];
+  }>
 > {
-  if (!symbol) {
-    return { success: false, error: "symbol required" };
-  }
-
-  const [decisionRows, commentRows] = await Promise.all([
-    query<DecisionRow>(
+  if (!symbol) return { success: false, error: "symbol required" };
+  const version = await getBudgetVersion();
+  if (expectedBudgetVersion && expectedBudgetVersion !== version)
+    return {
+      success: false,
+      error: "The submission cycle has changed. Reload this page.",
+    };
+  return transaction(async (tx) => {
+    const user = await getCurrentUser(tx);
+    if (!user) return { success: false, error: "unauthorized" };
+    const decisionRows = await tx<DecisionRow>(
       `SELECT d.*, u.entity as user_entity, approver.entity as approved_by_entity
        FROM mandates_housekeeping.mandate_decisions d
        LEFT JOIN mandates_housekeeping.users u ON d.user_email = u.email
        LEFT JOIN mandates_housekeeping.users approver ON d.approved_by = approver.email
        WHERE d.document_symbol = $1
-       ORDER BY d.created_at`,
+       ORDER BY d.created_at, d.id`,
       [symbol],
-    ),
-    query<CommentRow>(
+    );
+    const commentRows = await tx<CommentRow>(
       `SELECT c.*, u.entity as user_entity
        FROM mandates_housekeeping.mandate_comments c
        LEFT JOIN mandates_housekeeping.users u ON c.user_email = u.email
-       WHERE c.document_symbol = $1 
-       ORDER BY c.created_at`,
+       WHERE c.document_symbol = $1 ORDER BY c.created_at, c.id`,
       [symbol],
-    ),
-  ]);
-
-  return {
-    success: true,
-    data: {
-      decisions: decisionRows.map(toDecision),
-      comments: commentRows.map(toComment),
-    },
-  };
+    );
+    const readCommentIds = await getCommentReadState(
+      tx,
+      user.email,
+      symbol,
+      version,
+    );
+    return {
+      success: true,
+      data: {
+        decisions: decisionRows.map(toDecision),
+        comments: commentRows.map(toComment),
+        readCommentIds,
+      },
+    };
+  }, version);
 }
 
 /**
@@ -302,6 +329,9 @@ export async function createDecisionAction(
     entity: string;
     subprogramme: string | null;
     decision: string;
+    decisionTrack?: "entity" | "review";
+    reviewedSubmissionId?: string | null;
+    agreeWithSubmission?: boolean;
     newSymbol?: string | null;
     manualMetadata?: ManualMetadata | null;
     decisionReason?: string | null;
@@ -324,10 +354,53 @@ export async function createDecisionAction(
       documentSymbol,
       entity,
       subprogramme,
-      decision,
-      newSymbol,
-      manualMetadata,
+      decision: requestedDecision,
+      newSymbol: requestedNewSymbol,
+      manualMetadata: requestedMetadata,
     } = params;
+    let decision = requestedDecision;
+    let newSymbol = requestedNewSymbol;
+    let manualMetadata = requestedMetadata;
+    let decisionReason = params.decisionReason || null;
+    let otherReason = params.otherReason || null;
+    const track = params.decisionTrack ?? "entity";
+    if (track !== "entity" && track !== "review")
+      return { success: false, error: "Invalid decision track" };
+    if (track === "entity" && user.isReviewer)
+      return {
+        success: false,
+        error: "Reviewers can edit only review decisions",
+      };
+    if (track === "review" && !user.isReviewer)
+      return {
+        success: false,
+        error: "Only reviewers can edit review decisions",
+      };
+    await lockEntityReview(tx, entity);
+    const submissions = await tx<DecisionRow>(
+      `SELECT * FROM mandates_housekeeping.mandate_decisions
+      WHERE entity = $1 AND document_symbol = $2 AND subprogramme IS NOT DISTINCT FROM $3
+        AND decision_track = 'entity' ORDER BY created_at DESC, id DESC LIMIT 1`,
+      [entity, documentSymbol, subprogramme || null],
+    );
+    const submission = submissions[0];
+    if (
+      track === "review" &&
+      params.reviewedSubmissionId !== (submission?.id ?? null)
+    )
+      return {
+        success: false,
+        error: "Submission changed. Refresh and review the latest submission.",
+      };
+    if (params.agreeWithSubmission) {
+      if (track !== "review" || !submission || submission.decision === "cancel")
+        return { success: false, error: "No entity submission to agree with" };
+      decision = submission.decision;
+      newSymbol = submission.new_symbol || undefined;
+      manualMetadata = submission.manual_metadata || undefined;
+      decisionReason = submission.decision_reason;
+      otherReason = submission.other_reason;
+    }
 
     if (
       [documentSymbol, newSymbol].some(
@@ -376,7 +449,7 @@ export async function createDecisionAction(
       [entity],
     );
     const reviewSessionId = reviewSessionRows[0]?.id || null;
-    if (reviewSessionId && !user.isReviewer) {
+    if (reviewSessionId && track === "entity") {
       return { success: false, error: "review_mode_blocked" };
     }
 
@@ -384,8 +457,8 @@ export async function createDecisionAction(
     const rows = await tx<DecisionRow>(
       `WITH inserted AS (
       INSERT INTO mandates_housekeeping.mandate_decisions 
-        (document_symbol, entity, subprogramme, decision, new_symbol, manual_metadata, decision_reason, other_reason, user_email, review_session_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        (document_symbol, entity, subprogramme, decision, new_symbol, manual_metadata, decision_reason, other_reason, user_email, review_session_id, decision_track, reviewed_submission_id, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, clock_timestamp())
       RETURNING *
     )
     SELECT i.*, u.entity as user_entity, NULL::text as approved_by_entity
@@ -398,10 +471,12 @@ export async function createDecisionAction(
         decision,
         newSymbol || null,
         manualMetadata ? JSON.stringify(manualMetadata) : null,
-        params.decisionReason || null,
-        params.decisionReason === "other" ? params.otherReason || null : null,
+        decisionReason,
+        decisionReason === "other" ? otherReason : null,
         user.email,
-        reviewSessionId,
+        track === "review" ? reviewSessionId : null,
+        track,
+        track === "review" ? (submission?.id ?? null) : null,
       ],
     );
 
@@ -423,53 +498,13 @@ export async function approveDecisionAction(
     approvedAt: string | null;
   }>
 > {
-  const cycleError = await getReviewWriteError(expectedBudgetVersion);
-  if (cycleError) return { success: false, error: cycleError };
-
-  const user = await getCurrentUser();
-  if (!user) {
-    return { success: false, error: "unauthorized" };
-  }
-
-  if (!user.isReviewer) {
-    return { success: false, error: "only reviewers can approve" };
-  }
-
-  if (!decisionId) {
-    return { success: false, error: "decisionId required" };
-  }
-
-  const rows = await query<{
-    id: string;
-    entity: string;
-    approved_by: string | null;
-    approved_at: string | null;
-  }>(
-    approved
-      ? `UPDATE mandates_housekeeping.mandate_decisions 
-         SET approved_by = $2, approved_at = NOW()
-         WHERE id = $1
-         RETURNING id, entity, approved_by, approved_at`
-      : `UPDATE mandates_housekeeping.mandate_decisions 
-         SET approved_by = NULL, approved_at = NULL
-         WHERE id = $1
-         RETURNING id, entity, approved_by, approved_at`,
-    approved ? [decisionId, user.email] : [decisionId],
-  );
-
-  if (!rows[0]) {
-    return { success: false, error: "decision not found" };
-  }
-
-  revalidatePath(`/entity/${rows[0].entity}`);
-
+  void decisionId;
+  void approved;
+  void expectedBudgetVersion;
   return {
-    success: true,
-    data: {
-      id: rows[0].id,
-      approvedBy: rows[0].approved_by,
-      approvedAt: rows[0].approved_at,
-    },
+    success: false,
+    error:
+      "Use the review decision column to agree or record a different decision.",
   };
 }
 
@@ -517,6 +552,11 @@ export async function updateDecisionReasonAction(
     }
 
     const existing = existingRows[0];
+    if (existing.decision === "cancel")
+      return {
+        success: false,
+        error: "A cleared decision has no editable reason",
+      };
 
     // DMSPC users can update any entity, others can only update their own entity
     if (!user.canReviewAnyEntity && user.entity !== existing.entity) {
@@ -526,7 +566,38 @@ export async function updateDecisionReasonAction(
       };
     }
 
-    if (existing.review_active && !user.isReviewer) {
+    if ((existing.decision_track ?? "entity") === "entity" && user.isReviewer)
+      return {
+        success: false,
+        error: "Reviewers can edit only review decisions",
+      };
+    if (existing.decision_track === "review" && !user.isReviewer)
+      return {
+        success: false,
+        error: "Only reviewers can edit review decisions",
+      };
+    await lockEntityReview(tx, existing.entity);
+    const latest = await tx<{ id: string }>(
+      `SELECT id FROM mandates_housekeeping.mandate_decisions
+      WHERE entity = $1 AND document_symbol = $2 AND subprogramme IS NOT DISTINCT FROM $3
+        AND decision_track = $4 ORDER BY created_at DESC, id DESC LIMIT 1`,
+      [
+        existing.entity,
+        existing.document_symbol,
+        existing.subprogramme,
+        existing.decision_track ?? "entity",
+      ],
+    );
+    if (latest[0]?.id !== decisionId)
+      return {
+        success: false,
+        error: "Decision changed. Refresh before editing its reason.",
+      };
+    const sessions = await tx<{ id: string }>(
+      `SELECT id FROM mandates_housekeeping.entity_review_mode WHERE entity = $1 AND ended_at IS NULL`,
+      [existing.entity],
+    );
+    if (sessions.length && existing.decision_track !== "review") {
       return { success: false, error: "review_mode_blocked" };
     }
 
@@ -535,7 +606,7 @@ export async function updateDecisionReasonAction(
     const rows = await tx<DecisionRow>(
       `WITH inserted AS (
       INSERT INTO mandates_housekeeping.mandate_decisions 
-        (document_symbol, entity, subprogramme, decision, new_symbol, manual_metadata, decision_reason, other_reason, user_email, review_session_id)
+        (document_symbol, entity, subprogramme, decision, new_symbol, manual_metadata, decision_reason, other_reason, user_email, review_session_id, decision_track, reviewed_submission_id, created_at)
       SELECT 
         document_symbol, 
         entity, 
@@ -546,7 +617,7 @@ export async function updateDecisionReasonAction(
         $2,  -- new decision_reason
         $3,  -- new other_reason
         $4,  -- current user (who is updating the reason)
-        review_session_id
+        $5, decision_track, reviewed_submission_id, clock_timestamp()
       FROM mandates_housekeeping.mandate_decisions
       WHERE id = $1
       RETURNING *
@@ -559,6 +630,7 @@ export async function updateDecisionReasonAction(
         decisionReason,
         decisionReason === "other" ? otherReason : null,
         user.email,
+        existing.decision_track === "review" ? (sessions[0]?.id ?? null) : null,
       ],
     );
 
@@ -576,65 +648,11 @@ export async function clearAllEntityDecisionsAction(
 ): Promise<
   ActionResult<{ deletedDecisions: number; deletedComments: number }>
 > {
-  const cycleError = await getReviewWriteError(expectedBudgetVersion);
-  if (cycleError) return { success: false, error: cycleError };
-
-  const user = await getCurrentUser();
-  if (!user) {
-    return { success: false, error: "unauthorized" };
-  }
-
-  // Only reviewers can clear entity data
-  if (!user.isReviewer) {
-    return {
-      success: false,
-      error: "Only reviewers can clear entity decisions",
-    };
-  }
-
-  if (!entity) {
-    return { success: false, error: "entity required" };
-  }
-
-  try {
-    // Delete all comments for this entity
-    const commentsResult = await query<{ count: string }>(
-      `WITH deleted AS (
-        DELETE FROM mandates_housekeeping.mandate_comments
-        WHERE entity = $1
-        RETURNING 1
-      )
-      SELECT COUNT(*)::text as count FROM deleted`,
-      [entity],
-    );
-    const deletedComments = parseInt(commentsResult[0]?.count ?? "0", 10);
-
-    // Delete all decisions for this entity
-    const decisionsResult = await query<{ count: string }>(
-      `WITH deleted AS (
-        DELETE FROM mandates_housekeeping.mandate_decisions
-        WHERE entity = $1
-        RETURNING 1
-      )
-      SELECT COUNT(*)::text as count FROM deleted`,
-      [entity],
-    );
-    const deletedDecisions = parseInt(decisionsResult[0]?.count ?? "0", 10);
-
-    revalidatePath(`/entity/${encodeURIComponent(entity)}`);
-
-    return {
-      success: true,
-      data: {
-        deletedDecisions,
-        deletedComments,
-      },
-    };
-  } catch (error) {
-    console.error("Failed to clear entity decisions:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to clear data",
-    };
-  }
+  void entity;
+  void expectedBudgetVersion;
+  return {
+    success: false,
+    error:
+      "Bulk deletion is no longer available. Clear individual review decisions to preserve submission history.",
+  };
 }

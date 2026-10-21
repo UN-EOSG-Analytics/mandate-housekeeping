@@ -13,6 +13,7 @@
  */
 
 import { query } from "@/lib/db/db";
+import { effectiveDecisionsCteSql } from "../decision-tracks-sql";
 import {
   type BudgetVersion,
   versionPredicateSqlFor,
@@ -54,13 +55,7 @@ function entSymCte(version: BudgetVersion): string {
  * with as an "improvement" metric.
  */
 function projectedEntSymCte(): string {
-  return `latest_decisions AS (
-    SELECT DISTINCT ON (document_symbol, entity, COALESCE(subprogramme, ''))
-      document_symbol, entity, decision, new_symbol
-    FROM mandates_housekeeping.mandate_decisions
-    WHERE entity IS NOT NULL AND entity != 'NA'
-    ORDER BY document_symbol, entity, COALESCE(subprogramme, ''), created_at DESC
-  ),
+  return `${effectiveDecisionsCteSql()},
   base AS (
     SELECT DISTINCT c.entity,
            REGEXP_REPLACE(c.ppb_full_document_symbol, '(\\d) ([A-Z])$', '\\1\\2') AS symbol
@@ -76,14 +71,14 @@ function projectedEntSymCte(): string {
       SELECT 1 FROM latest_decisions d
       WHERE d.entity = b.entity
         AND REGEXP_REPLACE(d.document_symbol, '(\\d) ([A-Z])$', '\\1\\2') = b.symbol
-        AND d.decision = 'remove'
+        AND d.decision = 'remove' AND NOT d.has_addition
     )
   ),
   added AS (
     SELECT entity,
            REGEXP_REPLACE(COALESCE(new_symbol, document_symbol), '(\\d) ([A-Z])$', '\\1\\2') AS symbol
     FROM latest_decisions
-    WHERE decision = 'add'
+    WHERE decision = 'add' OR (has_addition AND decision IN ('retain', 'update'))
   ),
   ent_sym AS (
     SELECT entity, symbol FROM retained
