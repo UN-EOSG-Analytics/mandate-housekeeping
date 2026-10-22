@@ -32,9 +32,24 @@ const activity = (id = "comment", reads = []) => ({
     decisions: [{ id: `decision-${id}` }],
     comments: [{ id }],
     readCommentIds: reads,
+    serverTime: "2026-10-22T12:00:00Z",
   },
 });
-function harness() {
+function loadCache() {
+  const code = ts.transpileModule(
+    readFileSync("src/features/mandates/services/activity-cache.ts", "utf8"),
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+      },
+    },
+  ).outputText;
+  const exports = {};
+  new Function("exports", code)(exports);
+  return exports;
+}
+function harness(cache = loadCache()) {
   const slots = [];
   const requests = [];
   const intervals = new Set();
@@ -82,16 +97,18 @@ function harness() {
       return pending.promise;
     };
   const dependencies = {
-    "@/lib/polling": { REVIEW_POLL_INTERVAL_MS: 30_000 },
+    "@/lib/polling": {
+      REVIEW_POLL_INTERVAL_MS: 30_000,
+      REVIEW_RECONCILE_INTERVAL_MS: 300_000,
+    },
     react,
-    "@/features/mandates/actions/decisions": {
+    "@/features/mandates/services/activity-cache": cache,
+    "@/features/mandates/services/client-reads": {
       getDocumentDecisionsAction: request("activity"),
+      getDocumentVersionsAction: request("versions"),
     },
     "@/features/mandates/services/documents/client-data-service": {
       fetchParagraphs: request("paragraphs"),
-    },
-    "@/features/mandates/services/documents/document-fetching": {
-      getDocumentVersionsAction: request("versions"),
     },
   };
   const exports = {};
@@ -105,7 +122,11 @@ function harness() {
   )(
     exports,
     (name) => dependencies[name] || {},
-    { visibilityState: "visible" },
+    {
+      visibilityState: "visible",
+      addEventListener() {},
+      removeEventListener() {},
+    },
     (fn, intervalMs) => {
       assert.equal(intervalMs, 30_000);
       intervals.add(fn);
@@ -120,6 +141,7 @@ function harness() {
     activeTab: "info",
   };
   return {
+    cache,
     requests,
     intervals,
     render(next = {}) {
@@ -247,4 +269,90 @@ test("failed initial activity remains loading, exposes the error and recovers on
   assert.equal(recovered.activityError, false);
   assert.equal(recovered.activityLoading, false);
   assert.equal(recovered.allComments[0].id, "recovered");
+});
+
+test("a remounted sidebar reuses its user's cached conversation and requests deltas", async () => {
+  const first = harness();
+  first.render({ userEmail: "reader@un.org" });
+  first.requests[0].resolve(activity("cached", ["read"]));
+  await settle();
+  first.render();
+  const reopened = harness(first.cache);
+  const initial = reopened.render({ userEmail: "reader@un.org" });
+  assert.equal(initial.activityLoading, false);
+  assert.equal(initial.allComments[0].id, "cached");
+  assert.equal(reopened.requests[0].args[2], "2026-10-22T12:00:00Z");
+  reopened.requests[0].resolve({
+    success: true,
+    data: {
+      decisions: [],
+      comments: [],
+      readCommentIds: ["read"],
+      serverTime: "2026-10-22T12:01:00Z",
+    },
+  });
+  await settle();
+  assert.equal(reopened.render().allComments[0].id, "cached");
+  const otherUser = harness(first.cache);
+  assert.equal(
+    otherUser.render({ userEmail: "other@un.org" }).activityLoading,
+    true,
+  );
+  assert.equal(otherUser.requests[0].args[2], undefined);
+});
+
+test("incremental refresh keeps older history, updates comments by ID, and preserves unchanged references", async () => {
+  const h = harness();
+  h.render({ userEmail: "history@un.org" });
+  const original = activity("original");
+  original.data.comments[0].resolvedAt = null;
+  h.requests[0].resolve(original);
+  await settle();
+  const before = h.render();
+  for (const poll of h.intervals) void poll();
+  h.requests
+    .find((r, i) => i > 0 && r.kind === "activity")
+    .resolve({
+      success: true,
+      data: {
+        decisions: [],
+        comments: [
+          { ...original.data.comments[0], resolvedAt: "2026-10-22T12:01:00Z" },
+        ],
+        readCommentIds: [],
+        serverTime: "2026-10-22T12:01:00Z",
+      },
+    });
+  await settle();
+  const after = h.render();
+  assert.equal(after.allDecisions, before.allDecisions);
+  assert.equal(after.allComments.length, 1);
+  assert.equal(after.allComments[0].resolvedAt, "2026-10-22T12:01:00Z");
+  for (const poll of h.intervals) void poll();
+  h.requests
+    .filter((r) => r.kind === "activity")
+    .at(-1)
+    .resolve({
+      success: true,
+      data: {
+        decisions: [],
+        comments: [],
+        readCommentIds: [],
+        serverTime: "2026-10-22T12:02:00Z",
+      },
+    });
+  await settle();
+  assert.equal(h.render().allComments, after.allComments);
+});
+
+test("cached data and read receipts cannot cross budget cycles for the same user", async () => {
+  const h = harness();
+  h.render({ userEmail: "cycle@un.org" });
+  h.requests[0].resolve(activity("active", ["active-read"]));
+  await settle();
+  h.render();
+  const archive = h.render({ budgetVersion: "ppb2026" });
+  assert.equal(archive.activityLoading, true);
+  assert.deepEqual(archive.allComments, []);
+  assert.equal(archive.readCommentIds, null);
 });

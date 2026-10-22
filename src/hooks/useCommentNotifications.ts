@@ -2,7 +2,7 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import { REVIEW_POLL_INTERVAL_MS } from "@/lib/polling";
-import { getCommentNotificationsAction } from "@/features/mandates/actions/comment-notifications";
+import { getCommentNotificationsAction } from "@/features/mandates/services/client-reads";
 import type { BudgetVersion } from "@/lib/db/budget-version";
 import type { CommentNotificationSummary } from "@/types/comments";
 

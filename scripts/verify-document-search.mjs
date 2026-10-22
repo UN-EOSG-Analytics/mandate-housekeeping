@@ -71,13 +71,13 @@ function harness() {
     (name) => {
       if (name === "react") return react;
       return {
-        searchDocumentsAction(query) {
+        searchDocumentsAction(query, signal) {
           let resolve, reject;
           const pending = new Promise((a, b) => {
             resolve = a;
             reject = b;
           });
-          requests.push({ query, resolve, reject });
+          requests.push({ query, signal, resolve, reject });
           return pending;
         },
       };
@@ -286,4 +286,20 @@ test("editing or selecting invalidates an in-flight response before the next ren
     assert.equal(input.writes(), writes);
     assert.deepEqual(input.render({ query }).results, []);
   }
+});
+
+test("replacing a query or unmounting aborts the obsolete HTTP request", () => {
+  const h = harness(),
+    input = h.input();
+  input.render({ query: "first" });
+  h.tick();
+  const first = h.requests[0];
+  assert.equal(first.signal.aborted, false);
+  input.render({ query: "second" });
+  assert.equal(first.signal.aborted, true);
+  h.tick();
+  const second = h.requests[1];
+  assert.equal(second.signal.aborted, false);
+  input.unmount();
+  assert.equal(second.signal.aborted, true);
 });

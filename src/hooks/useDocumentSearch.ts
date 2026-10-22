@@ -1,10 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  searchDocumentsAction,
-  type DocumentSearchResult,
-} from "@/features/mandates/services/documents/document-fetching";
+import type { DocumentSearchResult } from "@/features/mandates/services/documents/document-fetching";
+import { searchDocumentsAction } from "@/features/mandates/services/client-reads";
 
 interface SearchRequest {
   term: string;
@@ -18,8 +16,8 @@ interface SearchState {
   status: "loading" | "done" | "error";
 }
 
-/** Each input owns its debounce and request lifetime. Server actions cannot be
- * aborted, so ignore responses after a query/focus change or unmount. */
+/** Debounce and abort obsolete HTTP searches. Generation and request identity
+ * also reject late responses immediately after an edit, selection or retry. */
 export function useDocumentSearch(query: string, active: boolean) {
   const term = query.trim();
   const [state, setState] = useState<SearchState | null>(null);
@@ -38,9 +36,10 @@ export function useDocumentSearch(query: string, active: boolean) {
     if (!active || term.length < 2) return;
     let cancelled = false;
     const currentGeneration = generation.current;
+    const controller = new AbortController();
     const timer = setTimeout(() => {
       setState({ request, results: [], status: "loading" });
-      searchDocumentsAction(term).then(
+      searchDocumentsAction(term, controller.signal).then(
         (results) => {
           if (!cancelled && generation.current === currentGeneration)
             setState({ request, results, status: "done" });
@@ -53,6 +52,7 @@ export function useDocumentSearch(query: string, active: boolean) {
     }, 200);
     return () => {
       cancelled = true;
+      controller.abort();
       clearTimeout(timer);
     };
   }, [term, active, request]);

@@ -4,7 +4,7 @@ import { ArrowLeftFromLine, Info, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MAX_YEAR, MIN_YEAR } from "@/lib/constants";
 import { Tooltip } from "../../../components/Tooltip";
-import { getIssuingBodies } from "@/features/mandates/services/reference-data";
+import { getIssuingBodies } from "@/features/mandates/services/client-reads";
 import { useDocumentSearch } from "@/hooks/useDocumentSearch";
 
 export interface ManualEntryData {

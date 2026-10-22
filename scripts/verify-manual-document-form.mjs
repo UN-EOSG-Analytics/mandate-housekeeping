@@ -47,7 +47,7 @@ function form(props = {}, searchState = { results: [], searching: false }) {
     "lucide-react": { Info() {}, X() {}, ArrowLeftFromLine() {} },
     "@/lib/constants": { MIN_YEAR: 1946, MAX_YEAR: 2026 },
     "../../../components/Tooltip": { Tooltip() {} },
-    "@/features/mandates/services/reference-data": {
+    "@/features/mandates/services/client-reads": {
       getIssuingBodies: async () => [],
     },
     "@/hooks/useDocumentSearch": { useDocumentSearch: () => searchState },

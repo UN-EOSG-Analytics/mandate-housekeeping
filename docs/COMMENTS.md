@@ -33,3 +33,18 @@ All existing comments initially appear unread because there are no historic per-
 - Existing decision and export workflow checks remain applicable.
 
 No browser-level behavior or live database migration is exercised by these checks.
+
+Sidebar activity now uses authenticated HTTP reads every 30 seconds. Reopening a
+conversation displays its in-memory cache immediately and refreshes from the last
+successful database watermark. Cache keys include the user, budget cycle and
+symbol; entries expire after five minutes of inactivity and are limited to 50
+conversations. Caches are never persisted to browser storage.
+
+The first request includes the complete history so notification targets and older
+messages remain accessible. A full reconciliation every five minutes repairs
+changes from transactions longer than the overlap window. Other requests include only new decisions and
+new/changed comments, plus current personal read IDs. Local confirmed saves and
+read receipts update the cache immediately. Refreshes overlap timestamps to
+handle commits around the polling boundary; rows merge by ID. Resolving or
+unresolving comments advances `updated_at`. Unchanged rows retain their references
+so idle refreshes do not rebuild the conversation.

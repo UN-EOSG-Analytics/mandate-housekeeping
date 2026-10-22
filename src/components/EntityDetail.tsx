@@ -47,22 +47,24 @@ import { getAgeIndicator } from "@/features/mandates/services/age-indicator";
 import {
   clearAllEntityDecisionsAction,
   createDecisionAction,
-  getEntityDecisionsAction,
   updateDecisionReasonAction,
 } from "@/features/mandates/actions/decisions";
 import {
-  getEntityReviewChangesAction,
   acceptReviewChangeAction,
   revertReviewChangeAction,
 } from "@/features/mandates/actions/review-baselines";
 import { createCommentAction } from "@/features/mandates/actions/comments";
 import {
   endReviewModeAction,
-  getReviewModeStatusAction,
   startReviewModeAction,
 } from "@/features/mandates/actions/review-mode";
-import { getDocumentMetadataAction } from "@/features/mandates/services/documents/document-fetching";
-import { getUserRoleAction } from "@/features/auth/user";
+import {
+  getEntityDecisionsAction,
+  getEntityReviewChangesAction,
+  getReviewModeStatusAction,
+  getDocumentMetadataAction,
+  getUserRoleAction,
+} from "@/features/mandates/services/client-reads";
 import {
   getMandateWarnings,
   getWarningIcon,
@@ -1752,7 +1754,7 @@ export function EntityDetail({
       try {
         const [role, decisions, review] = await Promise.all([
           getUserRoleAction(),
-          getEntityDecisionsAction(entity),
+          getEntityDecisionsAction(entity, undefined, budgetVersion),
           getReviewModeStatusAction(entity),
         ]);
         if (
@@ -1811,7 +1813,7 @@ export function EntityDetail({
     return () => {
       cancelled = true;
     };
-  }, [entity, cycleReadOnly, loadAttempt, loadKey]);
+  }, [entity, cycleReadOnly, loadAttempt, loadKey, budgetVersion]);
 
   // Refresh all changed symbols in one request, including every subprogramme.
   const handleRemoteChanges = useCallback(
@@ -1819,7 +1821,11 @@ export function EntityDetail({
       const symbols = [
         ...new Set(changes.map((change) => change.document_symbol)),
       ];
-      const result = await getEntityDecisionsAction(entity, symbols);
+      const result = await getEntityDecisionsAction(
+        entity,
+        symbols,
+        budgetVersion,
+      );
       if (!result.success || !result.data) {
         throw new Error(
           result.success ? "Could not refresh decisions" : result.error,
@@ -1840,13 +1846,14 @@ export function EntityDetail({
         ),
       }));
     },
-    [entity],
+    [entity, budgetVersion],
   );
 
   // Real-time sync via polling (works with Vercel serverless)
   // Polls both decisions/comments AND review mode status
   useRealtimeDecisions({
     entity,
+    budgetVersion,
     onRemoteChanges: handleRemoteChanges,
     onReviewModeChange: async (status) => {
       setIsUnderReview(status.isUnderReview);
@@ -2613,7 +2620,11 @@ export function EntityDetail({
 
   // Refresh decisions from server (used after review blocked dialog closes)
   const refreshDecisions = useCallback(async () => {
-    const result = await getEntityDecisionsAction(entity);
+    const result = await getEntityDecisionsAction(
+      entity,
+      undefined,
+      budgetVersion,
+    );
     if (result.success && result.data) {
       const map: Record<string, MandateState> = {};
       for (const s of result.data.states) {
@@ -2622,7 +2633,7 @@ export function EntityDetail({
       setStates(map);
       setTotalComments(result.data.totalComments);
     }
-  }, [entity]);
+  }, [entity, budgetVersion]);
 
   // Handle accepting a review change
   const handleAcceptChange = useCallback(

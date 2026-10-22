@@ -176,6 +176,7 @@ function initialLoad({ optionalFailure = false } = {}) {
     entity: "UNOMS",
     cycleReadOnly: false,
     loadKey: "UNOMS:ppb2027",
+    budgetVersion: "ppb2027",
     FEATURE_FLAGS: { reviewChangeIndicator: optionalFailure },
     getEntityReviewChangesAction: async () => {
       throw new Error("Optional indicator unavailable");

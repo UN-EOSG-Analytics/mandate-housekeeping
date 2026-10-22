@@ -154,7 +154,7 @@ export async function resolveCommentAction(
   const rows = await query<CommentRow>(
     `WITH updated AS (
       UPDATE mandates_housekeeping.mandate_comments 
-      SET resolved_at = $2, resolved_by = $3
+      SET resolved_at = $2, resolved_by = $3, updated_at = clock_timestamp()
       WHERE id = $1
       RETURNING *
     )

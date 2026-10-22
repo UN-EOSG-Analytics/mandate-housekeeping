@@ -6,16 +6,18 @@ import {
   REVIEW_POLL_MAX_RETRY_MS,
   REVIEW_RECONCILE_INTERVAL_MS,
 } from "@/lib/polling";
-import {
-  getRealtimeChangesAction,
-  type RealtimeChange,
-  type ReviewModeStatus,
+import { getRealtimeChangesAction } from "@/features/mandates/services/client-reads";
+import type { BudgetVersion } from "@/lib/db/budget-version";
+import type {
+  RealtimeChange,
+  ReviewModeStatus,
 } from "@/features/mandates/actions/realtime";
 
 export type { RealtimeChange, ReviewModeStatus };
 
 interface UseRealtimeDecisionsOptions {
   entity: string;
+  budgetVersion?: BudgetVersion;
   /** All changed documents are refreshed together before advancing the cursor. */
   onRemoteChanges?: (changes: RealtimeChange[]) => void | Promise<void>;
   onReviewModeChange?: (status: ReviewModeStatus) => void | Promise<void>;
@@ -26,6 +28,7 @@ interface UseRealtimeDecisionsOptions {
 /** Single-flight polling pauses in hidden tabs and backs off after failures. */
 export function useRealtimeDecisions({
   entity,
+  budgetVersion,
   onRemoteChanges,
   onReviewModeChange,
   enabled = true,
@@ -46,6 +49,7 @@ export function useRealtimeDecisions({
   useEffect(() => {
     if (!enabled || !entity) return;
     let cancelled = false;
+    const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let cursor: string | undefined;
     let failures = 0;
@@ -82,12 +86,15 @@ export function useRealtimeDecisions({
         const result = await getRealtimeChangesAction(
           entity,
           reconcile ? undefined : cursor,
+          budgetVersion,
+          controller.signal,
         );
         if (cancelled) return;
         if (!result.success) throw new Error(result.error);
         const data = result.data;
         const changes = data.changes.filter(
-          (change) => reconcile || !processed.has(change.id),
+          (change) =>
+            reconcile || !processed.has(`${change.id}:${change.created_at}`),
         );
         if (changes.length) await callbacks.current.onRemoteChanges?.(changes);
         if (cancelled) return;
@@ -103,7 +110,8 @@ export function useRealtimeDecisions({
           previousStatus = status;
           setReviewModeStatus(status);
         }
-        for (const change of changes) processed.add(change.id);
+        for (const change of changes)
+          processed.add(`${change.id}:${change.created_at}`);
         // IDs only suppress the bounded overlap window; no unbounded tab growth.
         if (processed.size > 2000) {
           const recent = [...processed].slice(-1000);
@@ -135,11 +143,12 @@ export function useRealtimeDecisions({
     void poll();
     return () => {
       cancelled = true;
+      controller.abort();
       clearTimeout(timer);
       pollRef.current = null;
       document.removeEventListener("visibilitychange", refreshVisible);
     };
-  }, [enabled, entity, pollIntervalMs]);
+  }, [enabled, entity, budgetVersion, pollIntervalMs]);
 
   const refresh = useCallback(() => pollRef.current?.(), []);
   return { isConnected, error, reviewModeStatus, refresh };

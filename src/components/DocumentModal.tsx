@@ -1,7 +1,16 @@
 // Modal is client-side
 "use client";
 
-import { REVIEW_POLL_INTERVAL_MS } from "@/lib/polling";
+import {
+  cacheActivity,
+  getCachedActivity,
+  mergeActivityRows,
+  mergeReadIds,
+} from "@/features/mandates/services/activity-cache";
+import {
+  REVIEW_POLL_INTERVAL_MS,
+  REVIEW_RECONCILE_INTERVAL_MS,
+} from "@/lib/polling";
 import { type BudgetVersion } from "@/lib/db/budget-version";
 import { CommentsDecisionPanel } from "./CommentsDecisionPanel";
 
@@ -23,8 +32,10 @@ import {
 import { getAgeIndicator } from "@/features/mandates/services/age-indicator";
 import { getParagraphTextSegments } from "@/features/mandates/services/documents/paragraph-highlights";
 import { fetchParagraphs } from "@/features/mandates/services/documents/client-data-service";
-import { getDocumentDecisionsAction } from "@/features/mandates/actions/decisions";
-import { getDocumentVersionsAction } from "@/features/mandates/services/documents/document-fetching";
+import {
+  getDocumentDecisionsAction,
+  getDocumentVersionsAction,
+} from "@/features/mandates/services/client-reads";
 import type { DocumentVersion } from "@/features/mandates/services/documents/document-versions";
 import { getDocumentComparisonUrl } from "@/features/mandates/services/documents/comparison-link";
 import { UN_BLUE } from "@/lib/theme";
@@ -582,13 +593,18 @@ export function useDocumentSidebarData({
   symbol,
   budgetVersion,
   activeTab,
+  userEmail = null,
 }: {
+  userEmail?: string | null;
   open: boolean;
   symbol: string;
   budgetVersion: BudgetVersion;
   activeTab: "info" | "paragraphs";
 }) {
-  const activityKey = `${budgetVersion}:${symbol}`;
+  const activityKey = JSON.stringify([userEmail, budgetVersion, symbol]);
+  const cacheKey = userEmail ? activityKey : null;
+  const cachedActivity = open ? getCachedActivity(cacheKey) : undefined;
+  const hasCachedActivity = !!cachedActivity;
   const [loadedActivityKey, setLoadedActivityKey] = useState<string | null>(
     null,
   );
@@ -597,11 +613,6 @@ export function useDocumentSidebarData({
   const [allComments, setAllComments] = useState<MandateComment[]>([]);
   const [readCommentIds, setReadCommentIds] = useState<string[] | null>(null);
   const readKeyRef = useRef<string | null>(null);
-  const handleRead = useCallback((ids: string[]) => {
-    setReadCommentIds((previous) => [
-      ...new Set([...(previous || []), ...ids]),
-    ]);
-  }, []);
   const [paragraphResult, setParagraphResult] = useState<{
     symbol: string;
     paragraphs: Paragraph[];
@@ -618,32 +629,84 @@ export function useDocumentSidebarData({
     new Map<string, ReturnType<typeof getDocumentVersionsAction>>(),
   );
 
-  // Next's client router queues server actions. Start the activity request before
-  // optional document queries so fulltext cannot block the initial conversation.
+  // HTTP reads run independently from mutation actions. Reopen from memory,
+  // then request only events changed since the last successful refresh.
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     let pending = false;
+    const controller = new AbortController();
+    const initialCache = getCachedActivity(cacheKey);
+    let cursor = initialCache?.cursor;
+    let lastReconciledAt = initialCache?.reconciledAt ?? 0;
     const fetchActivity = async () => {
       if (pending || document.visibilityState !== "visible") return;
       pending = true;
+      const reconcile =
+        !cursor ||
+        Date.now() - lastReconciledAt >= REVIEW_RECONCILE_INTERVAL_MS;
       const result = await getDocumentDecisionsAction(
         symbol,
         budgetVersion,
+        reconcile ? undefined : cursor,
+        controller.signal,
+        userEmail ?? undefined,
       ).catch(() => ({ success: false as const, error: "Failed to load" }));
       pending = false;
       if (cancelled) return;
       if (result.success && result.data) {
+        const update = result.data;
+        const cached = getCachedActivity(cacheKey);
+        const initial = reconcile;
         const sameContext = readKeyRef.current === activityKey;
         readKeyRef.current = activityKey;
-        setReadCommentIds((previous) => [
-          ...new Set([
-            ...(sameContext ? previous || [] : []),
-            ...result.data!.readCommentIds,
-          ]),
-        ]);
-        setAllDecisions(result.data.decisions || []);
-        setAllComments(result.data.comments || []);
+        setAllDecisions((previous) =>
+          mergeActivityRows(
+            sameContext
+              ? previous
+              : initial
+                ? []
+                : (cached?.data.decisions ?? []),
+            update.decisions || [],
+          ),
+        );
+        setAllComments((previous) =>
+          mergeActivityRows(
+            sameContext
+              ? previous
+              : initial
+                ? []
+                : (cached?.data.comments ?? []),
+            update.comments || [],
+          ),
+        );
+        setReadCommentIds((previous) =>
+          mergeReadIds(
+            sameContext ? previous || [] : (cached?.data.readCommentIds ?? []),
+            update.readCommentIds,
+          ),
+        );
+        cursor = update.serverTime;
+        if (reconcile) lastReconciledAt = Date.now();
+        cacheActivity(
+          cacheKey,
+          {
+            decisions: mergeActivityRows(
+              initial ? [] : (cached?.data.decisions ?? []),
+              update.decisions || [],
+            ),
+            comments: mergeActivityRows(
+              initial ? [] : (cached?.data.comments ?? []),
+              update.comments || [],
+            ),
+            readCommentIds: mergeReadIds(
+              cached?.data.readCommentIds ?? [],
+              update.readCommentIds,
+            ),
+          },
+          cursor,
+          reconcile,
+        );
         setLoadedActivityKey(activityKey);
         setActivityErrorKey(null);
       } else {
@@ -652,11 +715,37 @@ export function useDocumentSidebarData({
     };
     void fetchActivity();
     const interval = setInterval(fetchActivity, REVIEW_POLL_INTERVAL_MS);
+    document.addEventListener("visibilitychange", fetchActivity);
     return () => {
       cancelled = true;
+      controller.abort();
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", fetchActivity);
     };
-  }, [open, symbol, budgetVersion, activityKey]);
+  }, [open, symbol, budgetVersion, activityKey, cacheKey, userEmail]);
+
+  // Include confirmed local comments, decisions and read receipts in reopen data.
+  useEffect(() => {
+    if (loadedActivityKey !== activityKey) return;
+    const cached = getCachedActivity(cacheKey);
+    if (cached)
+      cacheActivity(
+        cacheKey,
+        {
+          decisions: allDecisions,
+          comments: allComments,
+          readCommentIds: readCommentIds ?? [],
+        },
+        cached.cursor,
+      );
+  }, [
+    loadedActivityKey,
+    activityKey,
+    cacheKey,
+    allDecisions,
+    allComments,
+    readCommentIds,
+  ]);
 
   useEffect(() => {
     if (!open || activeTab !== "paragraphs") return;
@@ -680,7 +769,8 @@ export function useDocumentSidebarData({
   }, [open, activeTab, symbol]);
 
   useEffect(() => {
-    if (!open || loadedActivityKey !== activityKey) return;
+    if (!open || (loadedActivityKey !== activityKey && !hasCachedActivity))
+      return;
     let cancelled = false;
     let request = versionRequests.current.get(symbol);
     if (!request) {
@@ -701,17 +791,62 @@ export function useDocumentSidebarData({
     return () => {
       cancelled = true;
     };
-  }, [open, symbol, loadedActivityKey, activityKey]);
+  }, [open, symbol, loadedActivityKey, activityKey, hasCachedActivity]);
 
-  const activityLoading = loadedActivityKey !== activityKey;
+  const localActivity =
+    loadedActivityKey === activityKey
+      ? {
+          decisions: allDecisions,
+          comments: allComments,
+          readCommentIds: readCommentIds ?? [],
+        }
+      : (cachedActivity?.data ?? {
+          decisions: [],
+          comments: [],
+          readCommentIds: [],
+        });
+  const saveLocalActivity = (data: typeof localActivity) => {
+    readKeyRef.current = activityKey;
+    setAllDecisions(data.decisions);
+    setAllComments(data.comments);
+    setReadCommentIds(data.readCommentIds);
+    setLoadedActivityKey(activityKey);
+    const cached = getCachedActivity(cacheKey);
+    if (cached) cacheActivity(cacheKey, data, cached.cursor);
+  };
+  const setLocalDecisions: typeof setAllDecisions = (update) =>
+    saveLocalActivity({
+      ...localActivity,
+      decisions:
+        typeof update === "function" ? update(localActivity.decisions) : update,
+    });
+  const setLocalComments: typeof setAllComments = (update) =>
+    saveLocalActivity({
+      ...localActivity,
+      comments:
+        typeof update === "function" ? update(localActivity.comments) : update,
+    });
+  const handleRead = (ids: string[]) =>
+    saveLocalActivity({
+      ...localActivity,
+      readCommentIds: mergeReadIds(localActivity.readCommentIds, ids),
+    });
+  const activityLoading = loadedActivityKey !== activityKey && !cachedActivity;
+  const hasLocalActivity = loadedActivityKey === activityKey;
   return {
     activityLoading,
     activityError: activityErrorKey === activityKey,
-    allDecisions: activityLoading ? [] : allDecisions,
-    allComments: activityLoading ? [] : allComments,
-    readCommentIds: activityLoading ? null : readCommentIds,
-    setAllDecisions,
-    setAllComments,
+    allDecisions: hasLocalActivity
+      ? allDecisions
+      : (cachedActivity?.data.decisions ?? []),
+    allComments: hasLocalActivity
+      ? allComments
+      : (cachedActivity?.data.comments ?? []),
+    readCommentIds: hasLocalActivity
+      ? readCommentIds
+      : (cachedActivity?.data.readCommentIds ?? null),
+    setAllDecisions: setLocalDecisions,
+    setAllComments: setLocalComments,
     handleRead,
     paragraphs:
       paragraphResult?.symbol === symbol ? paragraphResult.paragraphs : null,
@@ -782,7 +917,13 @@ export function DocumentSymbol({
     fulltextError,
     documentVersions,
     versionsLoading,
-  } = useDocumentSidebarData({ open, symbol, budgetVersion, activeTab });
+  } = useDocumentSidebarData({
+    open,
+    symbol,
+    budgetVersion,
+    activeTab,
+    userEmail: currentUserEmail,
+  });
   const openerRef = useRef<HTMLElement | null>(null);
   const commentsSectionRef = useRef<HTMLElement>(null);
 

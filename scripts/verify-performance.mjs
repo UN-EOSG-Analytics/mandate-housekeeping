@@ -259,7 +259,7 @@ function pollingHarness() {
     {
       react: h.react,
       "@/lib/polling": load("src/lib/polling.ts", {}),
-      "@/features/mandates/actions/realtime": {
+      "@/features/mandates/services/client-reads": {
         getRealtimeChangesAction: (...args) => {
           const request = deferred();
           requests.push({ ...request, args });
@@ -546,6 +546,7 @@ test("changed documents load in one scoped batch and resolve both decision track
       "../services/comment-notifications": {},
       "@/lib/db/review-cycle": {},
       "@/features/auth/auth": {},
+      "@/features/auth/permissions": {},
       "@/lib/db/review-lock": {},
       "../services/decision-tracks": load(
         "src/features/mandates/services/decision-tracks.ts",

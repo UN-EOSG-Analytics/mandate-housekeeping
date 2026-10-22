@@ -285,14 +285,20 @@ export async function getSingleMandateStateAction(params: {
 export async function getDocumentDecisionsAction(
   symbol: string,
   expectedBudgetVersion?: string,
+  since?: string,
+  expectedViewer?: string,
 ): Promise<
   ActionResult<{
     decisions: MandateDecision[];
     comments: MandateComment[];
     readCommentIds: string[];
+    serverTime: string;
   }>
 > {
   if (!symbol) return { success: false, error: "symbol required" };
+  const sinceDate = since ? new Date(since) : null;
+  if (sinceDate && !Number.isFinite(sinceDate.getTime()))
+    return { success: false, error: "Invalid activity cursor" };
   const version = await getBudgetVersion();
   if (expectedBudgetVersion && expectedBudgetVersion !== version)
     return {
@@ -301,22 +307,29 @@ export async function getDocumentDecisionsAction(
     };
   return transaction(async (tx) => {
     const user = await getCurrentUser(tx);
-    if (!user) return { success: false, error: "unauthorized" };
+    if (!user || (expectedViewer && expectedViewer !== user.email))
+      return { success: false, error: "unauthorized" };
+    const [clock] = await tx<{ server_time: string }>(
+      "SELECT clock_timestamp()::text AS server_time",
+    );
     const decisionRows = await tx<DecisionRow>(
       `SELECT d.*, u.entity as user_entity, approver.entity as approved_by_entity
        FROM mandates_housekeeping.mandate_decisions d
        LEFT JOIN mandates_housekeeping.users u ON d.user_email = u.email
        LEFT JOIN mandates_housekeeping.users approver ON d.approved_by = approver.email
        WHERE d.document_symbol = $1
+         AND ($2::timestamptz IS NULL OR d.created_at >= $2::timestamptz - interval '30 seconds')
        ORDER BY d.created_at, d.id`,
-      [symbol],
+      [symbol, sinceDate?.toISOString() ?? null],
     );
     const commentRows = await tx<CommentRow>(
       `SELECT c.*, u.entity as user_entity
        FROM mandates_housekeeping.mandate_comments c
        LEFT JOIN mandates_housekeeping.users u ON c.user_email = u.email
-       WHERE c.document_symbol = $1 ORDER BY c.created_at, c.id`,
-      [symbol],
+       WHERE c.document_symbol = $1
+         AND ($2::timestamptz IS NULL OR GREATEST(c.created_at, c.updated_at, c.resolved_at) >= $2::timestamptz - interval '30 seconds')
+       ORDER BY c.created_at, c.id`,
+      [symbol, sinceDate?.toISOString() ?? null],
     );
     const readCommentIds = await getCommentReadState(
       tx,
@@ -330,6 +343,7 @@ export async function getDocumentDecisionsAction(
         decisions: decisionRows.map(toDecision),
         comments: commentRows.map(toComment),
         readCommentIds,
+        serverTime: clock.server_time,
       },
     };
   }, version);

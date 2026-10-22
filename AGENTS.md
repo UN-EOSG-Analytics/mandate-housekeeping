@@ -81,11 +81,11 @@ Custom magic-link auth — no third-party auth library.
 
 ### Realtime
 
-No websockets. Collaboration is **polling-based**: [src/hooks/useRealtimeDecisions.ts](src/hooks/useRealtimeDecisions.ts) polls the `realtime` server action (~30s) to sync other reviewers' decisions and review-mode status.
+No websockets. Collaboration is **polling-based**: [src/hooks/useRealtimeDecisions.ts](src/hooks/useRealtimeDecisions.ts) polls the authenticated `/api/review/realtime` endpoint (~30s) to sync other reviewers' decisions and review-mode status.
 
 ### API routes
 
-Used only where App Router needs a real HTTP endpoint (see [src/app/api/README.md](src/app/api/README.md)): `/api/export/...` (file downloads) only. Everything else uses server actions/server components, not API routes.
+Used only where App Router needs a real HTTP endpoint (see [src/app/api/README.md](src/app/api/README.md)): `/api/export/...` for file downloads and authenticated, read-only `/api/review/[resource]` endpoints for cancellable reads outside the server-action queue. Mutations use server actions; page data uses server components.
 
 ### Python
 

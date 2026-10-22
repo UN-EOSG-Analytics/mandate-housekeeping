@@ -61,10 +61,10 @@ export async function getRealtimeChangesAction(
              AND created_at <= $3::timestamptz
            UNION ALL
            SELECT id, 'mandate_comments'::text AS "table", document_symbol,
-             subprogramme, created_at::text
+             subprogramme, GREATEST(created_at, updated_at, resolved_at)::text AS created_at
            FROM mandates_housekeeping.mandate_comments
-           WHERE entity = $1 AND created_at >= $2::timestamptz - interval '30 seconds'
-             AND created_at <= $3::timestamptz
+           WHERE entity = $1 AND GREATEST(created_at, updated_at, resolved_at) >= $2::timestamptz - interval '30 seconds'
+             AND GREATEST(created_at, updated_at, resolved_at) <= $3::timestamptz
          ) events
          ORDER BY ${since ? "" : '"table", document_symbol, subprogramme,'} created_at::timestamptz DESC, id DESC`,
         [entity, sinceDate.toISOString(), clock.server_time],
