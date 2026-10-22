@@ -50,6 +50,10 @@ const COMMENT_BUBBLE =
 const dateLabel = (date: string) => new Date(date).toLocaleString();
 
 function DecisionLine({ decision }: { decision: MandateDecision }) {
+  const trackLabel =
+    decision.decisionTrack === "review"
+      ? "Reviewer decision"
+      : "Focal point submission";
   const Icon =
     decision.decision === "retain"
       ? Check
@@ -73,18 +77,11 @@ function DecisionLine({ decision }: { decision: MandateDecision }) {
       : null;
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 py-1 text-xs text-foreground">
-      <span className="font-medium" title={decision.userEmail}>
-        {decision.userEmail}
-      </span>
+      <span className="font-medium">{decision.userEmail}</span>
       <time dateTime={decision.createdAt}>{dateLabel(decision.createdAt)}</time>
-      <span className="inline-flex items-center gap-0.5">
+      <span className="inline-flex w-full flex-wrap items-center gap-0.5">
         <span
           className={`inline-flex h-6 items-center gap-1 rounded border px-1.5 ${style}`}
-          title={
-            decision.decisionTrack === "review"
-              ? "Reviewer decision"
-              : "Entity submission"
-          }
         >
           <Icon className="h-3 w-3" />
           {decision.decision === "cancel"
@@ -111,6 +108,7 @@ function DecisionLine({ decision }: { decision: MandateDecision }) {
             </PopoverContent>
           </Popover>
         )}
+        <span className="ml-1 text-muted-foreground">{trackLabel}</span>
       </span>
     </div>
   );
@@ -357,7 +355,7 @@ export function CommentsDecisionPanel({
           className={`${GROUP_GRID} border-y border-border bg-muted py-2 text-xs font-medium text-foreground`}
         >
           <span>Entity / Programme</span>
-          <span>Decision</span>
+          <span>Focal point submission</span>
           <span>Reviewer</span>
           <span title="Comments">
             <MessageSquare className="h-3.5 w-3.5" aria-label="Comments" />
@@ -416,10 +414,7 @@ export function CommentsDecisionPanel({
                     >
                       {group.entity}
                     </span>
-                    <span
-                      className="block text-xs"
-                      title={group.subprogramme || "Programme level"}
-                    >
+                    <span className="block text-xs">
                       {group.subprogramme || "Programme level"}
                     </span>
                   </span>

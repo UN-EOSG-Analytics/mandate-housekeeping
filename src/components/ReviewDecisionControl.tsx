@@ -225,8 +225,8 @@ export function ReviewDecisionControl({
   const hasReview = !!review && review.decision !== "cancel";
   const hasMoreActions =
     reviewStale ||
-    review?.decision === "update" ||
-    (!!review?.manualMetadata && review.decision === "add");
+    (!!review?.manualMetadata &&
+      (review.decision === "add" || review.decision === "update"));
   const agreeWithSubmission = () => {
     if (submission)
       return save(submission.decision, undefined, undefined, true);
@@ -264,11 +264,6 @@ export function ReviewDecisionControl({
           ? "flex min-w-0 flex-nowrap items-center gap-1"
           : "flex min-w-0 flex-col items-start gap-1"
       }
-      title={
-        compact && review?.decision === "update"
-          ? `Replacement: ${review.newSymbol}`
-          : undefined
-      }
       aria-busy={busy}
       onClick={(e) => e.stopPropagation()}
     >
@@ -276,7 +271,7 @@ export function ReviewDecisionControl({
         <span
           role="status"
           className="inline-flex items-center gap-1 text-xs text-foreground"
-          title="Saving review…"
+          title={compact ? "Saving review…" : undefined}
         >
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           <span className={compact ? "sr-only" : undefined}>Saving…</span>
@@ -312,7 +307,7 @@ export function ReviewDecisionControl({
       {reviewStale && (!compact || !canEdit) && (
         <span
           className="text-xs text-amber-800"
-          title="Submission changed — review needed"
+          title={compact ? "Submission changed — review needed" : undefined}
         >
           {compact ? (
             <>
@@ -333,7 +328,7 @@ export function ReviewDecisionControl({
           <button
             type="button"
             disabled={busy}
-            title="Copy submission decision"
+            title={compact ? "Copy submission decision" : undefined}
             aria-label="Copy submission decision"
             className={
               compact
@@ -378,11 +373,6 @@ export function ReviewDecisionControl({
                 align="end"
                 className="flex w-56 flex-col items-start gap-3 p-3"
               >
-                {review?.decision === "update" && (
-                  <span className="text-xs break-all text-un-blue-text">
-                    Replacement: {review.newSymbol}
-                  </span>
-                )}
                 {reviewStale && (
                   <span className="text-xs text-amber-800">
                     Submission changed — review needed
@@ -415,7 +405,11 @@ export function ReviewDecisionControl({
         </DialogContent>
       </Dialog>
       {error && (
-        <span role="alert" title={error} className="text-xs text-red-700">
+        <span
+          role="alert"
+          title={compact ? error : undefined}
+          className="text-xs text-red-700"
+        >
           {compact ? (
             <>
               <AlertCircle className="h-4 w-4" />
