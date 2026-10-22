@@ -22,7 +22,7 @@ pnpm build          # production build (also runs as a pre-commit hook on `main`
 pnpm typecheck      # tsc --noEmit
 pnpm lint           # eslint
 pnpm format         # prettier --write on src/**
-uv sync             # install Python deps (root project + worker workspace)
+uv sync             # install Python deps for local analysis and DOCX extraction
 ```
 
 There is **no test suite**. Verify changes with `pnpm typecheck` and `pnpm build`. A Husky pre-commit hook runs `pnpm build` only when committing on the `main` branch, so builds must be green before committing to main.
@@ -33,7 +33,7 @@ The active application has three pieces:
 
 - **Next.js** (`src/`) — control plane: auth, UI, orchestration, exports. Next.js 16 App Router + React 19.
 - **Postgres** (Azure Flexible Server) — single source of truth.
-- **Python** — local analysis and DOCX parsing/normalization (`python/`). The legacy `worker/` ingestion scaffold is not connected to the application.
+- **Python** — local analysis and DOCX parsing/normalization (`python/`).
 
 ### Database access — raw `pg`
 
@@ -68,7 +68,7 @@ The app is organized by feature, each holding `actions/` (`"use server"` server 
 - `src/features/auth/` — magic-link auth, session, mail.
 - `src/features/mandates/` — the core domain. Subfolders: `services/` (`data-service.ts`, `reference-data.ts`, `mandate-warnings.ts`, `age-indicator.ts`, `decision-reasons.ts`), `services/documents/` (metadata, versions, newer-version detection), `services/export/` (DOCX/Excel/applied-state export), `actions/` (decisions, comments, review-mode, review-baselines, realtime).
 
-`src/components/` holds shared/page components; `src/components/ui/` is shadcn/ui primitives (never edit these directly — compose around them). `src/app/` is App Router routes. `src/lib/` holds db, storage, theme, constants, utils.
+`src/components/` holds shared/page components; `src/components/ui/` is shadcn/ui primitives (never edit these directly — compose around them). `src/app/` is App Router routes. `src/lib/` holds db, theme, constants, utils.
 
 > ⚠️ [docs/STRUCTURE.md](docs/STRUCTURE.md) and [docs/DATA.md](docs/DATA.md) describe an older `src/lib/services/` layout and a `housekeeping-actions.ts` monolith. That refactor is **done** — code now lives under `src/features/mandates/`. Trust the actual tree over those docs.
 
@@ -89,9 +89,9 @@ Used only where App Router needs a real HTTP endpoint (see [src/app/api/README.m
 
 ### Python
 
-Two distinct contexts (uv workspace, members declared in `pyproject.toml`):
-- `python/` — analysis & ingestion scripts run locally (`llm_relevance.py` uses Azure OpenAI, `analysis.py`, `ppb_extraction/` parses PPB DOCX into per-entity data). Run with `uv run`.
-- `worker/ppb-docx-worker/` — Legacy Azure Function scaffold for DOCX ingestion; uploads have been removed from the application. Regenerate its pinned deps with `bash worker.sh` after editing `worker/pyproject.toml`. Deployed via `.github/workflows/deploy-docx-worker.yml`.
+Local analysis and DOCX extraction scripts live in `python/`: `llm_relevance.py` uses Azure OpenAI, `analysis.py` performs local analysis, and `ppb_extraction/` parses PPB DOCX into per-entity data. Run them with `uv run`.
+
+The unused DOCX ingestion worker, deployment workflow, and workspace configuration have been removed. There is no background upload/ingestion service.
 
 ## Conventions
 
