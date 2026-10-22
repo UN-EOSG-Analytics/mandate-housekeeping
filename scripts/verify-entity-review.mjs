@@ -189,7 +189,6 @@ function initialLoad({ optionalFailure = false } = {}) {
     "States",
     "TotalComments",
     "IsReviewer",
-    "CanReviewAnyEntity",
     "UserEmail",
     "UserEntity",
     "IsUnderReview",

@@ -88,7 +88,6 @@ interface Props {
   onOpenChange?: (open: boolean) => void;
   state?: MandateState;
   isReviewer?: boolean;
-  canReviewAnyEntity?: boolean;
   userEmail?: string | null;
   userEntity?: string | null;
   isFoundational?: boolean;

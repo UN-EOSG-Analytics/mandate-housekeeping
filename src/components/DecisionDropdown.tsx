@@ -309,11 +309,6 @@ export function DecisionDropdown({
                       {userEntity}
                     </span>
                   )}
-                  {userEntity?.toUpperCase() === "DMSPC" && (
-                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-micro font-medium text-foreground">
-                      Reviewer
-                    </span>
-                  )}
                   <span>· {new Date(createdAt).toLocaleDateString()}</span>
                 </div>
               </div>

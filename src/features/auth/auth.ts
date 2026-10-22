@@ -165,15 +165,11 @@ export async function getCurrentUser(runQuery: TransactionQueryFn = query) {
 
   // Reviewer status is determined solely by the allowed_reviewers table
   const isReviewer = isAllowedReviewer;
-  const isDMSPC = entity?.toUpperCase() === "DMSPC";
 
   return {
     id: rows[0].id,
     email: rows[0].email,
     entity: entity,
     isReviewer: isReviewer,
-    isDMSPC: isDMSPC,
-    // Must be BOTH: logged in as DMSPC entity AND be in allowed_reviewers
-    canReviewAnyEntity: isDMSPC && isReviewer,
   };
 }

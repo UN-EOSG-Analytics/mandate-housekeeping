@@ -15,7 +15,6 @@ export async function getUserRoleAction(): Promise<
     email: string;
     entity: string | null;
     isReviewer: boolean;
-    canReviewAnyEntity: boolean;
   }>
 > {
   const user = await getCurrentUser();
@@ -29,7 +28,6 @@ export async function getUserRoleAction(): Promise<
       email: user.email,
       entity: user.entity,
       isReviewer: user.isReviewer,
-      canReviewAnyEntity: user.canReviewAnyEntity || false,
     },
   };
 }

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { query, transaction } from "@/lib/db/db";
 import { lockEntityReview } from "@/lib/db/review-lock";
 import { getCurrentUser } from "@/features/auth/auth";
+import { getEntityPermissions } from "@/features/auth/permissions";
 
 // Return type for actions
 type ActionResult<T = void> =
@@ -91,10 +92,7 @@ export async function startReviewModeAction(
     async (tx) => {
       const user = await getCurrentUser(tx);
       if (!user) return { success: false, error: "unauthorized" };
-      if (
-        !user.isReviewer ||
-        (!user.canReviewAnyEntity && user.entity !== entity)
-      )
+      if (!getEntityPermissions(user, entity).canReview)
         return {
           success: false,
           error: "Only authorized reviewers can start review for this entity",
@@ -144,10 +142,7 @@ export async function endReviewModeAction(
     async (tx) => {
       const user = await getCurrentUser(tx);
       if (!user) return { success: false, error: "unauthorized" };
-      if (
-        !user.isReviewer ||
-        (!user.canReviewAnyEntity && user.entity !== entity)
-      )
+      if (!getEntityPermissions(user, entity).canReview)
         return {
           success: false,
           error: "Only authorized reviewers can end review for this entity",

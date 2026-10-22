@@ -65,6 +65,7 @@ import {
   getDocumentMetadataAction,
   getUserRoleAction,
 } from "@/features/mandates/services/client-reads";
+import { getEntityPermissions } from "@/features/auth/permissions";
 import {
   getMandateWarnings,
   getWarningIcon,
@@ -795,7 +796,6 @@ function MandateRow({
   state,
   commentCount,
   isReviewer,
-  canReviewAnyEntity,
   userEmail,
   userEntity,
   onDecision,
@@ -820,7 +820,6 @@ function MandateRow({
   state?: MandateState;
   commentCount: number;
   isReviewer: boolean;
-  canReviewAnyEntity?: boolean;
   userEmail: string | null;
   userEntity: string | null;
   onDecision: DecisionChangeHandler;
@@ -1077,7 +1076,6 @@ function MandateRow({
             }}
             state={state}
             isReviewer={isReviewer}
-            canReviewAnyEntity={canReviewAnyEntity}
             userEmail={userEmail}
             userEntity={userEntity}
             isFoundational={isFoundational}
@@ -1117,7 +1115,6 @@ function MandateRow({
               onOpenChange={setNewDocSidebarOpen}
               state={state}
               isReviewer={isReviewer}
-              canReviewAnyEntity={canReviewAnyEntity}
               userEmail={userEmail}
               userEntity={userEntity}
               onDecision={onDecision}
@@ -1377,7 +1374,6 @@ function MandateSection({
   totalComments,
   updateTargetMetadata,
   isReviewer,
-  canReviewAnyEntity,
   userEmail,
   userEntity,
   readOnly,
@@ -1419,7 +1415,6 @@ function MandateSection({
     { title: string | null; year: number | null; body: string | null } | null
   >;
   isReviewer: boolean;
-  canReviewAnyEntity?: boolean;
   userEmail: string | null;
   userEntity: string | null;
   readOnly?: boolean;
@@ -1566,7 +1561,6 @@ function MandateSection({
               state={states[stateKey(m.symbol)]}
               commentCount={totalComments[m.symbol] || 0}
               isReviewer={isReviewer}
-              canReviewAnyEntity={canReviewAnyEntity}
               userEmail={userEmail}
               userEntity={userEntity}
               readOnly={readOnly}
@@ -1665,7 +1659,6 @@ export function EntityDetail({
     {},
   );
   const [isReviewer, setIsReviewer] = useState(false);
-  const [canReviewAnyEntity, setCanReviewAnyEntity] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userEntity, setUserEntity] = useState<string | null>(null);
   const [isUnderReview, setIsUnderReview] = useState(false);
@@ -1712,17 +1705,16 @@ export function EntityDetail({
     >
   >({});
 
-  // Check if user owns this entity (can edit) or can review any entity (DMSPC)
-  const isOwnEntity = useMemo(() => {
-    return (
-      initialLoaded &&
-      !cycleReadOnly &&
-      (userEntity === entity || canReviewAnyEntity)
-    );
-  }, [userEntity, entity, canReviewAnyEntity, cycleReadOnly, initialLoaded]);
-
-  const canEditSubmission =
-    initialLoaded && !cycleReadOnly && userEntity === entity && !isUnderReview;
+  const permissions = getEntityPermissions(
+    { entity: userEntity, isReviewer },
+    entity,
+    {
+      cycleReadOnly: cycleReadOnly || !initialLoaded,
+      submissionLocked: isUnderReview,
+    },
+  );
+  const isOwnEntity = initialLoaded && permissions.ownsEntity;
+  const { canEditSubmission, canReview, canComment } = permissions;
   // Additions belong to the entity submission when the viewer can edit it.
   // Reviewers working on a locked or another entity's submission add to review.
   const additionTrack = canEditSubmission ? "entity" : "review";
@@ -1777,9 +1769,6 @@ export function EntityDetail({
         setStates(map);
         setTotalComments(decisions.data.totalComments);
         setIsReviewer(!cycleReadOnly && (role.data.isReviewer ?? false));
-        setCanReviewAnyEntity(
-          !cycleReadOnly && (role.data.canReviewAnyEntity ?? false),
-        );
         setUserEmail(role.data.email);
         setUserEntity(role.data.entity ?? null);
         setIsUnderReview(review.data.isUnderReview);
@@ -2820,7 +2809,6 @@ export function EntityDetail({
     addedMetadata,
     updateTargetMetadata,
     isReviewer,
-    canReviewAnyEntity,
     userEmail,
     userEntity,
     citationIndex,
@@ -2905,10 +2893,7 @@ export function EntityDetail({
       value={{
         budgetVersion,
         userEmail,
-        canComment:
-          initialLoaded &&
-          !cycleReadOnly &&
-          (userEntity === entity || canReviewAnyEntity),
+        canComment,
         counts: commentSummary?.resolutions || {},
       }}
     >
@@ -2916,11 +2901,7 @@ export function EntityDetail({
         value={{
           entity,
           canEditSubmission,
-          canReview:
-            initialLoaded &&
-            !cycleReadOnly &&
-            isReviewer &&
-            (userEntity === entity || canReviewAnyEntity),
+          canReview,
           onSaved: onTrackSaved,
         }}
       >
@@ -2982,8 +2963,7 @@ export function EntityDetail({
                   )
                 }
                 onComment={
-                  !cycleReadOnly &&
-                  (userEntity === entity || canReviewAnyEntity)
+                  canComment
                     ? (text) =>
                         handleComment(
                           notificationSymbol,
@@ -3029,16 +3009,13 @@ export function EntityDetail({
               </p>
             )}
             {/* Read-only notice */}
-            {!cycleReadOnly &&
-              !isOwnEntity &&
-              userEntity &&
-              !canReviewAnyEntity && (
-                <ReadOnlyNoticeBanner
-                  viewingEntity={entity}
-                  userEntity={userEntity}
-                />
-              )}
-            {canReviewAnyEntity && userEntity !== entity && (
+            {!cycleReadOnly && !isOwnEntity && userEntity && !canReview && (
+              <ReadOnlyNoticeBanner
+                viewingEntity={entity}
+                userEntity={userEntity}
+              />
+            )}
+            {canReview && userEntity !== entity && (
               <ReviewerModeBanner reviewingEntity={entity} />
             )}
             {isUnderReview && (
@@ -3059,7 +3036,7 @@ export function EntityDetail({
               totalCitations={totalMandates}
               filteredUniqueDocuments={filteredUniqueDocuments}
               totalUniqueDocuments={totalUniqueDocuments}
-              canReviewAnyEntity={canReviewAnyEntity}
+              canReview={canReview}
               isUnderReview={isUnderReview}
               onStartReview={
                 !cycleReadOnly && reviewModeLoaded
@@ -3149,14 +3126,7 @@ export function EntityDetail({
                     subprogramme={section.subprogramme}
                     foundationalSymbols={foundationalSymbols}
                     readOnly={
-                      section.subprogramme !== null
-                        ? !isOwnEntity
-                        : !canReviewAnyEntity &&
-                          !(
-                            isReviewer &&
-                            userEntity === entity &&
-                            !cycleReadOnly
-                          )
+                      section.subprogramme !== null ? !canComment : !canReview
                     }
                     {...sharedSectionProps}
                     {...makeSubprogHandlers(section.subprogramme)}

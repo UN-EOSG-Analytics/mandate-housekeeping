@@ -10,6 +10,7 @@ import { getReviewWriteError } from "@/lib/db/review-cycle";
 import { revalidatePath } from "next/cache";
 import { query, transaction } from "@/lib/db/db";
 import { getCurrentUser } from "@/features/auth/auth";
+import { getEntityPermissions } from "@/features/auth/permissions";
 import type { MandateComment } from "@/types";
 
 // Return type for actions
@@ -79,15 +80,11 @@ export async function createCommentAction(
   return transaction(async (tx) => {
     const user = await getCurrentUser(tx);
     if (!user) return { success: false, error: "unauthorized" };
-    if (!user.canReviewAnyEntity && user.entity !== entity)
+    if (!getEntityPermissions(user, entity).canComment)
       return {
         success: false,
         error: "You can only comment on your own entity",
       };
-    if (!user.entity && !user.canReviewAnyEntity)
-      return { success: false, error: "You must have an entity assigned" };
-
-    // Comments stay available while a review session locks submission edits.
     const rows = await tx<CommentRow>(
       `WITH inserted AS (
         INSERT INTO mandates_housekeeping.mandate_comments
@@ -112,7 +109,7 @@ export async function createCommentAction(
  * Resolve or unresolve a comment
  * @param commentId The comment UUID to resolve/unresolve
  * @param resolved True to mark resolved, false to unresolve
- * Permissions: Reviewers (DMSPC) can resolve any comment, entities can resolve their own
+ * Permissions: Reviewers can resolve any comment, entities can resolve their own
  */
 export async function resolveCommentAction(
   commentId: string,
@@ -146,8 +143,8 @@ export async function resolveCommentAction(
 
   const existing = existingRows[0];
 
-  // Only DMSPC (reviewers) can resolve comments, or the entity can resolve their own comments
-  if (!user.canReviewAnyEntity && user.entity !== existing.entity) {
+  // Reviewers can resolve comments across entities; members can resolve their own entity comments.
+  if (!getEntityPermissions(user, existing.entity).canComment) {
     return { success: false, error: "Not authorized to resolve this comment" };
   }
 

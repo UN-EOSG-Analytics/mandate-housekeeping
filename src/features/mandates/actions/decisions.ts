@@ -16,6 +16,7 @@ import { getCommentReadState } from "../services/comment-notifications";
 import { getBudgetVersion } from "@/lib/db/review-cycle";
 import { getReviewWriteError } from "@/lib/db/review-cycle";
 import { getCurrentUser } from "@/features/auth/auth";
+import { getEntityPermissions } from "@/features/auth/permissions";
 import { lockEntityReview } from "@/lib/db/review-lock";
 import { getDecisionTracks } from "../services/decision-tracks";
 import { query, transaction } from "@/lib/db/db";
@@ -395,12 +396,13 @@ export async function createDecisionAction(
     const track = params.decisionTrack ?? "entity";
     if (track !== "entity" && track !== "review")
       return { success: false, error: "Invalid decision track" };
-    if (track === "entity" && user.entity !== entity)
+    const permissions = getEntityPermissions(user, entity);
+    if (track === "entity" && !permissions.canEditSubmission)
       return {
         success: false,
         error: "Entity submissions can only be edited by their own entity",
       };
-    if (track === "review" && !user.isReviewer)
+    if (track === "review" && !permissions.canReview)
       return {
         success: false,
         error: "Only reviewers can edit review decisions",
@@ -444,18 +446,6 @@ export async function createDecisionAction(
     }
     if (!documentSymbol || !entity || !decision) {
       return { success: false, error: "invalid request" };
-    }
-
-    // Reviewers (DMSPC entity + in allowed_reviewers list) can edit any entity
-    if (!user.canReviewAnyEntity && user.entity !== entity) {
-      return {
-        success: false,
-        error: "You can only make decisions for your own entity",
-      };
-    }
-
-    if (!user.entity && !user.canReviewAnyEntity) {
-      return { success: false, error: "You must have an entity assigned" };
     }
 
     if (!["retain", "remove", "add", "update", "cancel"].includes(decision)) {
@@ -587,24 +577,17 @@ export async function updateDecisionReasonAction(
         error: "A cleared decision has no editable reason",
       };
 
-    // DMSPC users can update any entity, others can only update their own entity
-    if (!user.canReviewAnyEntity && user.entity !== existing.entity) {
-      return {
-        success: false,
-        error: "You can only update reasons for your own entity",
-      };
-    }
-
+    const permissions = getEntityPermissions(user, existing.entity);
     if (
       (existing.decision_track ?? "entity") === "entity" &&
-      user.entity !== existing.entity
+      !permissions.canEditSubmission
     )
       return {
         success: false,
         error:
           "Entity submission reasons can only be edited by their own entity",
       };
-    if (existing.decision_track === "review" && !user.isReviewer)
+    if (existing.decision_track === "review" && !permissions.canReview)
       return {
         success: false,
         error: "Only reviewers can edit review decisions",

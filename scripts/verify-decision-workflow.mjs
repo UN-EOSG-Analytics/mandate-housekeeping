@@ -284,6 +284,8 @@ test("cancel never opens a reason popup and update waits for replacement selecti
   assert.deepEqual(saved, ["cancel"]);
 });
 
+const permissions = loadSource("src/features/auth/permissions.ts", {});
+
 const tracks = loadSource(
   "src/features/mandates/services/decision-tracks.ts",
   {},
@@ -294,7 +296,6 @@ function actions({
   activeReview = true,
   sourceTrack = "review",
   ownEntity = "UNOMS",
-  canReviewAny = reviewer,
   latestId = "old",
   noSubmission = false,
 } = {}) {
@@ -377,13 +378,13 @@ function actions({
       getReviewWriteError: async (version) =>
         version === "ppb2027" ? null : "read-only",
     },
+    "@/features/auth/permissions": permissions,
     "@/features/auth/auth": {
       getCurrentUser: async (tx) => {
         assert.equal(tx, runQuery, "Auth must use the same transaction");
         return {
           email: "reviewer@un.org",
           entity: ownEntity,
-          canReviewAnyEntity: canReviewAny,
           isReviewer: reviewer,
         };
       },
@@ -588,11 +589,10 @@ test("stale submission references and cross-track ownership reject before insert
   }
 });
 
-test("reviewer entity scope is enforced on decisions and reason edits", async () => {
+test("reviewers can save review decisions and reasons across entities regardless of their selected entity", async () => {
   const { api, statements } = actions({
     reviewer: true,
     ownEntity: "OTHER",
-    canReviewAny: false,
   });
   const created = await api.createDecisionAction(
     {
@@ -609,11 +609,11 @@ test("reviewer entity scope is enforced on decisions and reason edits", async ()
     { decisionId: "old", decisionReason: "other", otherReason: "No" },
     "ppb2027",
   );
-  assert.equal(created.success, false);
-  assert.equal(reason.success, false);
+  assert.equal(created.success, true);
+  assert.equal(reason.success, true);
   assert.equal(
     statements.some((x) => x.sql.includes("INSERT INTO")),
-    false,
+    true,
   );
 });
 
@@ -795,7 +795,7 @@ test("review controls snapshot agreement, offer stale confirmation, and remain r
   );
 });
 
-test("session transitions share decision lock, enforce scope and leave decision history untouched", async () => {
+test("session transitions share decision lock, require reviewer role and leave decision history untouched", async () => {
   for (const permitted of [false, true]) {
     const statements = [];
     const tx = async (sql) => {
@@ -814,13 +814,13 @@ test("session transitions share decision lock, enforce scope and leave decision 
         transaction: (fn) => fn(tx),
         query: () => assert.fail("Use one transaction"),
       },
+      "@/features/auth/permissions": permissions,
       "@/features/auth/auth": {
         getCurrentUser: async (executor) => {
           assert.equal(executor, tx);
           return {
-            isReviewer: true,
-            canReviewAnyEntity: false,
-            entity: permitted ? "UNOMS" : "OTHER",
+            isReviewer: permitted,
+            entity: "OTHER",
             email: "review@un.org",
           };
         },
@@ -903,15 +903,16 @@ test("reviewed rows omit copy while keeping stale confirmation in the actions me
       node.props["aria-label"] === "More review actions",
   );
   assert.equal(more.props.title, "Submission changed — review needed");
-  assert.equal(ui.tree.props.title, "Replacement: A/RES/80/2");
-  assert.ok(
-    find(
-      ui.tree,
-      (node) =>
-        node.type === "button" &&
-        node.props.children === "Confirm review decision",
-    ),
+  const confirmation = find(
+    ui.tree,
+    (node) =>
+      node.type === "button" &&
+      node.props.children === "Confirm review decision",
   );
+  assert.ok(confirmation);
+  await confirmation.props.onClick();
+  assert.equal(ui.calls[0].params.newSymbol, "A/RES/80/2");
+  assert.equal(ui.calls[0].params.reviewedSubmissionId, "s2");
   assert.equal(
     find(
       ui.tree,
@@ -980,7 +981,6 @@ test("global reviewers cannot edit another entity's primary submission or its re
   const fixture = actions({
     reviewer: true,
     ownEntity: "OTHER",
-    canReviewAny: true,
     activeReview: false,
     sourceTrack: "entity",
   });
@@ -1005,4 +1005,46 @@ test("global reviewers cannot edit another entity's primary submission or its re
   assert.equal(created.success, false);
   assert.equal(reason.success, false);
   assert.ok(!fixture.statements.some((x) => x.sql.includes("INSERT INTO")));
+});
+
+test("reviewer permission is independent of membership, while submission ownership and locks still apply", () => {
+  for (const selectedEntity of ["UNOMS", "Ethics Office", "DMSPC", null]) {
+    for (const isReviewer of [true, false]) {
+      const user = { entity: selectedEntity, isReviewer };
+      const own = selectedEntity === "UNOMS";
+      const normal = permissions.getEntityPermissions(user, "UNOMS");
+      assert.equal(normal.canReview, isReviewer);
+      assert.equal(normal.canEditSubmission, own);
+      assert.equal(normal.canComment, own || isReviewer);
+      const locked = permissions.getEntityPermissions(user, "UNOMS", {
+        submissionLocked: true,
+      });
+      assert.equal(locked.canEditSubmission, false);
+      assert.equal(locked.canReview, isReviewer);
+      assert.equal(locked.canComment, own || isReviewer);
+      const archived = permissions.getEntityPermissions(user, "UNOMS", {
+        cycleReadOnly: true,
+      });
+      assert.equal(archived.canEditSubmission, false);
+      assert.equal(archived.canReview, false);
+      assert.equal(archived.canComment, false);
+    }
+  }
+});
+
+test("decision author entity labels never imply reviewer status", () => {
+  for (const userEntity of ["DMSPC", "Ethics Office"]) {
+    const ui = dropdown({
+      decision: "retain",
+      onChange: async () => null,
+      userEmail: "person@un.org",
+      userEntity,
+      createdAt: "2026-10-22T10:00:00Z",
+    });
+    assert.equal(
+      find(ui.render(), (node) => node.props.children === "Reviewer"),
+      undefined,
+    );
+    assert.ok(find(ui.render(), (node) => node.props.children === userEntity));
+  }
 });

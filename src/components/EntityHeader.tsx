@@ -20,7 +20,7 @@ interface Props {
   totalCitations: number;
   filteredUniqueDocuments: number;
   totalUniqueDocuments: number;
-  canReviewAnyEntity?: boolean;
+  canReview?: boolean;
   isUnderReview?: boolean;
   onStartReview?: () => void;
   onClearAll?: () => void;
@@ -38,7 +38,7 @@ export function EntityHeader({
   totalCitations,
   filteredUniqueDocuments,
   totalUniqueDocuments,
-  canReviewAnyEntity,
+  canReview,
   isUnderReview,
   onStartReview,
   onClearAll,
@@ -88,7 +88,7 @@ export function EntityHeader({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {canReviewAnyEntity && !isUnderReview && onStartReview && (
+            {canReview && !isUnderReview && onStartReview && (
               <button
                 onClick={onStartReview}
                 className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-amber-600"
@@ -99,7 +99,7 @@ export function EntityHeader({
               </button>
             )}
             <ExportDropdown entity={entity} />
-            {canReviewAnyEntity && !isUnderReview && onClearAll && (
+            {canReview && !isUnderReview && onClearAll && (
               <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                   <button

@@ -76,6 +76,7 @@ The app is organized by feature, each holding `actions/` (`"use server"` server 
 
 Custom magic-link auth — no third-party auth library.
 - Login is restricted to allowed domains/emails (`allowed_domains`, `allowed_reviewers` tables); `isValidUnEmail` enforces `@un.org`.
+- Reviewer access comes solely from `allowed_reviewers`, regardless of the user’s selected entity. Reviewers may review/comment across entities; only entity members may edit primary submissions. Shared rules live in `src/features/auth/permissions.ts`.
 - A magic token is emailed (SMTP via nodemailer), exchanged for an HMAC-signed session cookie (`auth_session`).
 - Route protection is in [src/proxy.ts](src/proxy.ts) — this is Next.js 16's renamed middleware (`proxy`, not `middleware`). It verifies the cookie via Web Crypto and redirects unauthenticated users to `/about`. Public paths: `/login`, `/verify`, `/about`.
 
