@@ -1790,7 +1790,6 @@ export function EntityDetail({
       }
     },
     enabled: !cycleReadOnly,
-    pollIntervalMs: 3000, // Poll every 3 seconds
   });
 
   // Fetch metadata for added documents

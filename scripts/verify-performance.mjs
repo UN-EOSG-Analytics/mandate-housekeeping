@@ -257,6 +257,7 @@ function pollingHarness() {
     "src/hooks/useRealtimeDecisions.ts",
     {
       react: h.react,
+      "@/lib/polling": load("src/lib/polling.ts", {}),
       "@/features/mandates/actions/realtime": {
         getRealtimeChangesAction: (...args) => {
           const request = deferred();
@@ -323,7 +324,7 @@ test("polling pauses hidden tabs, prevents overlap and resumes immediately", asy
   assert.equal(h.requests.length, 2);
   h.requests[1].resolve(response());
   await settle();
-  assert.deepEqual([...h.timers.values()], [3000]);
+  assert.deepEqual([...h.timers.values()], [30_000]);
 });
 test("polling backs off and retries a failed batch without advancing the cursor", async () => {
   const h = pollingHarness();
@@ -345,7 +346,7 @@ test("polling backs off and retries a failed batch without advancing the cursor"
   assert.equal(h.timers.size, 0);
   batch.reject(new Error("refresh failed"));
   await settle();
-  assert.deepEqual([...h.timers.values()], [6000]);
+  assert.deepEqual([...h.timers.values()], [60_000]);
   h.render({
     onRemoteChanges: () => {
       batchCalls++;
@@ -356,7 +357,7 @@ test("polling backs off and retries a failed batch without advancing the cursor"
   h.requests[1].resolve(response(changes));
   await settle();
   assert.equal(batchCalls, 2);
-  assert.deepEqual([...h.timers.values()], [3000]);
+  assert.deepEqual([...h.timers.values()], [30_000]);
   h.tick();
   h.requests[2].resolve(response(changes));
   await settle();

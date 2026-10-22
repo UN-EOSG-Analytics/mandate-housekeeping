@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
+import { REVIEW_POLL_INTERVAL_MS } from "@/lib/polling";
 import { getCommentNotificationsAction } from "@/features/mandates/actions/comment-notifications";
 import type { BudgetVersion } from "@/lib/db/budget-version";
 import type { CommentNotificationSummary } from "@/types/comments";
@@ -64,7 +65,7 @@ function createStore(version: BudgetVersion) {
         interval = setInterval(() => {
           if (!pending && document.visibilityState === "visible")
             void refresh();
-        }, 30_000);
+        }, REVIEW_POLL_INTERVAL_MS);
       }
       return () => {
         listeners.delete(listener);

@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  REVIEW_POLL_INTERVAL_MS,
+  REVIEW_POLL_MAX_RETRY_MS,
+} from "@/lib/polling";
+import {
   getRealtimeChangesAction,
   type RealtimeChange,
   type ReviewModeStatus,
@@ -24,7 +28,7 @@ export function useRealtimeDecisions({
   onRemoteChanges,
   onReviewModeChange,
   enabled = true,
-  pollIntervalMs = 3000,
+  pollIntervalMs = REVIEW_POLL_INTERVAL_MS,
 }: UseRealtimeDecisionsOptions) {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +55,13 @@ export function useRealtimeDecisions({
       if (!cancelled && document.visibilityState === "visible") {
         timer = setTimeout(
           () => void poll(),
-          Math.min(pollIntervalMs * 2 ** Math.min(failures, 4), 30000),
+          Math.max(
+            pollIntervalMs,
+            Math.min(
+              pollIntervalMs * 2 ** Math.min(failures, 4),
+              REVIEW_POLL_MAX_RETRY_MS,
+            ),
+          ),
         );
       }
     };

@@ -1,6 +1,7 @@
 // Modal is client-side
 "use client";
 
+import { REVIEW_POLL_INTERVAL_MS } from "@/lib/polling";
 import { type BudgetVersion } from "@/lib/db/budget-version";
 import { CommentsDecisionPanel } from "./CommentsDecisionPanel";
 
@@ -650,7 +651,7 @@ export function useDocumentSidebarData({
       }
     };
     void fetchActivity();
-    const interval = setInterval(fetchActivity, 3000);
+    const interval = setInterval(fetchActivity, REVIEW_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(interval);

@@ -81,7 +81,7 @@ Custom magic-link auth — no third-party auth library.
 
 ### Realtime
 
-No websockets. Collaboration is **polling-based**: [src/hooks/useRealtimeDecisions.ts](src/hooks/useRealtimeDecisions.ts) polls the `realtime` server action (~3s) to sync other reviewers' decisions and review-mode status.
+No websockets. Collaboration is **polling-based**: [src/hooks/useRealtimeDecisions.ts](src/hooks/useRealtimeDecisions.ts) polls the `realtime` server action (~30s) to sync other reviewers' decisions and review-mode status.
 
 ### API routes
 

@@ -82,6 +82,7 @@ function harness() {
       return pending.promise;
     };
   const dependencies = {
+    "@/lib/polling": { REVIEW_POLL_INTERVAL_MS: 30_000 },
     react,
     "@/features/mandates/actions/decisions": {
       getDocumentDecisionsAction: request("activity"),
@@ -105,7 +106,8 @@ function harness() {
     exports,
     (name) => dependencies[name] || {},
     { visibilityState: "visible" },
-    (fn) => {
+    (fn, intervalMs) => {
+      assert.equal(intervalMs, 30_000);
       intervals.add(fn);
       return fn;
     },
