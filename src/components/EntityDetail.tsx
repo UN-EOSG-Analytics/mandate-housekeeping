@@ -114,7 +114,15 @@ import {
   type TableSort,
   type TableSortColumn,
 } from "@/features/mandates/services/table-view";
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  Children,
+  type ComponentProps,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   ReadOnlyNoticeBanner,
   ReviewerModeBanner,
@@ -363,9 +371,34 @@ function getDecisionChange(
 const GRID_COLS =
   "grid-cols-[130px_minmax(180px,1fr)_68px_64px_48px_80px_56px_108px_140px_32px]";
 
+// Preserve the responsive CSS layout while exposing real row/column relationships.
+function CitationTableRow({
+  children,
+  header = false,
+  spanAll = false,
+  ...props
+}: ComponentProps<"div"> & { header?: boolean; spanAll?: boolean }) {
+  return (
+    <div {...props} role="row">
+      {Children.map(children, (child) =>
+        child == null ? null : (
+          <div
+            role={header ? "columnheader" : "cell"}
+            aria-colspan={spanAll ? 10 : undefined}
+            className="contents"
+          >
+            {child}
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
 function ColumnHeaders({ controls }: { controls: EntityTableViewControls }) {
   return (
-    <div
+    <CitationTableRow
+      header
       className={cn(
         typography.tableHeader,
         `grid ${GRID_COLS} h-10 items-center gap-x-1 tracking-normal text-foreground normal-case`,
@@ -414,7 +447,7 @@ function ColumnHeaders({ controls }: { controls: EntityTableViewControls }) {
         icon={<MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />}
         controls={controls}
       />
-    </div>
+    </CitationTableRow>
   );
 }
 
@@ -478,7 +511,7 @@ function MandateRowContent({
 
   return (
     <div className="relative">
-      <div
+      <CitationTableRow
         className={`grid ${GRID_COLS} min-h-10 cursor-pointer items-center gap-x-1 border-b border-border py-1 text-sm transition-colors ${
           bgColorClass || "hover:bg-muted"
         }`}
@@ -526,11 +559,19 @@ function MandateRowContent({
               </Tooltip>
             )}
           </span>
-          <span className="min-w-0 flex-1 truncate">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenSidebar?.();
+            }}
+            aria-label={`Review document ${mandate.symbol}`}
+            className="min-w-0 flex-1 truncate text-left focus-visible:ring-2 focus-visible:ring-un-blue"
+          >
             {mandate.title || (
               <span className="text-muted-foreground italic">No title</span>
             )}
-          </span>
+          </button>
         </div>
         <div
           className={cn(
@@ -726,7 +767,7 @@ function MandateRowContent({
                   event.stopPropagation();
                   onOpenActivityTab?.();
                 }}
-                aria-label={`${displayedCommentCount} comments${unreadCommentCount ? `, ${unreadCommentCount} unread` : ""}`}
+                aria-label={`${mandate.symbol}: ${displayedCommentCount} comments${unreadCommentCount ? `, ${unreadCommentCount} unread` : ""}`}
                 className={`inline-flex cursor-pointer items-center gap-1 text-xs ${displayedCommentCount > 0 ? "font-medium text-un-blue-text" : "text-foreground"}`}
               >
                 {displayedCommentCount > 0 ? displayedCommentCount : "—"}
@@ -740,7 +781,7 @@ function MandateRowContent({
             </Tooltip>
           )}
         </div>
-      </div>
+      </CitationTableRow>
     </div>
   );
 }
@@ -1459,35 +1500,39 @@ function MandateSection({
   return (
     <section
       id={sectionId}
+      role="rowgroup"
       aria-label={title}
       className="scroll-mt-10"
       style={visibleMandates.length ? undefined : { display: "contents" }}
     >
-      <div
+      <CitationTableRow
+        spanAll
         hidden={!visibleMandates.length}
-        className="sticky top-10 z-10 flex h-8 items-center gap-2 border-b border-border bg-muted px-3 text-sm"
+        className="sticky top-10 z-10"
       >
-        <h3 className="truncate font-semibold text-foreground">{title}</h3>
-        <span className="shrink-0 text-xs text-foreground tabular-nums">
-          {visibleMandates.length}
-          {visibleMandates.length !== mandates.length
-            ? ` / ${mandates.length}`
-            : ""}
-        </span>
-        {!readOnly && title !== "Programme level" && (
-          <button
-            type="button"
-            onClick={() => setShowEditModal(true)}
-            className="rounded text-foreground"
-            title="Edit subprogramme"
-          >
-            <Pencil className="h-3 w-3" />
-          </button>
-        )}
-        {readOnly && (
-          <span className="text-xs text-foreground">· reference</span>
-        )}
-      </div>
+        <div className="flex h-8 items-center gap-2 border-b border-border bg-muted px-3 text-sm">
+          <h3 className="truncate font-semibold text-foreground">{title}</h3>
+          <span className="shrink-0 text-xs text-foreground tabular-nums">
+            {visibleMandates.length}
+            {visibleMandates.length !== mandates.length
+              ? ` / ${mandates.length}`
+              : ""}
+          </span>
+          {!readOnly && title !== "Programme level" && (
+            <button
+              type="button"
+              onClick={() => setShowEditModal(true)}
+              className="rounded text-foreground"
+              title="Edit subprogramme"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+          )}
+          {readOnly && (
+            <span className="text-xs text-foreground">· reference</span>
+          )}
+        </div>
+      </CitationTableRow>
 
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
         <DialogContent className="sm:max-w-md">
@@ -1559,11 +1604,13 @@ function MandateSection({
         {visibleMandates.length > 0 &&
           !readOnly &&
           (tracksContext?.canEditSubmission || tracksContext?.canReview) && (
-            <AddEntryRow
-              onAdd={onAdd}
-              onAddManual={onAddManual}
-              disabled={false}
-            />
+            <CitationTableRow spanAll>
+              <AddEntryRow
+                onAdd={onAdd}
+                onAddManual={onAddManual}
+                disabled={false}
+              />
+            </CitationTableRow>
           )}
       </div>
     </section>
@@ -1600,6 +1647,17 @@ export function EntityDetail({
     column: "title",
     direction: "asc",
   });
+  const loadKey = `${entity}:${budgetVersion}`;
+  const [initialStatus, setInitialStatus] = useState<{
+    context: string;
+    loaded: boolean;
+    error: string | null;
+  } | null>(null);
+  const initialLoaded =
+    initialStatus?.context === loadKey && initialStatus.loaded;
+  const initialError =
+    initialStatus?.context === loadKey ? initialStatus.error : null;
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [states, setStates] = useState<Record<string, MandateState>>({});
   const [totalComments, setTotalComments] = useState<Record<string, number>>(
     {},
@@ -1654,11 +1712,15 @@ export function EntityDetail({
 
   // Check if user owns this entity (can edit) or can review any entity (DMSPC)
   const isOwnEntity = useMemo(() => {
-    return !cycleReadOnly && (userEntity === entity || canReviewAnyEntity);
-  }, [userEntity, entity, canReviewAnyEntity, cycleReadOnly]);
+    return (
+      initialLoaded &&
+      !cycleReadOnly &&
+      (userEntity === entity || canReviewAnyEntity)
+    );
+  }, [userEntity, entity, canReviewAnyEntity, cycleReadOnly, initialLoaded]);
 
   const canEditSubmission =
-    !cycleReadOnly && userEntity === entity && !isUnderReview;
+    initialLoaded && !cycleReadOnly && userEntity === entity && !isUnderReview;
   // Additions belong to the entity submission when the viewer can edit it.
   // Reviewers working on a locked or another entity's submission add to review.
   const additionTrack = canEditSubmission ? "entity" : "review";
@@ -1682,59 +1744,74 @@ export function EntityDetail({
     }
   }, [entity, reviewSessionId]);
 
-  // Fetch user role and decisions on mount
+  // These three results form one editable snapshot. A partial load must not look
+  // like an empty submission or enable edits against an unknown review lock.
   useEffect(() => {
-    getUserRoleAction()
-      .then((result) => {
-        if (result.success && result.data) {
-          setIsReviewer(!cycleReadOnly && (result.data.isReviewer ?? false));
-          setCanReviewAnyEntity(
-            !cycleReadOnly && (result.data.canReviewAnyEntity ?? false),
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [role, decisions, review] = await Promise.all([
+          getUserRoleAction(),
+          getEntityDecisionsAction(entity),
+          getReviewModeStatusAction(entity),
+        ]);
+        if (
+          !role.success ||
+          !role.data ||
+          !decisions.success ||
+          !decisions.data ||
+          !review.success ||
+          !review.data
+        ) {
+          throw new Error(
+            "Could not load your permissions and saved review decisions.",
           );
-          setUserEmail(result.data.email);
-          setUserEntity(result.data.entity ?? null);
         }
-      })
-      .catch(() => {});
-
-    getEntityDecisionsAction(entity)
-      .then((result) => {
-        if (result.success && result.data) {
-          const map: Record<string, MandateState> = {};
-          for (const s of result.data.states) {
-            map[`${s.documentSymbol}:${s.subprogramme || ""}`] = s;
-          }
-          setStates(map);
-          setTotalComments(result.data.totalComments);
+        if (cancelled) return;
+        const map: Record<string, MandateState> = {};
+        for (const state of decisions.data.states) {
+          map[`${state.documentSymbol}:${state.subprogramme || ""}`] = state;
         }
-      })
-      .catch(() => {});
-
-    getReviewModeStatusAction(entity)
-      .then(async (result) => {
-        if (result.success && result.data) {
-          setIsUnderReview(result.data.isUnderReview);
-          setReviewStartedBy(result.data.startedBy);
-          setReviewSessionId(result.data.reviewSessionId);
-
-          // Fetch review changes if we have a review session (only if feature enabled)
-          if (
-            FEATURE_FLAGS.reviewChangeIndicator &&
-            result.data.reviewSessionId
-          ) {
-            const changesResult = await getEntityReviewChangesAction(
-              entity,
-              result.data.reviewSessionId,
-            );
-            if (changesResult.success && changesResult.data) {
-              setReviewChanges(changesResult.data);
-            }
-          }
+        setStates(map);
+        setTotalComments(decisions.data.totalComments);
+        setIsReviewer(!cycleReadOnly && (role.data.isReviewer ?? false));
+        setCanReviewAnyEntity(
+          !cycleReadOnly && (role.data.canReviewAnyEntity ?? false),
+        );
+        setUserEmail(role.data.email);
+        setUserEntity(role.data.entity ?? null);
+        setIsUnderReview(review.data.isUnderReview);
+        setReviewStartedBy(review.data.startedBy);
+        setReviewSessionId(review.data.reviewSessionId);
+        setReviewModeLoaded(true);
+        setInitialStatus({ context: loadKey, loaded: true, error: null });
+        if (
+          FEATURE_FLAGS.reviewChangeIndicator &&
+          review.data.reviewSessionId
+        ) {
+          // This optional indicator cannot invalidate the required snapshot.
+          void getEntityReviewChangesAction(entity, review.data.reviewSessionId)
+            .then((changes) => {
+              if (!cancelled && changes.success && changes.data)
+                setReviewChanges(changes.data);
+            })
+            .catch(() => {});
         }
-      })
-      .catch(() => {})
-      .finally(() => setReviewModeLoaded(true));
-  }, [entity, cycleReadOnly]);
+      } catch {
+        if (!cancelled)
+          setInitialStatus({
+            context: loadKey,
+            loaded: false,
+            error:
+              "Could not load permissions and saved decisions. Please retry before reviewing mandates.",
+          });
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [entity, cycleReadOnly, loadAttempt, loadKey]);
 
   // Refresh all changed symbols in one request, including every subprogramme.
   const handleRemoteChanges = useCallback(
@@ -1789,7 +1866,7 @@ export function EntityDetail({
         }
       }
     },
-    enabled: !cycleReadOnly,
+    enabled: initialLoaded && !cycleReadOnly,
   });
 
   // Fetch metadata for added documents
@@ -1978,17 +2055,13 @@ export function EntityDetail({
           refreshReviewChanges();
         }
       } else if (!result.success) {
-        // Handle review mode blocked - let user explore, show dialog after delay
+        rollbackDecision(key);
         if (result.error === "review_mode_blocked") {
-          setTimeout(() => {
-            setShowReviewBlockedDialog(true);
-          }, 2000);
-          // Don't revert - let user continue exploring
+          setShowReviewBlockedDialog(true);
           return null;
         }
         // Restore the last persisted event when saving fails.
         showError(`Failed to save decision: ${result.error}`);
-        rollbackDecision(key);
       }
       return result.success ? (result.data ?? null) : null;
     },
@@ -2079,9 +2152,7 @@ export function EntityDetail({
             : prev,
         );
         if (result.error === "review_mode_blocked") {
-          setTimeout(() => {
-            setShowReviewBlockedDialog(true);
-          }, 2000);
+          setShowReviewBlockedDialog(true);
         } else {
           showError(`Failed to save: ${result.error}`);
         }
@@ -2179,13 +2250,11 @@ export function EntityDetail({
           refreshReviewChanges();
         }
       } else if (!result.success) {
+        rollbackDecision(key);
         if (result.error === "review_mode_blocked") {
-          setTimeout(() => {
-            setShowReviewBlockedDialog(true);
-          }, 2000);
+          setShowReviewBlockedDialog(true);
         } else {
           showError(`Failed to save: ${result.error}`);
-          rollbackDecision(key);
         }
       }
       return result.success && !!result.data;
@@ -2308,13 +2377,11 @@ export function EntityDetail({
           refreshReviewChanges();
         }
       } else if (!result.success) {
+        rollbackDecision(key);
         if (result.error === "review_mode_blocked") {
-          setTimeout(() => {
-            setShowReviewBlockedDialog(true);
-          }, 2000);
+          setShowReviewBlockedDialog(true);
         } else {
           showError(`Failed to save: ${result.error}`);
-          rollbackDecision(key);
         }
       }
     },
@@ -2432,17 +2499,15 @@ export function EntityDetail({
           refreshReviewChanges();
         }
       } else if (!result.success) {
+        setStates((prev) =>
+          prev[key]?.decision?.id === currentDecision.id
+            ? { ...prev, [key]: currentState }
+            : prev,
+        );
         if (result.error === "review_mode_blocked") {
-          setTimeout(() => {
-            setShowReviewBlockedDialog(true);
-          }, 2000);
+          setShowReviewBlockedDialog(true);
         } else {
           showError(`Failed to save: ${result.error}`);
-          setStates((prev) =>
-            prev[key]?.decision?.id === currentDecision.id
-              ? { ...prev, [key]: currentState }
-              : prev,
-          );
         }
       }
     },
@@ -2794,13 +2859,45 @@ export function EntityDetail({
       : {}),
   });
 
+  if (!initialLoaded) {
+    return (
+      <section
+        aria-busy={!initialError}
+        className="rounded-lg border border-border bg-white p-6"
+      >
+        <h1 className={typography.pageTitle}>{entity}</h1>
+        {initialError ? (
+          <div className="mt-3 space-y-3">
+            <p role="alert">{initialError}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setInitialStatus(null);
+                setLoadAttempt((attempt) => attempt + 1);
+              }}
+              className="rounded bg-un-blue-text px-3 py-2 text-sm text-white focus-visible:ring-2 focus-visible:ring-un-blue"
+            >
+              Retry loading review
+            </button>
+          </div>
+        ) : (
+          <p role="status" className="mt-3">
+            Loading permissions and saved decisions…
+          </p>
+        )}
+      </section>
+    );
+  }
+
   return (
     <CommentConversationContext.Provider
       value={{
         budgetVersion,
         userEmail,
         canComment:
-          !cycleReadOnly && (userEntity === entity || canReviewAnyEntity),
+          initialLoaded &&
+          !cycleReadOnly &&
+          (userEntity === entity || canReviewAnyEntity),
         counts: commentSummary?.resolutions || {},
       }}
     >
@@ -2809,6 +2906,7 @@ export function EntityDetail({
           entity,
           canEditSubmission,
           canReview:
+            initialLoaded &&
             !cycleReadOnly &&
             isReviewer &&
             (userEntity === entity || canReviewAnyEntity),
@@ -2898,11 +2996,15 @@ export function EntityDetail({
               )}
             {/* Error toast */}
             {errorMessage && (
-              <div className="fixed right-4 bottom-4 z-50 flex max-w-md items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 shadow-lg">
+              <div
+                role="alert"
+                className="fixed right-4 bottom-4 z-50 flex max-w-md items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 shadow-lg"
+              >
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
                 <p className="text-sm text-red-800">{errorMessage}</p>
                 <button
                   onClick={() => setErrorMessage(null)}
+                  aria-label="Dismiss error"
                   className="ml-auto shrink-0 text-red-400 hover:text-red-600"
                 >
                   <X className="h-4 w-4" />
@@ -3010,8 +3112,16 @@ export function EntityDetail({
               tabIndex={0}
               className="isolate max-h-[75vh] overflow-auto rounded-lg border border-border bg-white focus-visible:ring-2 focus-visible:ring-un-blue xl:max-h-none xl:overflow-clip"
             >
-              <div className="min-w-[960px]">
-                <div className="sticky top-0 z-20 border-b border-border bg-muted">
+              <div
+                role="table"
+                aria-label={`${entity} mandate review decisions`}
+                aria-colcount={10}
+                className="min-w-[960px]"
+              >
+                <div
+                  role="rowgroup"
+                  className="sticky top-0 z-20 border-b border-border bg-muted"
+                >
                   <ColumnHeaders controls={tableControls} />
                 </div>
                 {sectionViews.map((section) => (

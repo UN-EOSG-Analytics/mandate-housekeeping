@@ -19,6 +19,8 @@ export function VerifyForm({ entities }: VerifyFormProps) {
   const token = searchParams.get("token");
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [checkAttempt, setCheckAttempt] = useState(0);
+  const [checkFailed, setCheckFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedEntity, setSelectedEntity] = useState("");
   const [otherEntity, setOtherEntity] = useState("");
@@ -32,10 +34,20 @@ export function VerifyForm({ entities }: VerifyFormProps) {
       return;
     }
 
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setChecking(true);
+        setError(null);
+        setCheckFailed(false);
+      }
+    });
     checkEntityForTokenAction(token)
       .then((result) => {
+        if (cancelled) return;
         if (!result.success) {
           setError(result.error);
+          setCheckFailed(true);
         } else if (result.data) {
           setUserEmail(result.data.email);
           setHasExistingEntity(result.data.hasEntity);
@@ -43,13 +55,20 @@ export function VerifyForm({ entities }: VerifyFormProps) {
             setSelectedEntity(result.data.entity);
           }
         }
-        setChecking(false);
       })
       .catch(() => {
-        setError("Failed to verify token");
-        setChecking(false);
+        if (!cancelled) {
+          setError("Could not check this sign-in link. Please try again.");
+          setCheckFailed(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setChecking(false);
       });
-  }, [token]);
+    return () => {
+      cancelled = true;
+    };
+  }, [token, checkAttempt]);
 
   const handleVerify = async () => {
     if (!token) return;
@@ -66,16 +85,21 @@ export function VerifyForm({ entities }: VerifyFormProps) {
     }
 
     setLoading(true);
-
-    const result = await verifyMagicTokenAction(token, entity);
-
-    if (!result.success) {
-      setError(result.error);
+    setError(null);
+    try {
+      const result = await verifyMagicTokenAction(token, entity);
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      router.push("/");
+    } catch {
+      setError(
+        "Could not complete sign-in. Try again; if the link has expired, request a new one.",
+      );
+    } finally {
       setLoading(false);
-      return;
     }
-
-    router.push("/");
   };
 
   if (!token) {
@@ -106,6 +130,28 @@ export function VerifyForm({ entities }: VerifyFormProps) {
     );
   }
 
+  if (checkFailed) {
+    return (
+      <div className="flex flex-1 items-center justify-center px-4">
+        <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+          <p role="alert" className="mb-4 text-sm text-red-700">
+            {error}
+          </p>
+          <button
+            type="button"
+            onClick={() => setCheckAttempt((value) => value + 1)}
+            className="mr-4 rounded-lg bg-un-blue px-4 py-2 text-sm font-semibold text-white"
+          >
+            Try again
+          </button>
+          <a href="/login" className="text-sm text-un-blue underline">
+            Request a new link
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   // User already has entity - simple sign in
   if (hasExistingEntity) {
     return (
@@ -120,7 +166,9 @@ export function VerifyForm({ entities }: VerifyFormProps) {
             </p>
             {error && (
               <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3">
-                <p className="text-sm text-red-700">{error}</p>
+                <p role="alert" className="text-sm text-red-700">
+                  {error}
+                </p>
               </div>
             )}
             <button
@@ -173,7 +221,9 @@ export function VerifyForm({ entities }: VerifyFormProps) {
 
             {error && (
               <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-                <p className="text-sm text-red-700">{error}</p>
+                <p role="alert" className="text-sm text-red-700">
+                  {error}
+                </p>
               </div>
             )}
 

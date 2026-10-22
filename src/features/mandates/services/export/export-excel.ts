@@ -50,7 +50,7 @@ export async function exportToCsv(
         quote(r.symbol),
         quote(r.title),
         quote(r.body),
-        r.year?.toString() || "",
+        quote(r.year?.toString() || ""),
         quote(r.link || ""),
         quote(r.entity),
         quote(r.entityLong || ""),
@@ -64,7 +64,14 @@ export async function exportToCsv(
 }
 
 function quote(s: string): string {
-  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+  // CSV quoting alone does not prevent spreadsheet applications running formulas.
+  if (/^\s*[=+@-]/.test(s) || /^[\t\r\n]/.test(s)) s = "'" + s;
+  if (
+    s.includes(",") ||
+    s.includes('"') ||
+    s.includes("\n") ||
+    s.includes("\r")
+  ) {
     return `"${s.replace(/"/g, '""')}"`;
   }
   return s;

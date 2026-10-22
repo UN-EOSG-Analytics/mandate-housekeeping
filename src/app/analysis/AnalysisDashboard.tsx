@@ -171,8 +171,8 @@ function EntityImpactChart({
   }
 
   const impactChartConfig: ChartConfig = {
-    current: { label: "Current Citations", color: "#94a3b8" },
-    projected: { label: "Projected Citations", color: "#3b82f6" },
+    current: { label: "Current Mandates", color: "#94a3b8" },
+    projected: { label: "Projected Mandates", color: "#3b82f6" },
   };
 
   return (
@@ -297,6 +297,12 @@ export function AnalysisDashboard({ data }: Props) {
         <ArrowRight className="h-4 w-4 text-gray-400 transition-transform group-hover:translate-x-0.5" />
       </Link>
 
+      <p className="text-sm text-gray-600">
+        Each cited mandate is counted once per entity and subprogramme, even
+        when it appears in several source locations. Projected totals apply
+        current review decisions, falling back to entity submissions.
+      </p>
+
       {/* Overall Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard
@@ -306,7 +312,7 @@ export function AnalysisDashboard({ data }: Props) {
           icon={Building2}
         />
         <StatCard
-          title="Total Entity Citations"
+          title="Distinct Cited Mandates"
           value={overall.totalCitations.toLocaleString()}
           subtitle={`${overall.totalUniqueDocuments.toLocaleString()} unique documents`}
           icon={FileText}
@@ -314,11 +320,11 @@ export function AnalysisDashboard({ data }: Props) {
         <StatCard
           title="Total Decisions Made"
           value={overall.totalDecisions.toLocaleString()}
-          subtitle={`${overall.citationsWithoutDecisions.toLocaleString()} citations without decisions`}
+          subtitle={`${overall.citationsWithoutDecisions.toLocaleString()} mandates without decisions`}
           icon={CheckCircle}
         />
         <StatCard
-          title="Projected Citations"
+          title="Projected Mandates"
           value={overall.projectedCitations.toLocaleString()}
           subtitle="After applying decisions"
           icon={Building2}
@@ -370,7 +376,7 @@ export function AnalysisDashboard({ data }: Props) {
           <CardHeader>
             <CardTitle>Projected Impact by Entity</CardTitle>
             <p className="text-sm text-gray-500">
-              Top entities by largest relative citation reduction
+              Top entities by largest relative mandate reduction
             </p>
           </CardHeader>
           <CardContent>
@@ -396,7 +402,7 @@ export function AnalysisDashboard({ data }: Props) {
                     Entity
                   </th>
                   <th className="px-3 py-3 text-right font-medium whitespace-nowrap text-gray-900">
-                    Citations
+                    Mandates
                   </th>
                   <th className="px-3 py-3 text-right font-medium whitespace-nowrap text-gray-900">
                     <span className="inline-flex items-center gap-1">

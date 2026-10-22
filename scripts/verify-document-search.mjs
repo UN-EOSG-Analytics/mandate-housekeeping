@@ -33,6 +33,23 @@ function harness() {
         },
       ];
     },
+    useRef(initial) {
+      const index = current.cursor++;
+      return (current.slots[index] ??= { current: initial });
+    },
+    useMemo(factory, deps) {
+      const index = current.cursor++;
+      const previous = current.slots[index];
+      if (
+        !previous ||
+        deps.some((value, i) => !Object.is(value, previous.deps[i]))
+      )
+        current.slots[index] = { deps, value: factory() };
+      return current.slots[index].value;
+    },
+    useCallback(fn, deps) {
+      return react.useMemo(() => fn, deps);
+    },
     useEffect(effect, deps) {
       const actor = current,
         index = actor.cursor++,
@@ -239,4 +256,34 @@ test("unmount cancels timers and ignores in-flight responses", async () => {
   h.requests[0].resolve([doc("query")]);
   await settle();
   assert.equal(pending.writes(), writes);
+});
+
+test("retyping the same query before debounce cannot reuse the earlier result", async () => {
+  const h = harness(),
+    input = h.input();
+  input.render({ query: "first" });
+  h.tick();
+  h.requests[0].resolve([doc("old")]);
+  await settle();
+  assert.equal(input.render().results[0].symbol, "old");
+  input.render({ query: "second" });
+  assert.deepEqual(input.render({ query: "first" }).results, []);
+  h.tick();
+  h.requests[1].resolve([doc("fresh")]);
+  await settle();
+  assert.equal(input.render().results[0].symbol, "fresh");
+});
+test("editing or selecting invalidates an in-flight response before the next render", async () => {
+  for (const query of ["edited", ""]) {
+    const h = harness(),
+      input = h.input();
+    const state = input.render({ query: "query" });
+    h.tick();
+    state.invalidate();
+    const writes = input.writes();
+    h.requests[0].resolve([doc("stale")]);
+    await settle();
+    assert.equal(input.writes(), writes);
+    assert.deepEqual(input.render({ query }).results, []);
+  }
 });

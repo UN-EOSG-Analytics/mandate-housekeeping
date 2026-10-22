@@ -4,7 +4,12 @@
  */
 
 import { query } from "@/lib/db/db";
-import { effectiveDecisionsCteSql } from "./decision-tracks-sql";
+import { getEffectiveDecision } from "./decision-tracks";
+import { citationSubprogramme, mandateKey } from "./citation-identity";
+import {
+  fetchDecisionHistories,
+  withLegacyProgrammeKeys,
+} from "./export/applied-state";
 import { versionPredicateSql } from "@/lib/db/budget-version";
 
 export interface DecisionStats {
@@ -50,214 +55,186 @@ export interface AnalysisData {
   byEntity: EntityDecisionStats[];
 }
 
-/**
- * Fetch comprehensive analysis data combining citations and decisions
- * Only considers the most recent decision per (document_symbol, entity, subprogramme)
- */
+/** Count review items once, regardless of how many source locations cite them. */
 export async function fetchAnalysisData(): Promise<AnalysisData> {
-  // Get total citations by entity (excluding NULL and 'NA' entities)
-  const citationsByEntity = await query<{
-    entity: string;
-    entity_long: string | null;
-    total_citations: string;
-    unique_documents: string;
-  }>(`
-    SELECT 
-      c.entity,
-      e.entity_long,
-      COUNT(*) as total_citations,
-      COUNT(DISTINCT c.ppb_full_document_symbol) as unique_documents
-    FROM ppb2026.source_document_citations c
-    LEFT JOIN systemchart.entities e ON c.entity = e.entity
-    WHERE c.entity IS NOT NULL AND c.entity != 'NA'
-      AND ${versionPredicateSql("c")}
-    GROUP BY c.entity, e.entity_long
-    ORDER BY COUNT(*) DESC
-  `);
+  const [citations, rawHistories] = await Promise.all([
+    query<{
+      entity: string;
+      entity_long: string | null;
+      symbol: string;
+      sub_programme: string | null;
+      component: string | null;
+      part_in_document: string | null;
+    }>(`
+      SELECT c.entity, e.entity_long, c.ppb_full_document_symbol AS symbol,
+        c.sub_programme, c.component, c.part_in_document
+      FROM ppb2026.source_document_citations c
+      LEFT JOIN systemchart.entities e ON c.entity = e.entity
+      WHERE c.entity IS NOT NULL AND c.entity <> 'NA'
+        AND ${versionPredicateSql("c")}
+    `),
+    fetchDecisionHistories(),
+  ]);
+  // The compatibility resolver needs only citation identities, never metadata.
+  const records = citations.map((c) => ({
+    full_document_symbol: c.symbol,
+    citation_info: [
+      {
+        entity: c.entity,
+        "sub-programme": c.sub_programme,
+        component: c.component,
+        part_in_document: c.part_in_document,
+      },
+    ],
+  }));
+  const histories = withLegacyProgrammeKeys(records, rawHistories);
+  const entities = new Map<string, EntityDecisionStats>();
+  const projected = new Map<string, Set<string>>();
+  const projectedSymbols = new Set<string>();
+  const originalSymbols = new Set<string>();
+  const baseline = new Set<string>();
+  const breakdown = new Map<string, number>();
 
-  // Get the LATEST decision per (document_symbol, entity, subprogramme) - excluding audit trail
-  // Using DISTINCT ON to get only the most recent decision for each unique citation
-  // Excludes NULL and 'NA' entities
-  const decisionsByEntity = await query<{
-    entity: string;
-    decision: string;
-    count: string;
-  }>(`
-    WITH ${effectiveDecisionsCteSql()}
-    SELECT 
-      entity,
-      CASE WHEN has_addition THEN
-        CASE WHEN decision IN ('add', 'retain', 'update') THEN 'add' ELSE 'cancel' END
-        ELSE decision END AS decision,
-      COUNT(*) as count
-    FROM latest_decisions
-    WHERE decision != 'cancel' AND NOT (has_addition AND decision = 'remove')
-      AND entity IS NOT NULL AND entity != 'NA'
-    GROUP BY entity, 2
-    ORDER BY entity, decision
-  `);
-
-  // Get overall decision breakdown (latest decisions only, excluding NULL and 'NA' entities)
-  const overallDecisions = await query<{
-    decision: string;
-    count: string;
-  }>(`
-    WITH ${effectiveDecisionsCteSql()}
-    SELECT 
-      CASE WHEN has_addition THEN
-        CASE WHEN decision IN ('add', 'retain', 'update') THEN 'add' ELSE 'cancel' END
-        ELSE decision END AS decision,
-      COUNT(*) as count
-    FROM latest_decisions
-    WHERE decision != 'cancel' AND NOT (has_addition AND decision = 'remove')
-      AND entity IS NOT NULL AND entity != 'NA'
-    GROUP BY 1
-    ORDER BY 1
-  `);
-
-  // Build decision maps for faster lookup
-  const decisionMap = new Map<string, Map<string, number>>();
-  for (const row of decisionsByEntity) {
-    if (!decisionMap.has(row.entity)) {
-      decisionMap.set(row.entity, new Map());
+  function entityStats(entity: string, entityLong: string | null) {
+    let stats = entities.get(entity);
+    if (!stats) {
+      stats = {
+        entity,
+        entityLong,
+        totalCitations: 0,
+        decisionsCount: 0,
+        retainCount: 0,
+        removeCount: 0,
+        updateCount: 0,
+        addCount: 0,
+        noDecisionCount: 0,
+        projectedCitations: 0,
+        absoluteDecrease: 0,
+        percentageDecrease: 0,
+      };
+      entities.set(entity, stats);
+      projected.set(entity, new Set());
     }
-    decisionMap.get(row.entity)!.set(row.decision, parseInt(row.count, 10));
+    return stats;
+  }
+  function countDecision(
+    stats: EntityDecisionStats,
+    decision: "retain" | "remove" | "update" | "add",
+  ) {
+    stats.decisionsCount++;
+    const field = `${decision}Count` as
+      | "retainCount"
+      | "removeCount"
+      | "updateCount"
+      | "addCount";
+    stats[field]++;
+    breakdown.set(decision, (breakdown.get(decision) ?? 0) + 1);
+  }
+  function include(
+    entity: string,
+    symbol: string,
+    subprogramme: string | null,
+  ) {
+    projected.get(entity)!.add(mandateKey(entity, symbol, subprogramme));
+    projectedSymbols.add(symbol);
   }
 
-  // Calculate entity-level stats
-  // totalDecisions = count of citations that have a decision (latest only, no cancel, no audit trail)
-  // Projected = current citations - remove + add
-  const byEntity: EntityDecisionStats[] = citationsByEntity.map((row) => {
-    const totalCitations = parseInt(row.total_citations, 10);
-    const entityDecisions = decisionMap.get(row.entity) || new Map();
+  for (const c of citations) {
+    const subprogramme = citationSubprogramme(
+      c.sub_programme,
+      c.component,
+      c.part_in_document,
+    );
+    const key = mandateKey(c.entity, c.symbol, subprogramme);
+    if (baseline.has(key)) continue;
+    baseline.add(key);
+    originalSymbols.add(c.symbol);
+    const stats = entityStats(c.entity, c.entity_long);
+    stats.totalCitations++;
+    const decision = getEffectiveDecision(histories.get(key) ?? [], "reviewed");
+    if (!decision || decision.decision === "cancel") stats.noDecisionCount++;
+    else {
+      // An add event targeting an existing citation does not create another item.
+      countDecision(
+        stats,
+        decision.decision === "add" ? "retain" : decision.decision,
+      );
+    }
+    if (decision?.decision !== "remove") {
+      include(
+        c.entity,
+        decision?.decision === "update" && decision.newSymbol
+          ? decision.newSymbol
+          : c.symbol,
+        subprogramme,
+      );
+    }
+  }
 
-    const retainCount = entityDecisions.get("retain") || 0;
-    const removeCount = entityDecisions.get("remove") || 0;
-    const updateCount = entityDecisions.get("update") || 0;
-    const addCount = entityDecisions.get("add") || 0;
-
-    // All decisions count towards "citations with decisions"
-    // 'add' creates new citations but still represents a decision
-    const decisionsCount = retainCount + removeCount + updateCount + addCount;
-
-    // Projected = current citations - removed + newly added
-    // retain/update/no-decision → stays in projected
-    // remove → removed from projected
-    // add → new citations added to projected
-    const projectedCitations = totalCitations - removeCount + addCount;
-    const absoluteDecrease = totalCitations - projectedCitations;
-    const percentageDecrease =
-      totalCitations > 0 ? (absoluteDecrease / totalCitations) * 100 : 0;
-
-    return {
-      entity: row.entity,
-      entityLong: row.entity_long,
+  for (const [key, history] of histories) {
+    if (baseline.has(key)) continue;
+    const decision = getEffectiveDecision(history, "reviewed");
+    if (
+      !decision ||
+      !decision.entity ||
+      decision.entity === "NA" ||
+      (!history.hasAddition && decision.decision !== "add") ||
+      decision.decision === "cancel" ||
+      decision.decision === "remove"
+    )
+      continue;
+    const stats = entityStats(decision.entity, null);
+    countDecision(stats, "add");
+    include(
+      decision.entity,
+      decision.decision === "update" && decision.newSymbol
+        ? decision.newSymbol
+        : decision.documentSymbol,
+      decision.subprogramme,
+    );
+  }
+  const byEntity = [...entities.values()]
+    .map((stats) => {
+      stats.projectedCitations = projected.get(stats.entity)!.size;
+      stats.absoluteDecrease = stats.totalCitations - stats.projectedCitations;
+      stats.percentageDecrease = stats.totalCitations
+        ? (stats.absoluteDecrease / stats.totalCitations) * 100
+        : 0;
+      return stats;
+    })
+    .sort(
+      (a, b) =>
+        b.totalCitations - a.totalCitations || a.entity.localeCompare(b.entity),
+    );
+  const sum = (field: keyof EntityDecisionStats) =>
+    byEntity.reduce((total, stats) => total + Number(stats[field]), 0);
+  const totalCitations = sum("totalCitations");
+  const totalDecisions = sum("decisionsCount");
+  const projectedCitations = sum("projectedCitations");
+  const absoluteDecrease = totalCitations - projectedCitations;
+  const citationsWithoutDecisions = sum("noDecisionCount");
+  return {
+    byEntity,
+    overall: {
       totalCitations,
-      decisionsCount,
-      retainCount,
-      removeCount,
-      updateCount,
-      addCount,
-      noDecisionCount: Math.max(
-        0,
-        totalCitations - retainCount - removeCount - updateCount,
-      ),
+      totalUniqueDocuments: originalSymbols.size,
+      projectedUniqueDocuments: projectedSymbols.size,
+      totalEntities: byEntity.length,
+      decisionsBreakdown: [...breakdown]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([decision, count]) => ({
+          decision,
+          count,
+          percentage: totalDecisions ? (count / totalDecisions) * 100 : 0,
+        })),
+      totalDecisions,
+      citationsWithDecisions: totalCitations - citationsWithoutDecisions,
+      citationsWithoutDecisions,
       projectedCitations,
       absoluteDecrease,
-      percentageDecrease,
-    };
-  });
-
-  // Calculate overall stats
-  const totalCitations = byEntity.reduce((sum, e) => sum + e.totalCitations, 0);
-  const totalRemoved = byEntity.reduce((sum, e) => sum + e.removeCount, 0);
-  const totalAdded = byEntity.reduce((sum, e) => sum + e.addCount, 0);
-
-  // Total citations that have received a decision (retain, remove, update, or add)
-  // Excludes audit trail (DISTINCT ON latest) and cancel decisions
-  const totalDecisionsCount = byEntity.reduce(
-    (sum, e) => sum + e.decisionsCount,
-    0,
-  );
-
-  // Count unique documents across all entities (excluding NULL and 'NA' entities)
-  const uniqueDocsResult = await query<{ count: string }>(`
-    SELECT COUNT(DISTINCT c.ppb_full_document_symbol) as count
-    FROM ppb2026.source_document_citations c
-    WHERE c.entity IS NOT NULL AND c.entity != 'NA'
-      AND ${versionPredicateSql("c")}
-  `);
-
-  // Calculate projected unique documents
-  // Documents that will remain after applying all decisions
-  const projectedDocsResult = await query<{ count: string }>(`
-    WITH ${effectiveDecisionsCteSql()},
-    -- Documents with at least one non-removed citation
-    retained_docs AS (
-      SELECT DISTINCT c.ppb_full_document_symbol
-      FROM ppb2026.source_document_citations c
-      WHERE c.entity IS NOT NULL AND c.entity != 'NA'
-        AND ${versionPredicateSql("c")}
-        AND NOT EXISTS (
-          SELECT 1 FROM latest_decisions d
-          WHERE d.document_symbol = c.ppb_full_document_symbol
-            AND d.entity = c.entity
-            AND COALESCE(d.subprogramme, '') = COALESCE(c.sub_programme, '')
-            AND d.decision = 'remove' AND NOT d.has_addition
-        )
-    ),
-    -- New documents from add decisions
-    added_docs AS (
-      SELECT DISTINCT CASE WHEN decision = 'update' THEN new_symbol ELSE document_symbol END as ppb_full_document_symbol
-      FROM latest_decisions
-      WHERE decision = 'add' OR (has_addition AND decision IN ('retain', 'update'))
-    )
-    SELECT COUNT(DISTINCT ppb_full_document_symbol) as count
-    FROM (
-      SELECT ppb_full_document_symbol FROM retained_docs
-      UNION
-      SELECT ppb_full_document_symbol FROM added_docs
-    ) all_docs
-  `);
-
-  // Projected = current - removed + added
-  const projectedCitations = totalCitations - totalRemoved + totalAdded;
-  const absoluteDecrease = totalCitations - projectedCitations;
-  const percentageDecrease =
-    totalCitations > 0 ? (absoluteDecrease / totalCitations) * 100 : 0;
-
-  // Total unique latest decisions (for pie chart)
-  const totalDecisions = overallDecisions.reduce(
-    (sum, d) => sum + parseInt(d.count, 10),
-    0,
-  );
-
-  const decisionsBreakdown: DecisionStats[] = overallDecisions.map((d) => ({
-    decision: d.decision,
-    count: parseInt(d.count, 10),
-    percentage:
-      totalDecisions > 0 ? (parseInt(d.count, 10) / totalDecisions) * 100 : 0,
-  }));
-
-  const overall: OverallStats = {
-    totalCitations,
-    totalUniqueDocuments: parseInt(uniqueDocsResult[0]?.count || "0", 10),
-    projectedUniqueDocuments: parseInt(
-      projectedDocsResult[0]?.count || "0",
-      10,
-    ),
-    totalEntities: citationsByEntity.length,
-    decisionsBreakdown,
-    totalDecisions,
-    citationsWithDecisions: totalDecisionsCount - totalAdded,
-    citationsWithoutDecisions: Math.max(
-      0,
-      totalCitations - totalDecisionsCount + totalAdded,
-    ),
-    projectedCitations,
-    absoluteDecrease,
-    percentageDecrease,
+      percentageDecrease: totalCitations
+        ? (absoluteDecrease / totalCitations) * 100
+        : 0,
+    },
   };
-
-  return { overall, byEntity };
 }

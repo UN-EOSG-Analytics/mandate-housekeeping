@@ -19,6 +19,10 @@ function load(file, deps) {
   return out;
 }
 const tracks = load("src/features/mandates/services/decision-tracks.ts", {});
+const identity = load(
+  "src/features/mandates/services/citation-identity.ts",
+  {},
+);
 let decisions = [];
 const records = [
   {
@@ -41,6 +45,7 @@ const records = [
 ];
 const api = load("src/features/mandates/services/export/applied-state.ts", {
   "@/lib/db/db": { query: async () => decisions },
+  "../citation-identity": identity,
   "@/features/mandates/services/data-service": {
     fetchPPBRecords: async () => records,
   },

@@ -1,4 +1,8 @@
 import { query } from "@/lib/db/db";
+import {
+  citationSubprogramme,
+  mandateKey as decisionKey,
+} from "../citation-identity";
 import type {
   PPBRecord,
   CitationInfo,
@@ -61,20 +65,18 @@ interface ResolvedDecisionMetadata {
   link: string | null;
 }
 
-function getSubprogramme(ci: CitationInfo): string | null {
-  return ci["sub-programme"] || ci.component || null;
+function getSubprogramme(
+  ci: Pick<CitationInfo, "sub-programme" | "component" | "part_in_document">,
+): string | null {
+  return citationSubprogramme(
+    ci["sub-programme"],
+    ci.component,
+    ci.part_in_document,
+  );
 }
 
 function isLegislative(part: string | null): boolean {
   return part === "Legislative mandates";
-}
-
-function decisionKey(
-  entity: string,
-  symbol: string,
-  subprogramme: string | null,
-): string {
-  return `${entity}:${symbol}:${subprogramme || ""}`;
 }
 
 function applyManualOverrides(
@@ -120,9 +122,11 @@ function compareAppliedRows(
   return compareSymbolsNatural(a.symbol, b.symbol);
 }
 
-type ExportDecisionHistory = MandateDecision[] & { hasAddition: boolean };
+export type ExportDecisionHistory = MandateDecision[] & {
+  hasAddition: boolean;
+};
 
-async function fetchDecisionHistories(
+export async function fetchDecisionHistories(
   entity?: string,
 ): Promise<Map<string, ExportDecisionHistory>> {
   const rows = await query<DecisionRow>(
@@ -182,6 +186,7 @@ async function fetchDecisionHistories(
     const history =
       histories.get(key) ??
       Object.assign([], { hasAddition: row.has_addition });
+    history.hasAddition ||= row.has_addition;
     history.push(event);
     histories.set(key, history);
   }
@@ -213,6 +218,63 @@ function buildEntityLongMap(records: PPBRecord[]): Map<string, string | null> {
     }
   }
   return map;
+}
+
+/** Preserve old programme-level null keys without applying background decisions. */
+export function withLegacyProgrammeKeys(
+  records: {
+    full_document_symbol: string;
+    citation_info: Pick<
+      CitationInfo,
+      "entity" | "sub-programme" | "component" | "part_in_document"
+    >[];
+  }[],
+  histories: Map<string, ExportDecisionHistory>,
+): Map<string, ExportDecisionHistory> {
+  const resolved = new Map(histories);
+  const background = new Set<string>();
+  for (const record of records)
+    for (const ci of record.citation_info)
+      if (ci.entity && ci.part_in_document === "Mandates and background")
+        background.add(
+          decisionKey(ci.entity, record.full_document_symbol, null),
+        );
+  for (const record of records)
+    for (const ci of record.citation_info) {
+      if (
+        !ci.entity ||
+        !isLegislative(ci.part_in_document) ||
+        ci["sub-programme"] ||
+        ci.component
+      )
+        continue;
+      const key = decisionKey(
+        ci.entity,
+        record.full_document_symbol,
+        getSubprogramme(ci),
+      );
+      const legacyKey = decisionKey(
+        ci.entity,
+        record.full_document_symbol,
+        null,
+      );
+      const legacy = histories.get(legacyKey);
+      if (legacy && !background.has(legacyKey)) {
+        const existing = histories.get(key);
+        resolved.set(
+          key,
+          Object.assign(
+            [...(existing ?? []), ...legacy].map((event) => ({
+              ...event,
+              subprogramme: getSubprogramme(ci),
+            })),
+            { hasAddition: !!existing?.hasAddition || legacy.hasAddition },
+          ),
+        );
+        resolved.delete(legacyKey);
+      }
+    }
+  return resolved;
 }
 
 /** Count only submissions that participate in the legislative export. */
@@ -253,11 +315,15 @@ function countFallbacks(
 }
 
 export async function getExportFallbackCount(entity?: string): Promise<number> {
-  const [records, histories] = await Promise.all([
+  const [records, rawHistories] = await Promise.all([
     fetchPPBRecords(),
     fetchDecisionHistories(entity),
   ]);
-  return countFallbacks(records, histories, entity);
+  return countFallbacks(
+    records,
+    withLegacyProgrammeKeys(records, rawHistories),
+    entity,
+  );
 }
 
 export async function getAppliedExportData(
@@ -267,10 +333,11 @@ export async function getAppliedExportData(
   rows: AppliedMandateRow[];
   decisions: LatestDecisionRow[];
 }> {
-  const [records, histories] = await Promise.all([
+  const [records, rawHistories] = await Promise.all([
     fetchPPBRecords(),
     fetchDecisionHistories(entity),
   ]);
+  const histories = withLegacyProgrammeKeys(records, rawHistories);
   const decisions = [...histories.values()].flatMap((history) => {
     const decision = getEffectiveDecision(history, mode);
     if (!decision) return [];

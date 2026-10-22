@@ -2,7 +2,12 @@
 
 import * as React from "react";
 import { typography } from "@un-eosg/ui/typography";
-import { createPortal } from "react-dom";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type {
   Decision,
   MandateDecision,
@@ -48,61 +53,6 @@ interface DecisionDropdownProps {
 // Shared color scheme for decisions - re-export from theme
 export const DECISION_COLORS = DECISION_THEME;
 
-// Dropdown menu component
-function DropdownMenu({
-  containerRef,
-  menuRef,
-  options,
-  decision,
-  onSelect,
-}: {
-  containerRef: React.RefObject<HTMLDivElement | null>;
-  menuRef: React.RefObject<HTMLDivElement | null>;
-  options: { value: Decision | ""; label: string }[];
-  decision: Decision | null;
-  onSelect: (value: Decision | "") => void;
-}) {
-  const [pos, setPos] = React.useState({ top: 0, left: 0 });
-
-  React.useLayoutEffect(() => {
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left });
-    }
-  }, [containerRef]);
-
-  return (
-    <div
-      ref={menuRef}
-      className={`fixed z-9999 w-21 py-0.5 ${POPUP_STYLES.popup}`}
-      style={{ top: pos.top, left: pos.left }}
-    >
-      {options.map((opt) => {
-        const optColors =
-          opt.value && opt.value in DECISION_COLORS
-            ? DECISION_COLORS[opt.value as keyof typeof DECISION_COLORS]
-            : DECISION_COLORS.default;
-        const isSelected =
-          decision === opt.value ||
-          ((!decision || decision === "cancel") && opt.value === "");
-        return (
-          <button
-            key={opt.value || "empty"}
-            onClick={() => onSelect(opt.value)}
-            className={`flex w-full items-center px-2.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-inset ${
-              isSelected
-                ? `${optColors.bg} ${optColors.text}`
-                : "text-foreground hover:bg-un-blue-surface"
-            }`}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 /**
  * Shared decision dropdown component used across the app.
  * Supports "retain", "remove", "update", and canceling back to "—".
@@ -145,7 +95,6 @@ export function DecisionDropdown({
   const decisionTooltipTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const reasonTooltipTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
-  const menuRef = React.useRef<HTMLDivElement>(null);
 
   // Show popup if either internal or external says to show it
   // (external is used for "update" flow, internal for "retain"/"remove")
@@ -177,20 +126,6 @@ export function DecisionDropdown({
       : DECISION_COLORS.default;
   const sizeClasses =
     size === "sm" ? `h-6 ${typography.label}` : `h-6 ${typography.label}`;
-
-  // Close dropdown when clicking outside
-  React.useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      const target = event.target as Node;
-      const isInsideContainer = containerRef.current?.contains(target);
-      const isInsideMenu = menuRef.current?.contains(target);
-      if (!isInsideContainer && !isInsideMenu) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   const handleSelect = async (value: Decision | "") => {
     if (disabled || savingRef.current || reasonSavingRef.current) return;
@@ -281,30 +216,75 @@ export function DecisionDropdown({
   const hasReason = reason && reason !== "";
 
   return (
-    <div
-      ref={containerRef}
-      aria-busy={saving || savingReason}
-      className="relative flex items-center gap-0.5"
+    <DropdownMenu
+      open={isOpen && !disabled && !locked}
+      onOpenChange={(open) => {
+        setIsOpen(open);
+        if (open) setDecisionTooltipOpen(false);
+      }}
     >
-      {(saving || savingReason) && (
-        <span role="status" className="sr-only">
-          Saving…
-        </span>
-      )}
-      {saveError && (
-        <span role="alert" className="text-xs text-red-700">
-          {saveError}
-        </span>
-      )}
-      {/* Main decision dropdown button */}
-      {decision && decision !== "cancel" && userEmail && createdAt ? (
-        <Popover
-          open={decisionTooltipOpen}
-          onOpenChange={setDecisionTooltipOpen}
-        >
-          <PopoverTrigger asChild>
-            <button
-              onClick={() => !disabled && !locked && setIsOpen(!isOpen)}
+      <div
+        ref={containerRef}
+        tabIndex={-1}
+        aria-busy={saving || savingReason}
+        className="relative flex items-center gap-0.5"
+      >
+        {(saving || savingReason) && (
+          <span role="status" className="sr-only">
+            Saving…
+          </span>
+        )}
+        {saveError && (
+          <span role="alert" className="text-xs text-red-700">
+            {saveError}
+          </span>
+        )}
+        {/* Main decision dropdown button */}
+        {decision && decision !== "cancel" && userEmail && createdAt ? (
+          <Popover
+            open={decisionTooltipOpen}
+            onOpenChange={setDecisionTooltipOpen}
+          >
+            <PopoverTrigger asChild>
+              <DropdownMenuTrigger asChild disabled={disabled || locked}>
+                <button
+                  aria-label={`Submission decision for ${symbol || "document"}: ${displayLabel}`}
+                  onClick={(event) => event.preventDefault()}
+                  onMouseEnter={() => {
+                    if (decisionTooltipTimeoutRef.current)
+                      clearTimeout(decisionTooltipTimeoutRef.current);
+                    setDecisionTooltipOpen(true);
+                  }}
+                  onMouseLeave={() => {
+                    decisionTooltipTimeoutRef.current = setTimeout(
+                      () => setDecisionTooltipOpen(false),
+                      150,
+                    );
+                  }}
+                  disabled={disabled}
+                  className={`flex w-21 items-center justify-between gap-1 rounded border px-2 font-medium transition-colors focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 ${sizeClasses} ${colors.bg} ${colors.border} ${colors.text} ${
+                    disabled
+                      ? "cursor-default"
+                      : locked
+                        ? "cursor-default"
+                        : `cursor-pointer ${colors.hover}`
+                  } ${className || ""}`}
+                >
+                  <span>
+                    {saving || savingReason ? "Saving…" : displayLabel}
+                  </span>
+                  {!disabled && !locked && (
+                    <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+            </PopoverTrigger>
+            <PopoverContent
+              onOpenAutoFocus={(event) => event.preventDefault()}
+              onCloseAutoFocus={(event) => event.preventDefault()}
+              className={`${POPUP_STYLES.tooltipSize} overflow-hidden p-0`}
+              side="top"
+              sideOffset={8}
               onMouseEnter={() => {
                 if (decisionTooltipTimeoutRef.current)
                   clearTimeout(decisionTooltipTimeoutRef.current);
@@ -316,7 +296,34 @@ export function DecisionDropdown({
                   150,
                 );
               }}
-              disabled={disabled}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-3 py-2">
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-foreground">
+                  <span className={`font-medium ${colors.text}`}>
+                    {displayLabel}
+                  </span>
+                  <span>by {userEmail}</span>
+                  {userEntity && (
+                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-micro font-medium text-foreground">
+                      {userEntity}
+                    </span>
+                  )}
+                  {userEntity?.toUpperCase() === "DMSPC" && (
+                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-micro font-medium text-foreground">
+                      Reviewer
+                    </span>
+                  )}
+                  <span>· {new Date(createdAt).toLocaleDateString()}</span>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+        ) : (
+          <DropdownMenuTrigger asChild disabled={disabled || locked}>
+            <button
+              aria-label={`Submission decision for ${symbol || "document"}: ${displayLabel}`}
+              disabled={disabled || locked}
               className={`flex w-21 items-center justify-between gap-1 rounded border px-2 font-medium transition-colors focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 ${sizeClasses} ${colors.bg} ${colors.border} ${colors.text} ${
                 disabled
                   ? "cursor-default"
@@ -330,74 +337,54 @@ export function DecisionDropdown({
                 <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
               )}
             </button>
-          </PopoverTrigger>
-          <PopoverContent
-            className={`${POPUP_STYLES.tooltipSize} overflow-hidden p-0`}
-            side="top"
-            sideOffset={8}
-            onMouseEnter={() => {
-              if (decisionTooltipTimeoutRef.current)
-                clearTimeout(decisionTooltipTimeoutRef.current);
-              setDecisionTooltipOpen(true);
-            }}
-            onMouseLeave={() => {
-              decisionTooltipTimeoutRef.current = setTimeout(
-                () => setDecisionTooltipOpen(false),
-                150,
-              );
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="px-3 py-2">
-              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-foreground">
-                <span className={`font-medium ${colors.text}`}>
-                  {displayLabel}
-                </span>
-                <span>by {userEmail}</span>
-                {userEntity && (
-                  <span className="rounded bg-gray-100 px-1.5 py-0.5 text-micro font-medium text-foreground">
-                    {userEntity}
-                  </span>
-                )}
-                {userEntity?.toUpperCase() === "DMSPC" && (
-                  <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-micro font-medium text-foreground">
-                    Reviewer
-                  </span>
-                )}
-                <span>· {new Date(createdAt).toLocaleDateString()}</span>
-              </div>
-            </div>
-          </PopoverContent>
-        </Popover>
-      ) : (
-        <button
-          onClick={() => !disabled && !locked && setIsOpen(!isOpen)}
-          disabled={disabled}
-          className={`flex w-21 items-center justify-between gap-1 rounded border px-2 font-medium transition-colors focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 ${sizeClasses} ${colors.bg} ${colors.border} ${colors.text} ${
-            disabled
-              ? "cursor-default"
-              : locked
-                ? "cursor-default"
-                : `cursor-pointer ${colors.hover}`
-          } ${className || ""}`}
-        >
-          <span>{saving || savingReason ? "Saving…" : displayLabel}</span>
-          {!disabled && !locked && (
-            <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
-          )}
-        </button>
-      )}
+          </DropdownMenuTrigger>
+        )}
 
-      {/* Reason indicator/edit button with hover tooltip */}
-      {decision && decision !== "cancel" && onReasonChange && (
-        <Popover open={reasonTooltipOpen} onOpenChange={setReasonTooltipOpen}>
-          <PopoverTrigger asChild>
-            <button
-              disabled={disabled}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!disabled) setShowReasonPopup(true);
-              }}
+        {/* Reason indicator/edit button with hover tooltip */}
+        {decision && decision !== "cancel" && onReasonChange && (
+          <Popover open={reasonTooltipOpen} onOpenChange={setReasonTooltipOpen}>
+            <PopoverTrigger asChild>
+              <button
+                disabled={disabled}
+                aria-label={`Edit reason for ${symbol || "document"}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!disabled) setShowReasonPopup(true);
+                }}
+                onMouseEnter={() => {
+                  if (reasonTooltipTimeoutRef.current)
+                    clearTimeout(reasonTooltipTimeoutRef.current);
+                  setReasonTooltipOpen(true);
+                }}
+                onMouseLeave={() => {
+                  reasonTooltipTimeoutRef.current = setTimeout(
+                    () => setReasonTooltipOpen(false),
+                    150,
+                  );
+                }}
+                className={`group/reason flex h-6 items-center justify-center rounded border transition-all ${
+                  hasReason
+                    ? `w-6 ${colors.bg} ${colors.border} ${colors.text} ${colors.hover}`
+                    : "w-6 border-dashed border-gray-300 bg-white text-gray-400 hover:border-gray-400 hover:bg-gray-50"
+                }`}
+              >
+                {hasReason ? (
+                  reason ? (
+                    renderReasonIcon(reason, "h-3.5 w-3.5")
+                  ) : (
+                    <MessageCircle className="h-3.5 w-3.5" />
+                  )
+                ) : (
+                  <Pencil className="h-3 w-3" />
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              onOpenAutoFocus={(event) => event.preventDefault()}
+              onCloseAutoFocus={(event) => event.preventDefault()}
+              className={`${POPUP_STYLES.tooltipSize} overflow-hidden p-0`}
+              side="top"
+              sideOffset={8}
               onMouseEnter={() => {
                 if (reasonTooltipTimeoutRef.current)
                   clearTimeout(reasonTooltipTimeoutRef.current);
@@ -409,102 +396,84 @@ export function DecisionDropdown({
                   150,
                 );
               }}
-              className={`group/reason flex h-6 items-center justify-center rounded border transition-all ${
-                hasReason
-                  ? `w-6 ${colors.bg} ${colors.border} ${colors.text} ${colors.hover}`
-                  : "w-6 border-dashed border-gray-300 bg-white text-gray-400 hover:border-gray-400 hover:bg-gray-50"
-              }`}
+              onClick={(e) => e.stopPropagation()}
             >
-              {hasReason ? (
-                reason ? (
-                  renderReasonIcon(reason, "h-3.5 w-3.5")
-                ) : (
-                  <MessageCircle className="h-3.5 w-3.5" />
-                )
-              ) : (
-                <Pencil className="h-3 w-3" />
-              )}
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            className={`${POPUP_STYLES.tooltipSize} overflow-hidden p-0`}
-            side="top"
-            sideOffset={8}
-            onMouseEnter={() => {
-              if (reasonTooltipTimeoutRef.current)
-                clearTimeout(reasonTooltipTimeoutRef.current);
-              setReasonTooltipOpen(true);
-            }}
-            onMouseLeave={() => {
-              reasonTooltipTimeoutRef.current = setTimeout(
-                () => setReasonTooltipOpen(false),
-                150,
-              );
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="border-b border-gray-200 bg-gray-50 px-3 py-2">
-              <h4 className="text-xs font-medium tracking-wide text-gray-500 uppercase">
-                Reason
-              </h4>
-            </div>
-            <div className="px-3 py-2.5">
-              <div className="flex gap-2.5">
-                {reason && (
-                  <span
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${colors.bg} ${colors.text}`}
-                  >
-                    {renderReasonIcon(reason, "h-3.5 w-3.5")}
-                  </span>
-                )}
-                <div className="min-w-0 flex-1">
-                  {reasonLabel ? (
-                    <p className="text-sm leading-relaxed text-foreground">
-                      {renderLabelWithBold(reasonLabel)}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">
-                      No reason provided
-                    </p>
+              <div className="border-b border-gray-200 bg-gray-50 px-3 py-2">
+                <h4 className="text-xs font-medium tracking-wide text-gray-500 uppercase">
+                  Reason
+                </h4>
+              </div>
+              <div className="px-3 py-2.5">
+                <div className="flex gap-2.5">
+                  {reason && (
+                    <span
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${colors.bg} ${colors.text}`}
+                    >
+                      {renderReasonIcon(reason, "h-3.5 w-3.5")}
+                    </span>
                   )}
+                  <div className="min-w-0 flex-1">
+                    {reasonLabel ? (
+                      <p className="text-sm leading-relaxed text-foreground">
+                        {renderLabelWithBold(reasonLabel)}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">
+                        No reason provided
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          </PopoverContent>
-        </Popover>
-      )}
-
-      {isOpen &&
-        !disabled &&
-        !locked &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <DropdownMenu
-            containerRef={containerRef}
-            menuRef={menuRef}
-            options={options}
-            decision={decision}
-            onSelect={handleSelect}
-          />,
-          document.body,
+            </PopoverContent>
+          </Popover>
         )}
 
-      {/* Reason popup - appears after making a decision */}
-      {popupDecision && popupDecision !== "cancel" && onReasonChange && (
-        <ReasonPopup
-          decision={popupDecision as DecisionType}
-          reason={initialReasonDecision ? null : (reason ?? null)}
-          otherReason={initialReasonDecision ? null : (otherReason ?? null)}
-          onChange={handleReasonChange}
-          onClose={() => setShowReasonPopup(false)}
-          isOpen={
-            showReasonPopup &&
-            (!!initialReasonDecision || !disabled) &&
-            !savingReason
-          }
-          symbol={symbol}
-        />
-      )}
-    </div>
+        <DropdownMenuContent
+          align="start"
+          className="z-[100] min-w-21"
+          onCloseAutoFocus={(event) => {
+            // A selected decision opens a dialog; let that dialog own focus.
+            if (initialSaveRef.current || showReasonPopup)
+              event.preventDefault();
+          }}
+        >
+          {options.map((option) => (
+            <DropdownMenuItem
+              key={option.value || "empty"}
+              onSelect={() => handleSelect(option.value)}
+            >
+              {option.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+
+        {/* Reason popup - appears after making a decision */}
+        {popupDecision && popupDecision !== "cancel" && onReasonChange && (
+          <ReasonPopup
+            decision={popupDecision as DecisionType}
+            reason={initialReasonDecision ? null : (reason ?? null)}
+            otherReason={initialReasonDecision ? null : (otherReason ?? null)}
+            onChange={handleReasonChange}
+            onClose={() => setShowReasonPopup(false)}
+            isOpen={
+              showReasonPopup &&
+              (!!initialReasonDecision || !disabled) &&
+              !savingReason
+            }
+            symbol={symbol}
+            onRestoreFocus={() => {
+              // Saving may temporarily disable the original trigger. Its nearby
+              // enabled reason control is an equally useful return point.
+              const target =
+                containerRef.current?.querySelector<HTMLButtonElement>(
+                  "button:not(:disabled)",
+                );
+              (target ?? containerRef.current)?.focus();
+            }}
+          />
+        )}
+      </div>
+    </DropdownMenu>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { EntityCombobox } from "./EntityCombobox";
 import type { EntityOption } from "@/features/mandates/services/data-service";
 import { updateEntityAction } from "@/features/auth/actions";
@@ -19,6 +20,7 @@ export function EntityChangeDialog({
   currentEntity,
   entities,
 }: EntityChangeDialogProps) {
+  const openerRef = useRef<HTMLElement | null>(null);
   const [selectedEntity, setSelectedEntity] = useState("");
   const [otherEntity, setOtherEntity] = useState("");
   const [loading, setLoading] = useState(false);
@@ -64,20 +66,35 @@ export function EntityChangeDialog({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <>
-      <div
-        className="fixed inset-0 z-50 bg-black/50"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div className="fixed top-1/2 left-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white p-6 shadow-xl">
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        aria-describedby={undefined}
+        onOpenAutoFocus={() => {
+          openerRef.current =
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement
+              : null;
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (openerRef.current?.isConnected) openerRef.current.focus();
+        }}
+        className="gap-0 sm:max-w-sm"
+      >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Update Entity</h2>
+          <DialogTitle className="text-lg font-semibold text-gray-900">
+            Update Entity
+          </DialogTitle>
           <button
             onClick={onClose}
+            aria-label="Close entity selection"
             className="rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
           >
             <X className="h-5 w-5" />
@@ -130,7 +147,7 @@ export function EntityChangeDialog({
             </button>
           </div>
         </div>
-      </div>
-    </>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   REVIEW_POLL_INTERVAL_MS,
   REVIEW_POLL_MAX_RETRY_MS,
+  REVIEW_RECONCILE_INTERVAL_MS,
 } from "@/lib/polling";
 import {
   getRealtimeChangesAction,
@@ -48,6 +49,7 @@ export function useRealtimeDecisions({
     let timer: ReturnType<typeof setTimeout> | undefined;
     let cursor: string | undefined;
     let failures = 0;
+    let lastReconciledAt = 0;
     let previousStatus: ReviewModeStatus | null = null;
     const processed = new Set<string>();
     const schedule = () => {
@@ -74,12 +76,18 @@ export function useRealtimeDecisions({
       clearTimeout(timer);
       inFlight.current = true;
       try {
-        const result = await getRealtimeChangesAction(entity, cursor);
+        const reconcile =
+          !cursor ||
+          Date.now() - lastReconciledAt >= REVIEW_RECONCILE_INTERVAL_MS;
+        const result = await getRealtimeChangesAction(
+          entity,
+          reconcile ? undefined : cursor,
+        );
         if (cancelled) return;
         if (!result.success) throw new Error(result.error);
         const data = result.data;
         const changes = data.changes.filter(
-          (change) => !processed.has(change.id),
+          (change) => reconcile || !processed.has(change.id),
         );
         if (changes.length) await callbacks.current.onRemoteChanges?.(changes);
         if (cancelled) return;
@@ -103,6 +111,7 @@ export function useRealtimeDecisions({
           recent.forEach((id) => processed.add(id));
         }
         cursor = data.serverTime;
+        if (reconcile) lastReconciledAt = Date.now();
         failures = 0;
         setIsConnected(true);
         setError(null);

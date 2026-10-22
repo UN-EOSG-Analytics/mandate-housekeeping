@@ -127,7 +127,11 @@ function composerHarness(
   const theme = load("src/lib/theme.ts");
   const reasons = load("src/features/mandates/ui/ReasonsModal.tsx", {
     react,
-    "react-dom": { createPortal: (node) => node },
+    "@/components/ui/dialog": {
+      Dialog: "dialog-root",
+      DialogContent: "dialog-content",
+      DialogTitle: "dialog-title",
+    },
     "react/jsx-runtime": { jsx, jsxs: jsx },
     "lucide-react": icons,
     "@/features/mandates/services/decision-reasons": load(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useId, useMemo, useRef, useState, useTransition } from "react";
 import { Download, X, ExternalLink, ImageDown, RotateCcw } from "lucide-react";
 import {
   pairKey,
@@ -32,7 +32,9 @@ const DEFAULT_COLORS: Record<string, string> = {
   cross: CROSS_SECTION_COLOR,
   reduced: DEFAULT_REDUCED_COLOR,
   grew: DEFAULT_GREW_COLOR,
-  ...Object.fromEntries(SECTION_ORDER.map((s) => [s, SECTION_META[s].baseColor])),
+  ...Object.fromEntries(
+    SECTION_ORDER.map((s) => [s, SECTION_META[s].baseColor]),
+  ),
 };
 
 export type LayerId =
@@ -100,6 +102,9 @@ const COLHEAD_H = 62; // top label gutter height
 const LABEL_W = COLHEAD_H; // left label gutter width — kept equal to the header height
 
 export function HeatmapMatrix({ layers }: HeatmapPayload) {
+  const gridRef = useRef<HTMLDivElement>(null);
+  const gridHelpId = useId();
+  const [focusedCell, setFocusedCell] = useState("");
   const [layerId, setLayerId] = useState<LayerId>("v2026");
   const [hover, setHover] = useState<{
     a: OrderedEntity;
@@ -163,10 +168,7 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
   }, [layers]);
 
   // Entities with at least one citation in the 2027 draft.
-  const present2027 = useMemo(
-    () => new Set(layers.v2027.entities),
-    [layers],
-  );
+  const present2027 = useMemo(() => new Set(layers.v2027.entities), [layers]);
 
   // Selected entity codes (default = the curated figure). Presets set this;
   // the entity list toggles individual members.
@@ -180,13 +182,21 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
   );
 
   const entityPresets = [
-    { id: "figure", label: `Figure (${CURATED_CODES.length})`, codes: CURATED_CODES },
+    {
+      id: "figure",
+      label: `Figure (${CURATED_CODES.length})`,
+      codes: CURATED_CODES,
+    },
     {
       id: "in2027",
       label: `In 2027 draft (${present2027.size})`,
       codes: [...present2027],
     },
-    { id: "all", label: `All (${universe.length})`, codes: universe.map((e) => e.code) },
+    {
+      id: "all",
+      label: `All (${universe.length})`,
+      codes: universe.map((e) => e.code),
+    },
   ];
 
   // Scale reference. Diverging layers use a single max-abs (cross-block
@@ -204,7 +214,12 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
           maxAbs = Math.max(maxAbs, Math.abs(v));
         }
       }
-      return { maxAbs, perSection: {} as Record<string, number>, cross: 0, global: 0 };
+      return {
+        maxAbs,
+        perSection: {} as Record<string, number>,
+        cross: 0,
+        global: 0,
+      };
     }
     const perSection: Record<string, number> = {};
     let cross = 0;
@@ -241,14 +256,20 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
 
   function cellColor(a: OrderedEntity, b: OrderedEntity, value: number) {
     if (isDiff)
-      return divergingColor(value, scaleRef.maxAbs, gamma, reducedColor, grewColor);
+      return divergingColor(
+        value,
+        scaleRef.maxAbs,
+        gamma,
+        reducedColor,
+        grewColor,
+      );
     const sameSection = a.section === b.section && a.section !== "other";
     const base = sameSection ? colorFor(a.section) : crossColor;
     const max =
       scaleMode === "global"
         ? scaleRef.global
         : sameSection
-          ? scaleRef.perSection[a.section] ?? 0
+          ? (scaleRef.perSection[a.section] ?? 0)
           : scaleRef.cross;
     return sequentialColor(value, max, base, gamma);
   }
@@ -265,9 +286,7 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
       legend: legendItems,
       title: `Overlapping mandate citations — ${layer.label}`,
     });
-    const url = URL.createObjectURL(
-      new Blob([svg], { type: "image/svg+xml" }),
-    );
+    const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
     const link = document.createElement("a");
     link.href = url;
     link.download = `cocitation_${layerId}.svg`;
@@ -289,6 +308,10 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
         ),
         { color: crossColor, label: "Cross-section" },
       ];
+
+  const focusedCellVisible = entities.some((r) =>
+    entities.some((c) => `${r.code}:${c.code}` === focusedCell),
+  );
 
   return (
     <div>
@@ -338,7 +361,9 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
         </a>
       </div>
 
-      <p className="mb-3 max-w-3xl text-sm text-gray-500">{layer.description}</p>
+      <p className="mb-3 max-w-3xl text-sm text-gray-500">
+        {layer.description}
+      </p>
 
       {/* Entity selector */}
       <details className="mb-3 rounded-lg border border-gray-200 bg-white">
@@ -354,7 +379,9 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
             >
               Select all
             </button>
-            <button onClick={() => setSelectedEntities(new Set())}>Clear</button>
+            <button onClick={() => setSelectedEntities(new Set())}>
+              Clear
+            </button>
             <button
               onClick={() =>
                 setSelectedEntities(
@@ -434,141 +461,234 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
               : `${hover.value} shared mandate${hover.value === 1 ? "" : "s"}`}
           </span>
         ) : (
-          <span className="text-gray-400">Hover a cell for details</span>
+          <span className="text-gray-400">
+            Hover or focus a cell for details
+          </span>
         )}
       </div>
 
+      <p id={gridHelpId} className="sr-only">
+        Use arrow keys to move between entity pairs. Press Enter or Space to
+        show shared mandates.
+      </p>
       <div className="flex items-start gap-4">
-      {/* Matrix */}
-      <div className="min-w-0 flex-1 overflow-x-auto pb-4">
-        <div className="inline-block select-none">
-          {/* Section bands — coloured underline spans the section's columns;
+        {/* Matrix */}
+        <div className="min-w-0 flex-1 overflow-x-auto pb-4">
+          <div className="inline-block select-none">
+            {/* Section bands — coloured underline spans the section's columns;
               the centred label is allowed to overflow (never truncated), like
               the PDF, without pushing neighbouring bands. */}
-          <div
-            className="relative flex items-end"
-            style={{ marginLeft: LABEL_W, height: 30 }}
-          >
-            {bands.map((b, i) => {
-              const bc = b.section === "other" ? crossColor : colorFor(b.section);
-              return (
-                <div
-                  key={i}
-                  className="relative h-full"
-                  style={{ width: b.count * CELL }}
-                >
-                  {/* Label constrained to the band width: multi-word labels wrap
-                      (e.g. Humanitarian → two lines); short un-wrappable ones
-                      (H/R, Legal) overflow centred into empty space. */}
-                  <span
-                    className="absolute bottom-1 left-0 w-full text-center text-[11px] font-semibold leading-[1.05]"
-                    style={{ color: bc, hyphens: "manual" }}
-                  >
-                    {SECTION_META[b.section].label}
-                  </span>
-                  <div
-                    className="absolute bottom-0 left-0 w-full border-b-2"
-                    style={{ borderColor: bc }}
-                  />
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Column labels */}
-          <div className="flex items-end">
             <div
-              className="flex items-end justify-start pr-1 text-[10px] font-semibold text-gray-500"
-              style={{ width: LABEL_W, height: COLHEAD_H }}
+              className="relative flex items-end"
+              style={{ marginLeft: LABEL_W, height: 30 }}
             >
-              Cross-citation
-            </div>
-            {entities.map((e) => (
-              <div
-                key={e.code}
-                className="flex items-end justify-center"
-                style={{
-                  width: CELL,
-                  height: COLHEAD_H,
-                  backgroundColor: tintFor(e.section),
-                  borderRight: "1px solid rgba(255,255,255,0.7)",
-                }}
-              >
-                <span
-                  className="py-1 text-[10px] text-gray-700"
-                  style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-                >
-                  {e.label}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {/* Rows */}
-          {entities.map((rowE) => (
-            <div key={rowE.code} className="flex items-center">
-              <div
-                className="truncate px-1 text-right text-[10px] leading-4.5 text-gray-700"
-                style={{
-                  width: LABEL_W,
-                  height: CELL,
-                  backgroundColor: tintFor(rowE.section),
-                  borderBottom: "1px solid rgba(255,255,255,0.7)",
-                }}
-                title={rowE.code}
-              >
-                {rowE.label}
-              </div>
-              {entities.map((colE) => {
-                const isDiagonal = rowE.code === colE.code;
-                const value = isDiagonal
-                  ? 0
-                  : matrix.pairs[pairKey(rowE.code, colE.code)] ?? 0;
-                const bg = isDiagonal ? null : cellColor(rowE, colE, value);
-                const isSelected =
-                  !!selected &&
-                  !isDiagonal &&
-                  ((selected.a.code === rowE.code &&
-                    selected.b.code === colE.code) ||
-                    (selected.a.code === colE.code &&
-                      selected.b.code === rowE.code));
+              {bands.map((b, i) => {
+                const bc =
+                  b.section === "other" ? crossColor : colorFor(b.section);
                 return (
                   <div
-                    key={colE.code}
-                    onMouseEnter={() =>
-                      !isDiagonal && setHover({ a: rowE, b: colE, value })
-                    }
-                    onClick={() => !isDiagonal && selectPair(rowE, colE)}
-                    title={
-                      isDiagonal
-                        ? rowE.label
-                        : `${rowE.label} ↔ ${colE.label}: ${value}`
-                    }
-                    style={{
-                      width: CELL,
-                      height: CELL,
-                      backgroundColor: bg ?? (isDiagonal ? "#f9fafb" : "#fff"),
-                      outline: isSelected
-                        ? "2px solid #111827"
-                        : "0.5px solid rgba(0,0,0,0.04)",
-                      outlineOffset: isSelected ? "-1px" : undefined,
-                      cursor: isDiagonal ? "default" : "pointer",
-                    }}
-                  />
+                    key={i}
+                    className="relative h-full"
+                    style={{ width: b.count * CELL }}
+                  >
+                    {/* Label constrained to the band width: multi-word labels wrap
+                      (e.g. Humanitarian → two lines); short un-wrappable ones
+                      (H/R, Legal) overflow centred into empty space. */}
+                    <span
+                      className="absolute bottom-1 left-0 w-full text-center text-[11px] leading-[1.05] font-semibold"
+                      style={{ color: bc, hyphens: "manual" }}
+                    >
+                      {SECTION_META[b.section].label}
+                    </span>
+                    <div
+                      className="absolute bottom-0 left-0 w-full border-b-2"
+                      style={{ borderColor: bc }}
+                    />
+                  </div>
                 );
               })}
             </div>
-          ))}
-        </div>
-      </div>
 
-      {/* Detail panel — cross-cited mandates for the clicked cell */}
-      <DetailPanel
-        selected={selected}
-        mandates={mandates}
-        loading={isPending}
-        onClose={() => setSelected(null)}
-      />
+            <div
+              ref={gridRef}
+              role="grid"
+              aria-label={`${layer.label} shared mandates by entity pair`}
+              aria-describedby={gridHelpId}
+              aria-rowcount={entities.length + 1}
+              aria-colcount={entities.length + 1}
+            >
+              {/* Column labels */}
+              <div role="row" className="flex items-end">
+                <div
+                  role="columnheader"
+                  className="flex items-end justify-start pr-1 text-[10px] font-semibold text-gray-500"
+                  style={{ width: LABEL_W, height: COLHEAD_H }}
+                >
+                  Cross-citation
+                </div>
+                {entities.map((e) => (
+                  <div
+                    key={e.code}
+                    role="columnheader"
+                    className="flex items-end justify-center"
+                    style={{
+                      width: CELL,
+                      height: COLHEAD_H,
+                      backgroundColor: tintFor(e.section),
+                      borderRight: "1px solid rgba(255,255,255,0.7)",
+                    }}
+                  >
+                    <span
+                      className="py-1 text-[10px] text-gray-700"
+                      style={{
+                        writingMode: "vertical-rl",
+                        transform: "rotate(180deg)",
+                      }}
+                    >
+                      {e.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Rows */}
+              {entities.map((rowE, rowIndex) => (
+                <div key={rowE.code} role="row" className="flex items-center">
+                  <div
+                    role="rowheader"
+                    className="truncate px-1 text-right text-[10px] leading-4.5 text-gray-700"
+                    style={{
+                      width: LABEL_W,
+                      height: CELL,
+                      backgroundColor: tintFor(rowE.section),
+                      borderBottom: "1px solid rgba(255,255,255,0.7)",
+                    }}
+                    title={rowE.code}
+                  >
+                    {rowE.label}
+                  </div>
+                  {entities.map((colE, colIndex) => {
+                    const isDiagonal = rowE.code === colE.code;
+                    const value = isDiagonal
+                      ? 0
+                      : (matrix.pairs[pairKey(rowE.code, colE.code)] ?? 0);
+                    const bg = isDiagonal ? null : cellColor(rowE, colE, value);
+                    const isSelected =
+                      !!selected &&
+                      !isDiagonal &&
+                      ((selected.a.code === rowE.code &&
+                        selected.b.code === colE.code) ||
+                        (selected.a.code === colE.code &&
+                          selected.b.code === rowE.code));
+                    return (
+                      <div
+                        key={colE.code}
+                        role="gridcell"
+                        data-row={rowIndex}
+                        data-col={colIndex}
+                        aria-selected={isSelected}
+                        aria-label={
+                          isDiagonal
+                            ? `${rowE.label}: same entity`
+                            : `${rowE.label} and ${colE.label}: ${value} ${isDiff ? "change in shared mandates" : "shared mandates"}. Show mandates`
+                        }
+                        tabIndex={
+                          focusedCell === `${rowE.code}:${colE.code}` ||
+                          (!focusedCellVisible &&
+                            rowIndex === 0 &&
+                            colIndex === (entities.length > 1 ? 1 : 0))
+                            ? 0
+                            : -1
+                        }
+                        className="focus-visible:z-10 focus-visible:!outline-2 focus-visible:!outline-offset-1 focus-visible:!outline-un-blue"
+                        onFocus={() => {
+                          setFocusedCell(`${rowE.code}:${colE.code}`);
+                          setHover({ a: rowE, b: colE, value });
+                        }}
+                        onKeyDown={(event) => {
+                          if (
+                            (event.key === "Enter" || event.key === " ") &&
+                            !isDiagonal
+                          ) {
+                            event.preventDefault();
+                            selectPair(rowE, colE);
+                            return;
+                          }
+                          let nextRow = rowIndex;
+                          let nextCol = colIndex;
+                          switch (event.key) {
+                            case "ArrowDown":
+                              nextRow += 1;
+                              break;
+                            case "ArrowUp":
+                              nextRow -= 1;
+                              break;
+                            case "ArrowRight":
+                              nextCol += 1;
+                              break;
+                            case "ArrowLeft":
+                              nextCol -= 1;
+                              break;
+                            case "Home":
+                              nextCol = 0;
+                              break;
+                            case "End":
+                              nextCol = entities.length - 1;
+                              break;
+                            default:
+                              return;
+                          }
+                          event.preventDefault();
+                          nextRow = Math.max(
+                            0,
+                            Math.min(entities.length - 1, nextRow),
+                          );
+                          nextCol = Math.max(
+                            0,
+                            Math.min(entities.length - 1, nextCol),
+                          );
+                          gridRef.current
+                            ?.querySelector<HTMLElement>(
+                              `[data-row="${nextRow}"][data-col="${nextCol}"]`,
+                            )
+                            ?.focus();
+                        }}
+                        onMouseEnter={() =>
+                          !isDiagonal && setHover({ a: rowE, b: colE, value })
+                        }
+                        onClick={() => !isDiagonal && selectPair(rowE, colE)}
+                        title={
+                          isDiagonal
+                            ? rowE.label
+                            : `${rowE.label} ↔ ${colE.label}: ${value}`
+                        }
+                        style={{
+                          width: CELL,
+                          height: CELL,
+                          backgroundColor:
+                            bg ?? (isDiagonal ? "#f9fafb" : "#fff"),
+                          outline: isSelected
+                            ? "2px solid #111827"
+                            : "0.5px solid rgba(0,0,0,0.04)",
+                          outlineOffset: isSelected ? "-1px" : undefined,
+                          cursor: isDiagonal ? "default" : "pointer",
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Detail panel — cross-cited mandates for the clicked cell */}
+        <DetailPanel
+          selected={selected}
+          mandates={mandates}
+          loading={isPending}
+          onClose={() => setSelected(null)}
+        />
       </div>
 
       {/* Legend */}
@@ -577,7 +697,8 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
           <LegendSwatch key={it.label} color={it.color} label={it.label} />
         ))}
         <span className="text-gray-400">
-          Intensity = {isDiff ? "magnitude of change" : "number of shared mandates"}
+          Intensity ={" "}
+          {isDiff ? "magnitude of change" : "number of shared mandates"}
         </span>
       </div>
 
@@ -647,7 +768,10 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
             <div className="flex items-center gap-2 text-xs text-gray-600">
               <span className="font-semibold text-gray-500">Scale</span>
               {(["section", "global"] as const).map((m) => (
-                <label key={m} className="flex cursor-pointer items-center gap-1">
+                <label
+                  key={m}
+                  className="flex cursor-pointer items-center gap-1"
+                >
                   <input
                     type="radio"
                     name="scaleMode"
@@ -720,7 +844,7 @@ function DetailPanel({
               <X className="h-4 w-4" />
             </button>
           </div>
-          <div className="scrollbar-thin max-h-[70vh] overflow-y-auto p-2">
+          <div className="max-h-[70vh] scrollbar-thin overflow-y-auto p-2">
             {loading ? (
               <p className="p-2 text-sm text-gray-400">Loading…</p>
             ) : mandates.length === 0 ? (
@@ -774,7 +898,7 @@ function MandateItem({ m }: { m: SharedMandate }) {
 function VersionPill({ label, color }: { label: string; color: string }) {
   return (
     <span
-      className="rounded px-1 text-[10px] font-semibold leading-4 text-white"
+      className="rounded px-1 text-[10px] leading-4 font-semibold text-white"
       style={{ backgroundColor: color }}
     >
       {label}
@@ -805,7 +929,8 @@ function ColorField({
         type="text"
         value={value}
         onChange={(e) => {
-          if (/^#[0-9a-fA-F]{6}$/.test(e.target.value)) onChange(e.target.value);
+          if (/^#[0-9a-fA-F]{6}$/.test(e.target.value))
+            onChange(e.target.value);
         }}
         className="w-20 rounded border border-gray-200 px-1.5 py-0.5 font-mono text-[11px] text-gray-700"
       />

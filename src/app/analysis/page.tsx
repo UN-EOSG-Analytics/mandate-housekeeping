@@ -10,7 +10,7 @@ import { AnalysisDashboard } from "./AnalysisDashboard";
 
 export const metadata = {
   title: "Analysis | Mandate Housekeeping Platform",
-  description: "Decision distribution and citation impact analysis",
+  description: "Decision distribution and mandate impact analysis",
 };
 
 export default async function AnalysisPage() {
@@ -39,7 +39,7 @@ export default async function AnalysisPage() {
             </h1>
             <p className="mt-2 text-base text-gray-500">
               Review decisions, with entity submissions as fallback, and their
-              projected impact on citation counts
+              projected impact on distinct cited mandates
             </p>
           </div>
           <a

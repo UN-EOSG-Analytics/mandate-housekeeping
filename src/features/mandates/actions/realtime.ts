@@ -36,7 +36,7 @@ export async function getRealtimeChangesAction(
   if (!entity) return { success: false, error: "Entity required" };
   const sinceDate = since
     ? new Date(isNaN(Number(since)) ? since : Number(since))
-    : new Date(Date.now() - 30000);
+    : new Date(0);
   if (!Number.isFinite(sinceDate.getTime()))
     return { success: false, error: "Invalid change cursor" };
 
@@ -44,14 +44,15 @@ export async function getRealtimeChangesAction(
     return await transaction(async (tx) => {
       const user = await getCurrentUser(tx);
       if (!user) return { success: false as const, error: "Unauthorized" };
-      // Use database time captured BEFORE reads. Overlap catches commits whose
-      // event timestamp precedes visibility; clients deduplicate event IDs. Keep
-      // every event so a late commit cannot hide behind an already-seen event.
+      // Capture database time before reads and overlap incremental windows.
+      // A missing cursor reconciles all document keys, including transactions
+      // that committed too late for the overlap window. Return the latest event
+      // for each key rather than replaying its entire audit history.
       const [clock] = await tx<{ server_time: string }>(
         "SELECT clock_timestamp()::text AS server_time",
       );
       const changes = await tx<RealtimeChange>(
-        `SELECT *
+        `SELECT ${since ? "*" : 'DISTINCT ON ("table", document_symbol, subprogramme) *'}
          FROM (
            SELECT id, 'mandate_decisions'::text AS "table", document_symbol,
              subprogramme, created_at::text
@@ -65,7 +66,7 @@ export async function getRealtimeChangesAction(
            WHERE entity = $1 AND created_at >= $2::timestamptz - interval '30 seconds'
              AND created_at <= $3::timestamptz
          ) events
-         ORDER BY created_at::timestamptz, id`,
+         ORDER BY ${since ? "" : '"table", document_symbol, subprogramme,'} created_at::timestamptz DESC, id DESC`,
         [entity, sinceDate.toISOString(), clock.server_time],
       );
       const sessions = await tx<{ id: string; started_by: string | null }>(

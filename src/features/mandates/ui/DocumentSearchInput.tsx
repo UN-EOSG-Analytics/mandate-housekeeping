@@ -47,7 +47,7 @@ export function DocumentSearchInput({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const listId = useId();
-  const { results, searching, searchDone, searchError, retry } =
+  const { results, searching, searchDone, searchError, retry, invalidate } =
     useDocumentSearch(query, focused && !showManualForm);
   const hasManualOption = searchDone || searchError;
   const totalItems = results.length + (hasManualOption ? 1 : 0);
@@ -67,21 +67,24 @@ export function DocumentSearchInput({
     if (initialQuery === lastInitialQuery.current) return;
     const timer = setTimeout(() => {
       lastInitialQuery.current = initialQuery;
+      invalidate();
       setQuery(initialQuery || "");
       setHighlighted(-1);
       inputRef.current?.focus();
       setOpen(true);
     }, 0);
     return () => clearTimeout(timer);
-  }, [initialQuery]);
+  }, [initialQuery, invalidate]);
 
   const handleInputChange = (value: string) => {
+    invalidate();
     setQuery(value);
     setHighlighted(-1);
     setOpen(true);
   };
 
   const handleSelect = (doc: SearchResult) => {
+    invalidate();
     onSelect(doc.symbol);
     setQuery("");
     setOpen(false);
@@ -89,6 +92,7 @@ export function DocumentSearchInput({
   };
 
   const handleOpenManualForm = () => {
+    invalidate();
     setShowManualForm(true);
     setFocused(false);
     setOpen(false);
@@ -96,6 +100,7 @@ export function DocumentSearchInput({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
+      invalidate();
       e.preventDefault();
       e.stopPropagation();
       if (!dropdownOpen) setQuery("");
@@ -177,10 +182,12 @@ export function DocumentSearchInput({
                 value={query}
                 onChange={(e) => handleInputChange(e.target.value)}
                 onFocus={() => {
+                  invalidate();
                   setFocused(true);
                   setOpen(true);
                 }}
                 onBlur={() => {
+                  invalidate();
                   setFocused(false);
                   setOpen(false);
                 }}
@@ -205,7 +212,13 @@ export function DocumentSearchInput({
               {onCancel && (
                 <button
                   type="button"
-                  onClick={onCancel}
+                  aria-label="Cancel document search"
+                  onClick={() => {
+                    invalidate();
+                    setQuery("");
+                    setOpen(false);
+                    onCancel();
+                  }}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <X className="h-4 w-4" />

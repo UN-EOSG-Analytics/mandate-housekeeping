@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { createPortal } from "react-dom";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   getReasonsForDecision,
   getReasonLabel,
@@ -9,7 +9,6 @@ import {
 } from "@/features/mandates/services/decision-reasons";
 import { typography } from "@un-eosg/ui/typography";
 import { cn } from "@/lib/utils";
-import { POPUP_STYLES } from "@/lib/theme";
 import {
   X,
   Check,
@@ -33,6 +32,7 @@ interface ReasonPopupProps {
   onClose: () => void;
   isOpen: boolean;
   symbol?: string;
+  onRestoreFocus?: () => void;
 }
 
 /**
@@ -108,13 +108,12 @@ export function ReasonPopup({
   onClose,
   isOpen,
   symbol,
+  onRestoreFocus,
 }: ReasonPopupProps) {
   const [localOtherReason, setLocalOtherReason] = React.useState(
     otherReason ?? "",
   );
   const [localReason, setLocalReason] = React.useState<string | null>(reason);
-  const [mounted, setMounted] = React.useState(false);
-  const containerRef = React.useRef<HTMLDivElement>(null);
 
   const reasons = getReasonsForDecision(decision);
 
@@ -123,53 +122,6 @@ export function ReasonPopup({
     const IconComponent = REASON_ICONS[reasonId] || MessageSquare;
     return <IconComponent className="h-4 w-4" />;
   };
-
-  // Client-side only rendering for portal
-  React.useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMounted(true);
-  }, []);
-
-  // Lock body scroll when modal is open (comprehensive solution for all browsers including iOS)
-  React.useEffect(() => {
-    if (!isOpen) return;
-
-    const scrollY = window.scrollY;
-    const originalStyles = {
-      overflow: document.body.style.overflow,
-      position: document.body.style.position,
-      top: document.body.style.top,
-      width: document.body.style.width,
-    };
-
-    // Apply scroll lock
-    document.body.style.overflow = "hidden";
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.width = "100%";
-
-    return () => {
-      // Restore original styles
-      document.body.style.overflow = originalStyles.overflow;
-      document.body.style.position = originalStyles.position;
-      document.body.style.top = originalStyles.top;
-      document.body.style.width = originalStyles.width;
-      // Restore scroll position
-      window.scrollTo(0, scrollY);
-    };
-  }, [isOpen]);
-
-  // Close on escape key
-  React.useEffect(() => {
-    if (!isOpen) return;
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
 
   // Sync local state with props
   React.useEffect(() => {
@@ -198,33 +150,34 @@ export function ReasonPopup({
     onClose();
   };
 
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
-  if (!isOpen || !mounted) return null;
-
   const decisionLabel = decision.charAt(0).toUpperCase() + decision.slice(1);
 
-  const modal = (
-    <div
-      className={`fixed inset-0 z-50 flex items-center justify-center ${POPUP_STYLES.overlay}`}
-      style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0 }}
-      onClick={handleBackdropClick}
+  return (
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
     >
-      <div
-        ref={containerRef}
-        className={`mx-4 max-w-lg animate-in ${POPUP_STYLES.popup} shadow-xl duration-150 zoom-in-95 fade-in`}
-        onClick={(e) => e.stopPropagation()}
+      <DialogContent
+        showCloseButton={false}
+        aria-describedby={undefined}
+        onCloseAutoFocus={(event) => {
+          if (onRestoreFocus) {
+            event.preventDefault();
+            onRestoreFocus();
+          }
+        }}
+        className="max-h-[calc(100dvh-2rem)] gap-0 overflow-y-auto p-0 text-left sm:max-w-lg"
       >
         {/* Header */}
         <div className="flex items-center justify-between rounded-t-lg border-b border-border bg-un-blue-surface px-4 py-3">
-          <span className={cn(typography.body, "font-medium text-foreground")}>
+          <DialogTitle
+            className={cn(typography.body, "font-medium text-foreground")}
+          >
             Why {decisionLabel.toLowerCase()}
             {symbol && <span className="font-semibold"> {symbol}</span>}?
-          </span>
+          </DialogTitle>
           <button
             onClick={onClose}
             aria-label="Close reason selection"
@@ -295,11 +248,9 @@ export function ReasonPopup({
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
-
-  return createPortal(modal, document.body);
 }
 
 /**

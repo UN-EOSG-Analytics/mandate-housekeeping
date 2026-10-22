@@ -33,21 +33,21 @@ export async function requestMagicLinkAction(
 
   const trimmedEmail = email.trim();
 
-  if (!(await isAllowedDomain(trimmedEmail))) {
-    return { success: false, error: "Email domain not allowed" };
-  }
-
-  // Check for recent token to prevent spam
-  const hasRecentToken = await recentTokenExists(trimmedEmail);
-  if (hasRecentToken) {
-    return {
-      success: false,
-      error:
-        "A magic link was recently sent. Please check your email or wait a few minutes.",
-    };
-  }
-
   try {
+    if (!(await isAllowedDomain(trimmedEmail))) {
+      return { success: false, error: "Email domain not allowed" };
+    }
+
+    // Check for recent token to prevent spam
+    const hasRecentToken = await recentTokenExists(trimmedEmail);
+    if (hasRecentToken) {
+      return {
+        success: false,
+        error:
+          "A magic link was recently sent. Please check your email or wait a few minutes.",
+      };
+    }
+
     const token = await createMagicToken(trimmedEmail);
     await sendMagicLink(trimmedEmail, token);
     return { success: true };

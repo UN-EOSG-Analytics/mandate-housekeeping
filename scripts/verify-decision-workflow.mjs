@@ -78,13 +78,20 @@ function dropdown(props) {
   };
   function ReasonPopup() {}
   function Placeholder() {}
+  function DropdownMenu() {}
+  function DropdownMenuItem() {}
   const colors = { bg: "", border: "", text: "", hover: "" };
   const { DecisionDropdown } = loadSource(
     "src/components/DecisionDropdown.tsx",
     {
       react: hooks,
       "@un-eosg/ui/typography": sharedTypography,
-      "react-dom": { createPortal: (node) => node },
+      "@/components/ui/dropdown-menu": {
+        DropdownMenu,
+        DropdownMenuItem,
+        DropdownMenuContent: Placeholder,
+        DropdownMenuTrigger: Placeholder,
+      },
       "lucide-react": {
         ChevronDown: Placeholder,
         Pencil: Placeholder,
@@ -116,16 +123,19 @@ function dropdown(props) {
     cursor = 0;
     return DecisionDropdown(props);
   };
-  const select = () => {
-    const previous = global.document;
-    global.document = { body: {} };
-    try {
-      find(render(), (node) => node.type === "button").props.onClick();
-      return find(render(), (node) => node.type.name === "DropdownMenu").props
-        .onSelect;
-    } finally {
-      global.document = previous;
-    }
+  const select = () => (value) => {
+    const label = {
+      "": "—",
+      retain: "Retain",
+      remove: "Remove",
+      update: "Update",
+    }[value];
+    const menu = find(render(), (node) => node.type === DropdownMenu);
+    menu.props.onOpenChange(true);
+    return find(
+      render(),
+      (node) => node.type === DropdownMenuItem && node.props.children === label,
+    ).props.onSelect();
   };
   return {
     render,
@@ -159,7 +169,7 @@ test("reason popup opens immediately and a fast choice waits for the exact saved
     tree,
     (node) =>
       node.type === "button" &&
-      node.props.onClick.toString().includes("stopPropagation"),
+      node.props.onClick?.toString().includes("stopPropagation"),
   );
   assert.equal(pencil.props.disabled, true);
   const queuedReason = ui.popup(tree).props.onChange("delivered", null);
@@ -221,10 +231,20 @@ test("reason saves block repeated edits until persistence finishes", async () =>
   const pending = callback("delivered", null);
   await callback("other", "second click");
   assert.equal(calls, 1);
-  assert.equal(ui.render().props["aria-busy"], true);
+  assert.equal(
+    find(ui.render(), (node) => node.props["aria-busy"] !== undefined).props[
+      "aria-busy"
+    ],
+    true,
+  );
   reason.resolve(true);
   await pending;
-  assert.equal(ui.render().props["aria-busy"], false);
+  assert.equal(
+    find(ui.render(), (node) => node.props["aria-busy"] !== undefined).props[
+      "aria-busy"
+    ],
+    false,
+  );
 });
 
 test("failed and throwing saves close the popup and report failure", async () => {

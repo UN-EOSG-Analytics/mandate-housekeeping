@@ -144,13 +144,10 @@ html {
   scrollbar-gutter: stable;
 }
 
-/* Accessible focus indicators - subtle styling */
-*:focus {
-  outline: none;
-}
-
+/* Keep a visible keyboard focus fallback, including controls without a ring. */
 *:focus-visible {
-  outline: none;
+  outline: 2px solid var(--color-un-blue, #009edb);
+  outline-offset: 2px;
 }
 
 /* Custom scrollbar styling for small containers */

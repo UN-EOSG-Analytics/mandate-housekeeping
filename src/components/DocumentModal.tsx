@@ -6,7 +6,7 @@ import { type BudgetVersion } from "@/lib/db/budget-version";
 import { CommentsDecisionPanel } from "./CommentsDecisionPanel";
 
 import React, { useContext } from "react";
-import { createPortal } from "react-dom";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DecisionTracksContext } from "./ReviewDecisionControl";
 import { CommentConversationContext } from "./CommentConversationContext";
 import { DocumentSymbol as SharedDocumentSymbol } from "@un-eosg/ui/components/document-symbol";
@@ -783,26 +783,8 @@ export function DocumentSymbol({
     documentVersions,
     versionsLoading,
   } = useDocumentSidebarData({ open, symbol, budgetVersion, activeTab });
-  const sidebarRef = useRef<HTMLDivElement>(null);
-  const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Portals need a client DOM host after hydration.
-    setPortalHost(document.body);
-  }, []);
+  const openerRef = useRef<HTMLElement | null>(null);
   const commentsSectionRef = useRef<HTMLElement>(null);
-
-  // Close on Escape key
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, setOpen]);
 
   // Set initial tab when modal opens with a specific tab
   useEffect(() => {
@@ -933,516 +915,487 @@ export function DocumentSymbol({
   const sidebarOnly = controlledOpen !== undefined;
 
   return (
-    <>
+    <Dialog open={open} onOpenChange={setOpen}>
       {!sidebarOnly &&
         (isTruncated ? <Tooltip content={symbol}>{btn}</Tooltip> : btn)}
 
-      {open &&
-        portalHost &&
-        createPortal(
-          <div className="fixed inset-0 z-50 flex cursor-default justify-end">
-            <div
-              className="absolute inset-0 cursor-pointer bg-black/20"
+      <DialogContent
+        showCloseButton={false}
+        aria-describedby={undefined}
+        onOpenAutoFocus={() => {
+          openerRef.current =
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement
+              : null;
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (openerRef.current?.isConnected) openerRef.current.focus();
+        }}
+        className="top-0 right-0 left-auto flex h-dvh w-full max-w-full translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 bg-white p-0 shadow-xl data-[state=closed]:animate-none data-[state=open]:animate-none sm:max-w-xl"
+      >
+        <div className="border-b p-5 pb-0">
+          <div className="flex items-start justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-3">
+                <DialogTitle className="text-xl font-semibold text-foreground">
+                  {symbol}
+                </DialogTitle>
+                {isFoundational && (
+                  <Tooltip content="Also cited in the Mandates and Background section">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-un-blue/10 px-2.5 py-0.5 text-xs font-medium text-un-blue-text">
+                      <Star className="h-3 w-3 fill-un-blue" strokeWidth={0} />
+                      Foundational
+                    </span>
+                  </Tooltip>
+                )}
+              </div>
+              {title && (
+                <p className={cn(typography.body, "mt-1 text-foreground")}>
+                  {title}
+                </p>
+              )}
+            </div>
+            <button
               onClick={() => setOpen(false)}
-            />
-
-            <div
-              ref={sidebarRef}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="sidebar-title"
-              className="relative flex h-full w-full max-w-xl cursor-default flex-col bg-white shadow-xl"
+              aria-label="Close sidebar"
+              className="ml-2 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
             >
-              <div className="border-b p-5 pb-0">
-                <div className="flex items-start justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-3">
-                      <h2
-                        id="sidebar-title"
-                        className="text-xl font-semibold text-foreground"
-                      >
-                        {symbol}
-                      </h2>
-                      {isFoundational && (
-                        <Tooltip content="Also cited in the Mandates and Background section">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-un-blue/10 px-2.5 py-0.5 text-xs font-medium text-un-blue-text">
-                            <Star
-                              className="h-3 w-3 fill-un-blue"
-                              strokeWidth={0}
-                            />
-                            Foundational
-                          </span>
-                        </Tooltip>
-                      )}
-                    </div>
-                    {title && (
-                      <p
-                        className={cn(typography.body, "mt-1 text-foreground")}
-                      >
-                        {title}
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => setOpen(false)}
-                    aria-label="Close sidebar"
-                    className="ml-2 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
+              <X className="h-5 w-5" />
+            </button>
+          </div>
 
-                {/* Tabs */}
-                <div className="mt-5 flex gap-1">
-                  <button
-                    onClick={() => setActiveTab("info")}
-                    className={`flex items-center gap-1.5 rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors ${
-                      activeTab === "info"
-                        ? "bg-gray-100 text-foreground"
-                        : "text-gray-500 hover:bg-gray-50 hover:text-foreground"
-                    }`}
-                  >
-                    <Info className="h-4 w-4" />
-                    Info
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("paragraphs")}
-                    className={`flex items-center gap-1.5 rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors ${
-                      activeTab === "paragraphs"
-                        ? "bg-gray-100 text-foreground"
-                        : "text-gray-500 hover:bg-gray-50 hover:text-foreground"
-                    }`}
-                  >
-                    <FileText className="h-4 w-4" />
-                    Paragraphs
-                    {paragraphs && paragraphs.length > 0 && (
-                      <span className="ml-1 rounded-full bg-gray-200 px-1.5 py-0.5 text-xs text-gray-600">
-                        {paragraphs.length}
-                      </span>
-                    )}
-                  </button>
+          {/* Tabs */}
+          <div className="mt-5 flex gap-1">
+            <button
+              onClick={() => setActiveTab("info")}
+              className={`flex items-center gap-1.5 rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors ${
+                activeTab === "info"
+                  ? "bg-gray-100 text-foreground"
+                  : "text-gray-500 hover:bg-gray-50 hover:text-foreground"
+              }`}
+            >
+              <Info className="h-4 w-4" />
+              Info
+            </button>
+            <button
+              onClick={() => setActiveTab("paragraphs")}
+              className={`flex items-center gap-1.5 rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors ${
+                activeTab === "paragraphs"
+                  ? "bg-gray-100 text-foreground"
+                  : "text-gray-500 hover:bg-gray-50 hover:text-foreground"
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              Paragraphs
+              {paragraphs && paragraphs.length > 0 && (
+                <span className="ml-1 rounded-full bg-gray-200 px-1.5 py-0.5 text-xs text-gray-600">
+                  {paragraphs.length}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto bg-gray-100 p-5">
+          {/* Keep Info mounted across tabs so comment drafts survive. */}
+          <div hidden={activeTab !== "info"} className="space-y-4">
+            <section className="rounded-xl bg-white p-3 shadow-sm">
+              <h3 className={cn(typography.eyebrow, "mb-2")}>
+                Document Details
+              </h3>
+              <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1.5 text-sm text-foreground">
+                {year != null &&
+                  (() => {
+                    const ageInfo = getAgeIndicator(year);
+                    return (
+                      <>
+                        <dt className="text-xs">Year</dt>
+                        <dd className="flex items-center gap-2 font-medium">
+                          {year}
+                          <Tooltip content={ageInfo.tooltip}>
+                            <span
+                              className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${ageInfo.color} ${ageInfo.bgColor}`}
+                            >
+                              {ageInfo.label}
+                            </span>
+                          </Tooltip>
+                        </dd>
+                      </>
+                    );
+                  })()}
+                {body && (
+                  <>
+                    <dt className="text-xs">Issuing body</dt>
+                    <dd className="font-medium">{issuingBody}</dd>
+                  </>
+                )}
+                {docType && (
+                  <>
+                    <dt className="text-xs">Document type</dt>
+                    <dd className="font-medium">{docType}</dd>
+                  </>
+                )}
+                {link && (
+                  <>
+                    <dt className="text-xs">Source</dt>
+                    <dd>
+                      <a
+                        href={link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 font-medium text-un-blue-text hover:underline"
+                      >
+                        View PDF <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </dd>
+                  </>
+                )}
+                {citingEntities.length > 0 ? (
+                  <>
+                    <dt className="self-start pt-0.5 text-xs">Also cited by</dt>
+                    <dd className="flex flex-wrap gap-1">
+                      {citingEntities.map((citingEntity) => (
+                        <Chip
+                          key={citingEntity}
+                          density="dense"
+                          tone="neutral"
+                          href={`/entity/${encodeURIComponent(citingEntity)}/`}
+                          title={entityLongMap?.[citingEntity] || citingEntity}
+                        >
+                          {citingEntity}
+                        </Chip>
+                      ))}
+                    </dd>
+                  </>
+                ) : otherEntitiesCount != null && otherEntitiesCount > 0 ? (
+                  <>
+                    <dt className="text-xs">Also cited by</dt>
+                    <dd>
+                      {otherEntitiesCount} other{" "}
+                      {otherEntitiesCount === 1 ? "entity" : "entities"}
+                    </dd>
+                  </>
+                ) : null}
+              </dl>
+            </section>
+
+            <section ref={commentsSectionRef} className="scroll-mt-2">
+              {activityError && (
+                <p role="alert" className="mb-2 text-sm text-red-700">
+                  Could not refresh comments and decisions. Retrying…
+                </p>
+              )}
+              <CommentsDecisionPanel
+                key={`${budgetVersion}:${symbol}:${entity}:${subprogramme || ""}`}
+                symbol={symbol}
+                entity={entity}
+                subprogramme={subprogramme}
+                entitySubprogrammes={entitySubprogrammes}
+                allEntities={allEntities}
+                loading={activityLoading}
+                decisions={allDecisions}
+                comments={allComments}
+                readCommentIds={readCommentIds}
+                userEmail={currentUserEmail}
+                budgetVersion={budgetVersion}
+                readOnly={readOnly}
+                state={state}
+                onDecision={onDecision}
+                onReasonChange={onReasonChange}
+                onUpdateClick={onUpdateClick}
+                targetCommentId={targetCommentId}
+                onComment={
+                  onComment
+                    ? async (text) => {
+                        const saved = await onComment(text);
+                        if (saved)
+                          setAllComments((previous) => [
+                            ...previous.filter((c) => c.id !== saved.id),
+                            saved,
+                          ]);
+                        return saved;
+                      }
+                    : undefined
+                }
+                onDecisionSaved={(event) =>
+                  setAllDecisions((previous) => [
+                    ...previous.filter((d) => d.id !== event.id),
+                    event,
+                  ])
+                }
+                onRead={handleRead}
+              />
+            </section>
+
+            {/* Newer Versions */}
+            {!versionsLoading &&
+              (() => {
+                // Find current document index
+                const currentIndex = documentVersions.findIndex(
+                  (v) => v.symbol === symbol,
+                );
+                // Only show versions newer than current (after current index in the sorted list)
+                const newerVersions =
+                  currentIndex >= 0
+                    ? documentVersions.slice(currentIndex + 1)
+                    : [];
+
+                if (newerVersions.length > 0) {
+                  return (
+                    <div className="rounded-xl bg-white p-4 shadow-sm">
+                      <h3 className={cn(typography.eyebrow, "mb-3")}>
+                        Newer Versions ({newerVersions.length})
+                      </h3>
+                      {/* Header row */}
+                      <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] items-center gap-x-3 gap-y-2 text-xs">
+                        <span className="font-medium text-gray-500">Year</span>
+                        <span className="font-medium text-gray-500">
+                          Symbol
+                        </span>
+                        <span className="text-center font-medium text-gray-500">
+                          vs Original
+                        </span>
+                        <span className="text-center font-medium text-gray-500">
+                          vs Previous
+                        </span>
+                        <span className="font-medium text-gray-500">PDF</span>
+                        <span className="font-medium text-gray-500">
+                          Action
+                        </span>
+
+                        {newerVersions.map((version, idx) => {
+                          // Previous version is either the one before in newerVersions, or the current document
+                          const previousSymbol =
+                            idx === 0 ? symbol : newerVersions[idx - 1].symbol;
+                          return (
+                            <React.Fragment key={version.symbol}>
+                              {/* Year */}
+                              <span className="text-sm text-foreground">
+                                {version.year}
+                              </span>
+
+                              {/* Symbol */}
+                              <span className="truncate text-sm font-medium text-foreground">
+                                {version.symbol}
+                              </span>
+
+                              {/* Compare with Original */}
+                              <a
+                                href={getDocumentComparisonUrl(
+                                  symbol,
+                                  version.symbol,
+                                )}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={`inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${UN_BLUE.badge}`}
+                                title={`Compare ${version.symbol} with ${symbol} in a new tab`}
+                              >
+                                <ArrowLeftRight className="h-3 w-3" />
+                              </a>
+
+                              {/* Compare with Previous */}
+                              <a
+                                href={
+                                  idx === 0
+                                    ? undefined
+                                    : getDocumentComparisonUrl(
+                                        previousSymbol,
+                                        version.symbol,
+                                      )
+                                }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-disabled={idx === 0}
+                                tabIndex={idx === 0 ? -1 : undefined}
+                                className={`inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
+                                  idx === 0
+                                    ? "cursor-not-allowed bg-gray-100 text-gray-400"
+                                    : UN_BLUE.badge
+                                }`}
+                                title={
+                                  idx === 0
+                                    ? "Same as original"
+                                    : `Compare ${version.symbol} with ${previousSymbol} in a new tab`
+                                }
+                              >
+                                <ArrowLeftRight className="h-3 w-3" />
+                              </a>
+
+                              {/* View PDF */}
+                              <a
+                                href={`https://docs.un.org/en/${version.symbol}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center justify-center rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-200"
+                                title="View PDF in ODS in a new tab"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+
+                              {/* Update To */}
+                              {trackContext?.canEditSubmission &&
+                              onUpdateClick ? (
+                                <button
+                                  onClick={() => {
+                                    onUpdateClick(version.symbol);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
+                                  title="Update the mandate citation to this newer version"
+                                >
+                                  <ArrowRight className="h-3 w-3" />
+                                  Update
+                                </button>
+                              ) : (
+                                <span className="text-xs text-gray-400">—</span>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                }
+
+                return null;
+              })()}
+          </div>
+
+          {/* Paragraphs Tab */}
+          {activeTab === "paragraphs" && (
+            <div className="space-y-4">
+              {/* Search Box */}
+              <div className="rounded-xl bg-white p-4 shadow-sm">
+                <div className={cn(typography.eyebrow, "mb-2")}>
+                  Search in document
+                </div>
+                <div className="relative">
+                  <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search for keywords in paragraphs..."
+                    className="w-full rounded-lg border border-gray-200 bg-white py-2 pr-4 pl-10 text-sm placeholder:text-gray-400 focus:border-un-blue focus:ring-2 focus:ring-un-blue/20 focus:outline-none"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto bg-gray-100 p-5">
-                {/* Keep Info mounted across tabs so comment drafts survive. */}
-                <div hidden={activeTab !== "info"} className="space-y-4">
-                  <section className="rounded-xl bg-white p-3 shadow-sm">
-                    <h3 className={cn(typography.eyebrow, "mb-2")}>
-                      Document Details
-                    </h3>
-                    <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1.5 text-sm text-foreground">
-                      {year != null &&
-                        (() => {
-                          const ageInfo = getAgeIndicator(year);
-                          return (
-                            <>
-                              <dt className="text-xs">Year</dt>
-                              <dd className="flex items-center gap-2 font-medium">
-                                {year}
-                                <Tooltip content={ageInfo.tooltip}>
-                                  <span
-                                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${ageInfo.color} ${ageInfo.bgColor}`}
-                                  >
-                                    {ageInfo.label}
-                                  </span>
-                                </Tooltip>
-                              </dd>
-                            </>
-                          );
-                        })()}
-                      {body && (
-                        <>
-                          <dt className="text-xs">Issuing body</dt>
-                          <dd className="font-medium">{issuingBody}</dd>
-                        </>
-                      )}
-                      {docType && (
-                        <>
-                          <dt className="text-xs">Document type</dt>
-                          <dd className="font-medium">{docType}</dd>
-                        </>
-                      )}
-                      {link && (
-                        <>
-                          <dt className="text-xs">Source</dt>
-                          <dd>
-                            <a
-                              href={link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 font-medium text-un-blue-text hover:underline"
-                            >
-                              View PDF <ExternalLink className="h-3 w-3" />
-                            </a>
-                          </dd>
-                        </>
-                      )}
-                      {citingEntities.length > 0 ? (
-                        <>
-                          <dt className="self-start pt-0.5 text-xs">
-                            Also cited by
-                          </dt>
-                          <dd className="flex flex-wrap gap-1">
-                            {citingEntities.map((citingEntity) => (
-                              <Chip
-                                key={citingEntity}
-                                density="dense"
-                                tone="neutral"
-                                href={`/entity/${encodeURIComponent(citingEntity)}/`}
-                                title={
-                                  entityLongMap?.[citingEntity] || citingEntity
-                                }
-                              >
-                                {citingEntity}
-                              </Chip>
-                            ))}
-                          </dd>
-                        </>
-                      ) : otherEntitiesCount != null &&
-                        otherEntitiesCount > 0 ? (
-                        <>
-                          <dt className="text-xs">Also cited by</dt>
-                          <dd>
-                            {otherEntitiesCount} other{" "}
-                            {otherEntitiesCount === 1 ? "entity" : "entities"}
-                          </dd>
-                        </>
-                      ) : null}
-                    </dl>
-                  </section>
-
-                  <section ref={commentsSectionRef} className="scroll-mt-2">
-                    {activityError && (
-                      <p role="alert" className="mb-2 text-sm text-red-700">
-                        Could not refresh comments and decisions. Retrying…
-                      </p>
-                    )}
-                    <CommentsDecisionPanel
-                      key={`${budgetVersion}:${symbol}:${entity}:${subprogramme || ""}`}
-                      symbol={symbol}
-                      entity={entity}
-                      subprogramme={subprogramme}
-                      entitySubprogrammes={entitySubprogrammes}
-                      allEntities={allEntities}
-                      loading={activityLoading}
-                      decisions={allDecisions}
-                      comments={allComments}
-                      readCommentIds={readCommentIds}
-                      userEmail={currentUserEmail}
-                      budgetVersion={budgetVersion}
-                      readOnly={readOnly}
-                      state={state}
-                      onDecision={onDecision}
-                      onReasonChange={onReasonChange}
-                      onUpdateClick={onUpdateClick}
-                      targetCommentId={targetCommentId}
-                      onComment={
-                        onComment
-                          ? async (text) => {
-                              const saved = await onComment(text);
-                              if (saved)
-                                setAllComments((previous) => [
-                                  ...previous.filter((c) => c.id !== saved.id),
-                                  saved,
-                                ]);
-                              return saved;
+              {allEntities && allEntities.length > 0 && (
+                <div className="rounded-xl bg-white p-4 shadow-sm">
+                  <div className={cn(typography.eyebrow, "mb-2")}>
+                    Filter by mentioned entity (Experimental)
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      onClick={() => setSelectedEntity(null)}
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${
+                        !selectedEntity
+                          ? "bg-gray-700 text-white"
+                          : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                      }`}
+                    >
+                      All
+                    </button>
+                    {allEntities.map((e) => {
+                      const count = entityRelevanceCounts[e] || 0;
+                      return (
+                        <button
+                          key={e}
+                          onClick={() => setSelectedEntity(e)}
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${
+                            selectedEntity === e
+                              ? "bg-un-blue text-white"
+                              : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                          }`}
+                        >
+                          {e}{" "}
+                          <span
+                            className={
+                              selectedEntity === e
+                                ? "text-white/60"
+                                : "text-gray-400"
                             }
-                          : undefined
-                      }
-                      onDecisionSaved={(event) =>
-                        setAllDecisions((previous) => [
-                          ...previous.filter((d) => d.id !== event.id),
-                          event,
-                        ])
-                      }
-                      onRead={handleRead}
-                    />
-                  </section>
-
-                  {/* Newer Versions */}
-                  {!versionsLoading &&
-                    (() => {
-                      // Find current document index
-                      const currentIndex = documentVersions.findIndex(
-                        (v) => v.symbol === symbol,
+                          >
+                            ({count})
+                          </span>
+                        </button>
                       );
-                      // Only show versions newer than current (after current index in the sorted list)
-                      const newerVersions =
-                        currentIndex >= 0
-                          ? documentVersions.slice(currentIndex + 1)
-                          : [];
-
-                      if (newerVersions.length > 0) {
-                        return (
-                          <div className="rounded-xl bg-white p-4 shadow-sm">
-                            <h3 className={cn(typography.eyebrow, "mb-3")}>
-                              Newer Versions ({newerVersions.length})
-                            </h3>
-                            {/* Header row */}
-                            <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] items-center gap-x-3 gap-y-2 text-xs">
-                              <span className="font-medium text-gray-500">
-                                Year
-                              </span>
-                              <span className="font-medium text-gray-500">
-                                Symbol
-                              </span>
-                              <span className="text-center font-medium text-gray-500">
-                                vs Original
-                              </span>
-                              <span className="text-center font-medium text-gray-500">
-                                vs Previous
-                              </span>
-                              <span className="font-medium text-gray-500">
-                                PDF
-                              </span>
-                              <span className="font-medium text-gray-500">
-                                Action
-                              </span>
-
-                              {newerVersions.map((version, idx) => {
-                                // Previous version is either the one before in newerVersions, or the current document
-                                const previousSymbol =
-                                  idx === 0
-                                    ? symbol
-                                    : newerVersions[idx - 1].symbol;
-                                return (
-                                  <React.Fragment key={version.symbol}>
-                                    {/* Year */}
-                                    <span className="text-sm text-foreground">
-                                      {version.year}
-                                    </span>
-
-                                    {/* Symbol */}
-                                    <span className="truncate text-sm font-medium text-foreground">
-                                      {version.symbol}
-                                    </span>
-
-                                    {/* Compare with Original */}
-                                    <a
-                                      href={getDocumentComparisonUrl(
-                                        symbol,
-                                        version.symbol,
-                                      )}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className={`inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${UN_BLUE.badge}`}
-                                      title={`Compare ${version.symbol} with ${symbol} in a new tab`}
-                                    >
-                                      <ArrowLeftRight className="h-3 w-3" />
-                                    </a>
-
-                                    {/* Compare with Previous */}
-                                    <a
-                                      href={
-                                        idx === 0
-                                          ? undefined
-                                          : getDocumentComparisonUrl(
-                                              previousSymbol,
-                                              version.symbol,
-                                            )
-                                      }
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      aria-disabled={idx === 0}
-                                      tabIndex={idx === 0 ? -1 : undefined}
-                                      className={`inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
-                                        idx === 0
-                                          ? "cursor-not-allowed bg-gray-100 text-gray-400"
-                                          : UN_BLUE.badge
-                                      }`}
-                                      title={
-                                        idx === 0
-                                          ? "Same as original"
-                                          : `Compare ${version.symbol} with ${previousSymbol} in a new tab`
-                                      }
-                                    >
-                                      <ArrowLeftRight className="h-3 w-3" />
-                                    </a>
-
-                                    {/* View PDF */}
-                                    <a
-                                      href={`https://docs.un.org/en/${version.symbol}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center justify-center rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-200"
-                                      title="View PDF in ODS in a new tab"
-                                    >
-                                      <ExternalLink className="h-3 w-3" />
-                                    </a>
-
-                                    {/* Update To */}
-                                    {trackContext?.canEditSubmission &&
-                                    onUpdateClick ? (
-                                      <button
-                                        onClick={() => {
-                                          onUpdateClick(version.symbol);
-                                        }}
-                                        className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
-                                        title="Update the mandate citation to this newer version"
-                                      >
-                                        <ArrowRight className="h-3 w-3" />
-                                        Update
-                                      </button>
-                                    ) : (
-                                      <span className="text-xs text-gray-400">
-                                        —
-                                      </span>
-                                    )}
-                                  </React.Fragment>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      }
-
-                      return null;
-                    })()}
+                    })}
+                  </div>
                 </div>
-
-                {/* Paragraphs Tab */}
-                {activeTab === "paragraphs" && (
-                  <div className="space-y-4">
-                    {/* Search Box */}
-                    <div className="rounded-xl bg-white p-4 shadow-sm">
-                      <div className={cn(typography.eyebrow, "mb-2")}>
-                        Search in document
-                      </div>
-                      <div className="relative">
-                        <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                        <input
-                          type="text"
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          placeholder="Search for keywords in paragraphs..."
-                          className="w-full rounded-lg border border-gray-200 bg-white py-2 pr-4 pl-10 text-sm placeholder:text-gray-400 focus:border-un-blue focus:ring-2 focus:ring-un-blue/20 focus:outline-none"
-                        />
-                        {searchQuery && (
-                          <button
-                            onClick={() => setSearchQuery("")}
-                            className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
+              )}
+              <div className="rounded-xl bg-white p-5 shadow-sm">
+                {paragraphs?.some((p) => p.extraction_quality_warning) && (
+                  <p className="mb-3 text-sm text-amber-800">
+                    Extraction warning: check this text against the original
+                    document.
+                  </p>
+                )}
+                {paragraphs?.some((p) => p.part_letter) && (
+                  <p className="mb-3 text-xs text-gray-500">
+                    Showing printed part{" "}
+                    {paragraphs.find((p) => p.part_letter)?.part_letter} only.
+                  </p>
+                )}
+                {paragraphsLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-gray-300" />
+                  </div>
+                ) : paragraphs && paragraphs.length > 0 ? (
+                  selectedEntity ? (
+                    <FilteredParagraphTree
+                      paragraphs={paragraphs}
+                      relevantIndices={selectedRelevance.indices}
+                      aiComments={selectedRelevance.aiComments}
+                      entity={selectedEntity}
+                      entityLong={selectedEntityLong || null}
+                      searchQuery={searchQuery}
+                    />
+                  ) : (
+                    <FullParagraphTree
+                      paragraphs={paragraphs}
+                      searchQuery={searchQuery}
+                    />
+                  )
+                ) : (
+                  <div className="py-12 text-center">
+                    <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
+                      <AlertTriangle className="h-6 w-6 text-gray-400" />
                     </div>
-
-                    {allEntities && allEntities.length > 0 && (
-                      <div className="rounded-xl bg-white p-4 shadow-sm">
-                        <div className={cn(typography.eyebrow, "mb-2")}>
-                          Filter by mentioned entity (Experimental)
-                        </div>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <button
-                            onClick={() => setSelectedEntity(null)}
-                            className={`rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${
-                              !selectedEntity
-                                ? "bg-gray-700 text-white"
-                                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                            }`}
-                          >
-                            All
-                          </button>
-                          {allEntities.map((e) => {
-                            const count = entityRelevanceCounts[e] || 0;
-                            return (
-                              <button
-                                key={e}
-                                onClick={() => setSelectedEntity(e)}
-                                className={`rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${
-                                  selectedEntity === e
-                                    ? "bg-un-blue text-white"
-                                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                                }`}
-                              >
-                                {e}{" "}
-                                <span
-                                  className={
-                                    selectedEntity === e
-                                      ? "text-white/60"
-                                      : "text-gray-400"
-                                  }
-                                >
-                                  ({count})
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
+                    <p className="text-sm font-medium text-gray-600">
+                      {fulltextError
+                        ? "Fulltext could not be loaded"
+                        : "No readable fulltext available"}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-400">
+                      The parsed document text is not available in our database
+                    </p>
+                    {link && (
+                      <a
+                        href={link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-un-blue-text hover:underline"
+                      >
+                        View original PDF →
+                      </a>
                     )}
-                    <div className="rounded-xl bg-white p-5 shadow-sm">
-                      {paragraphs?.some(
-                        (p) => p.extraction_quality_warning,
-                      ) && (
-                        <p className="mb-3 text-sm text-amber-800">
-                          Extraction warning: check this text against the
-                          original document.
-                        </p>
-                      )}
-                      {paragraphs?.some((p) => p.part_letter) && (
-                        <p className="mb-3 text-xs text-gray-500">
-                          Showing printed part{" "}
-                          {paragraphs.find((p) => p.part_letter)?.part_letter}{" "}
-                          only.
-                        </p>
-                      )}
-                      {paragraphsLoading ? (
-                        <div className="flex items-center justify-center py-12">
-                          <Loader2 className="h-8 w-8 animate-spin text-gray-300" />
-                        </div>
-                      ) : paragraphs && paragraphs.length > 0 ? (
-                        selectedEntity ? (
-                          <FilteredParagraphTree
-                            paragraphs={paragraphs}
-                            relevantIndices={selectedRelevance.indices}
-                            aiComments={selectedRelevance.aiComments}
-                            entity={selectedEntity}
-                            entityLong={selectedEntityLong || null}
-                            searchQuery={searchQuery}
-                          />
-                        ) : (
-                          <FullParagraphTree
-                            paragraphs={paragraphs}
-                            searchQuery={searchQuery}
-                          />
-                        )
-                      ) : (
-                        <div className="py-12 text-center">
-                          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
-                            <AlertTriangle className="h-6 w-6 text-gray-400" />
-                          </div>
-                          <p className="text-sm font-medium text-gray-600">
-                            {fulltextError
-                              ? "Fulltext could not be loaded"
-                              : "No readable fulltext available"}
-                          </p>
-                          <p className="mt-1 text-xs text-gray-400">
-                            The parsed document text is not available in our
-                            database
-                          </p>
-                          {link && (
-                            <a
-                              href={link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-un-blue-text hover:underline"
-                            >
-                              View original PDF →
-                            </a>
-                          )}
-                        </div>
-                      )}
-                    </div>
                   </div>
                 )}
               </div>
             </div>
-          </div>,
-          portalHost,
-        )}
-    </>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

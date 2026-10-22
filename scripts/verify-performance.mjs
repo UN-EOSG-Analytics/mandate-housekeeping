@@ -248,6 +248,7 @@ function pollingHarness() {
   const requests = [];
   const timers = new Map();
   const listeners = new Set();
+  let now = Date.now();
   const document = {
     visibilityState: "visible",
     addEventListener: (_, fn) => listeners.add(fn),
@@ -268,6 +269,7 @@ function pollingHarness() {
     },
     {
       document,
+      Date: { now: () => now },
       setTimeout: (fn, ms) => {
         timers.set(fn, ms);
         return fn;
@@ -279,6 +281,9 @@ function pollingHarness() {
   return {
     requests,
     timers,
+    advance(ms) {
+      now += ms;
+    },
     render(next = {}) {
       props = { ...props, ...next };
       return h.render(() => useRealtimeDecisions(props));
@@ -374,6 +379,30 @@ test("disabling polling ignores late responses and prevents further scheduling",
   assert.equal(h.timers.size, 0);
 });
 
+test("polling periodically reconciles already-seen keys after long transactions", async () => {
+  const h = pollingHarness();
+  let batches = 0;
+  const changes = [{ id: "existing", document_symbol: "A/RES/80/1" }];
+  h.render({ onRemoteChanges: () => batches++ });
+  h.requests[0].resolve(response(changes));
+  await settle();
+  h.tick();
+  assert.equal(h.requests[1].args[1], response().data.serverTime);
+  h.requests[1].resolve(response(changes));
+  await settle();
+  assert.equal(batches, 1, "Normal overlap suppresses duplicate refreshes");
+  h.advance(5 * 60_000);
+  h.tick();
+  assert.equal(h.requests[2].args[1], undefined);
+  h.requests[2].resolve(response(changes));
+  await settle();
+  assert.equal(
+    batches,
+    2,
+    "Reconciliation refreshes persisted state even for seen IDs",
+  );
+});
+
 test("overview only fetches summaries with explicit cycle scoping and cycle cache keys", async () => {
   const calls = [];
   let cacheOptions;
@@ -464,6 +493,10 @@ test("realtime reads share auth transaction, database watermark, overlap and no 
   assert.match(statements[1].sql, /interval '30 seconds'/);
   assert.doesNotMatch(statements[1].sql, /LIMIT 50/);
   assert.equal(statements[1].params[2], result.data.serverTime);
+  statements.length = 0;
+  await getRealtimeChangesAction("OCHA");
+  assert.equal(statements[1].params[1], "1970-01-01T00:00:00.000Z");
+  assert.match(statements[1].sql, /DISTINCT ON/);
 });
 
 test("changed documents load in one scoped batch and resolve both decision tracks", async () => {
