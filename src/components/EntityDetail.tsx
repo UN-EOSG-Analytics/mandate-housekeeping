@@ -4,6 +4,7 @@ import {
   buildEntityCitationIndex,
   type EntityCitationIndex,
 } from "@/features/mandates/services/citation-locations";
+import { useCitationConfirmation } from "@/hooks/useCitationConfirmation";
 import { CommentConversationContext } from "./CommentConversationContext";
 import {
   useCommentNotifications,
@@ -1981,7 +1982,7 @@ export function EntityDetail({
     });
   }, []);
 
-  const handleDecision = useCallback(
+  const saveDecision = useCallback(
     async (
       symbol: string,
       subprogramme: string | null,
@@ -2182,7 +2183,7 @@ export function EntityDetail({
     [states, reviewSessionId, refreshReviewChanges, showError],
   );
 
-  const handleUpdateWithManual = useCallback(
+  const saveUpdateWithManual = useCallback(
     async (
       symbol: string,
       subprogramme: string | null,
@@ -2290,7 +2291,7 @@ export function EntityDetail({
     ],
   );
 
-  const handleAddManual = useCallback(
+  const saveAddManual = useCallback(
     async (subprogramme: string | null, data: ManualEntryData) => {
       if (!userEmail) return;
       if (isReviewer && additionTrack === "review") {
@@ -2846,6 +2847,27 @@ export function EntityDetail({
     reviewSessionId,
   };
 
+  const { confirmCitation, citationConfirmation } = useCitationConfirmation(citationIndex);
+  const handleDecision = async (
+    symbol: string,
+    subprogramme: string | null,
+    decision: Decision,
+    newSymbol?: string,
+    decisionTrack: "entity" | "review" = "entity",
+  ) => {
+    const target = decision === "add" ? symbol : decision === "update" ? newSymbol : undefined;
+    if (target && !(await confirmCitation(target, subprogramme, decision === "update" ? symbol : undefined))) return null;
+    return saveDecision(symbol, subprogramme, decision, newSymbol, decisionTrack);
+  };
+  const handleUpdateWithManual = async (symbol: string, subprogramme: string | null, newSymbol: string, data: ManualEntryData) => {
+    if (!(await confirmCitation(newSymbol, subprogramme, symbol))) return false;
+    return saveUpdateWithManual(symbol, subprogramme, newSymbol, data);
+  };
+  const handleAddManual = async (subprogramme: string | null, data: ManualEntryData) => {
+    if (!(await confirmCitation(data.symbol, subprogramme))) return;
+    return saveAddManual(subprogramme, data);
+  };
+
   // Create handlers for a specific subprogramme
   const makeSubprogHandlers = (subprog: string | null) => ({
     onDecision: (symbol: string, decision: Decision, newSymbol?: string) =>
@@ -2933,6 +2955,7 @@ export function EntityDetail({
           canEditSubmission,
           canReview,
           onSaved: onTrackSaved,
+          confirmCitation,
         }}
       >
         <EntityTableFilterContext.Provider value={tableControls}>
@@ -3216,6 +3239,7 @@ export function EntityDetail({
               onClearingStateChange={setIsClearingAll}
             />
           </div>
+          {citationConfirmation}
         </EntityTableFilterContext.Provider>
       </DecisionTracksContext.Provider>
     </CommentConversationContext.Provider>

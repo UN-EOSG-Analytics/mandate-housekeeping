@@ -127,7 +127,7 @@ const WARNING_DEFINITIONS: WarningDefinition[] = [
 
 function ownCitation(
   location: CitationLocation,
-  mandate: Mandate,
+  mandate: Pick<Mandate, "symbol">,
   context: CitationWarningContext,
 ) {
   return (
@@ -161,7 +161,7 @@ function warningLocations(
 }
 
 function duplicateWarning(
-  mandate: Mandate,
+  mandate: Pick<Mandate, "symbol" | "isAdded">,
   context: CitationWarningContext,
 ): MandateWarning | null {
   // Background references coexist with legislative citations by design.
@@ -199,6 +199,33 @@ function duplicateWarning(
           ? "Consider moving this citation to programme level instead of repeating it across subprogrammes."
           : undefined,
   };
+}
+
+/** Preview the same duplicate notice before an addition/replacement is saved. */
+export function getPendingCitationWarning(
+  symbol: string,
+  subprogramme: string | null,
+  citations: EntityCitationIndex,
+  sourceSymbol?: string,
+): MandateWarning | null {
+  const key = citationSymbolKey(symbol);
+  const projected = new Map(citations);
+  const current: CitationLocation = {
+    subprogramme,
+    ...citationSection(subprogramme),
+    sourceSymbol: sourceSymbol ?? symbol,
+    kind: sourceSymbol ? "replacement" : "addition",
+  };
+  const existing = citations.get(key) ?? [];
+  projected.set(key, [...existing, current]);
+  return duplicateWarning(
+    { symbol, isAdded: !sourceSymbol },
+    {
+      citations: projected,
+      subprogramme,
+      sourceSymbol,
+    },
+  );
 }
 
 /** Citation context must come from the selected entity/cycle, before filters. */

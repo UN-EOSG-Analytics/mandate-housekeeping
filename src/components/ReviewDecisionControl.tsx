@@ -23,6 +23,11 @@ export const DecisionTracksContext = createContext<{
   canEditSubmission: boolean;
   canReview: boolean;
   onSaved: (event: MandateDecision) => void;
+  confirmCitation?: (
+    symbol: string,
+    subprogramme: string | null,
+    sourceSymbol?: string,
+  ) => Promise<boolean>;
 } | null>(null);
 
 /** Shared by the entity table and the document sidebar. */
@@ -92,6 +97,26 @@ export function ReviewDecisionControl({
   ) => {
     if (!canEdit || busyRef.current) return null;
     busyRef.current = true;
+    const targetDecision = agree ? submission?.decision : decision;
+    const targetSymbol =
+      targetDecision === "add"
+        ? symbol
+        : targetDecision === "update"
+          ? agree
+            ? submission?.newSymbol
+            : newSymbol
+          : null;
+    if (targetSymbol && context?.confirmCitation) {
+      const proceed = await context.confirmCitation(
+        targetSymbol,
+        subprogramme,
+        targetDecision === "update" ? symbol : undefined,
+      );
+      if (!proceed) {
+        busyRef.current = false;
+        return null;
+      }
+    }
     setError(null);
     setBusy(true);
     const copied = agree ? submission : null;

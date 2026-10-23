@@ -254,3 +254,39 @@ test("filters do not hide duplicates from the warning calculation", () => {
     sp1,
   );
 });
+
+test("pending additions show the saved duplicate notice before the new row exists", () => {
+  const index = locations.buildEntityCitationIndex([item(next, programme)], "OCHA");
+  const warning = warnings.getPendingCitationWarning(next, sp1, index);
+  assert.equal(warning.id, "duplicate-citation");
+  assert.equal(warning.locations[0].label, "Programme level");
+  assert.match(warning.advice, /single citation at programme level/);
+  assert.equal(index.get(locations.citationSymbolKey(next)).length, 1,
+    "preview must not change the effective citation index");
+});
+
+test("pending replacements report other originals and skip the edited citation itself", () => {
+  const index = locations.buildEntityCitationIndex([
+    item(old, sp1), item("A/RES/77/1", sp2, [event("update", { newSymbol: next })]),
+  ], "OCHA");
+  const warning = warnings.getPendingCitationWarning(" A/RES/79/1 ", sp1, index, old);
+  assert.equal(warning.locations[0].label, sp2);
+  assert.match(warning.locations[0].detail, /Via update of A\/RES\/77\/1/);
+  assert.match(warning.advice, /moving this citation to programme level/);
+  const alreadyUpdated = locations.buildEntityCitationIndex([
+    item(old, sp1, [event("update", { newSymbol: next })]),
+  ], "OCHA");
+  assert.equal(warnings.getPendingCitationWarning(next, sp1, alreadyUpdated, old), null);
+});
+
+test("pending confirmation respects removed citations, entity scope and background exception", () => {
+  const index = locations.buildEntityCitationIndex([
+    item(next, sp1, [event("remove")]),
+    { ...item(next, sp2), entity: "DESA" },
+    item(next, null),
+  ], "OCHA");
+  assert.equal(warnings.getPendingCitationWarning(next, sp2, index), null);
+  const legislative = locations.buildEntityCitationIndex([item(next, sp1)], "OCHA");
+  assert.equal(warnings.getPendingCitationWarning(next, null, legislative), null);
+  assert.equal(warnings.getPendingCitationWarning("S/RES/79/1", sp2, legislative), null);
+});
