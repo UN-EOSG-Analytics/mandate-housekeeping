@@ -114,6 +114,10 @@ import {
   isVisibleAddedState,
   buildEntityTableView,
   hasTableFilters,
+  getTableReplacements,
+  replacementTableMandate,
+  REPLACEMENT_LABELS,
+  type ReplacementMetadata,
   type TableFilters,
   type TableSort,
   type TableSortColumn,
@@ -462,6 +466,7 @@ function MandateRowContent({
   state,
   commentCount,
   isUpdateTarget,
+  rowLabel,
   sourceSymbol,
   readOnly,
   isFoundational,
@@ -484,6 +489,7 @@ function MandateRowContent({
   isReviewer: boolean;
   sourceSymbol?: string;
   isUpdateTarget?: boolean; // True for the "new" row in update view (no dropdowns)
+  rowLabel?: string;
   readOnly?: boolean; // True for background section (no interactivity)
   isFoundational?: boolean; // True if mandate is also in background mandates
   allSymbols?: Set<string>; // All symbols in current section for warning system
@@ -510,6 +516,16 @@ function MandateRowContent({
   const canEditSubmission = !readOnly && !!trackContext?.canEditSubmission;
   const ageInfo = getAgeIndicator(mandate.year);
   const currentDecision = state?.decision;
+  const tableControls = useContext(EntityTableFilterContext);
+  const bodyFilters = tableControls?.filters.bodies ?? [];
+  const bodyFilterActive = bodyFilters.length > 0;
+  const matchesBodyFilter = bodyFilters.includes(mandate.body || "Unknown");
+  const rowDescription = [
+    rowLabel,
+    bodyFilterActive && !matchesBodyFilter ? "Shown for context" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const bgColorClass = isUpdateTarget ? "bg-secondary/40" : "";
 
@@ -572,8 +588,15 @@ function MandateRowContent({
             aria-label={`Review document ${mandate.symbol}`}
             className="min-w-0 flex-1 truncate text-left focus-visible:ring-2 focus-visible:ring-un-blue"
           >
-            {mandate.title || (
-              <span className="text-muted-foreground italic">No title</span>
+            <span className="block truncate">
+              {mandate.title || (
+                <span className="text-muted-foreground italic">No title</span>
+              )}
+            </span>
+            {rowDescription && (
+              <span className="block truncate text-xs font-normal text-muted-foreground">
+                {rowDescription}
+              </span>
             )}
           </button>
         </div>
@@ -581,9 +604,18 @@ function MandateRowContent({
           className={cn(
             typography.label,
             mandate.body ? "text-foreground" : "text-muted-foreground",
+            matchesBodyFilter &&
+              "w-fit rounded border border-un-blue-text/25 bg-un-blue-surface px-1.5 py-0.5 font-semibold text-un-blue-text",
           )}
-          title={mandate.body ?? undefined}
+          title={
+            matchesBodyFilter
+              ? "Matches Body filter"
+              : (mandate.body ?? undefined)
+          }
         >
+          {matchesBodyFilter && (
+            <span className="sr-only">Matches Body filter: </span>
+          )}
           {abbreviateBody(mandate.body, BODY_ABBREVS) ?? "—"}
         </div>
         <div
@@ -656,7 +688,7 @@ function MandateRowContent({
                 if (warning.action === "remove") {
                   onDecision("remove");
                 } else if (warning.action === "update" && onUpdateClick) {
-                  onUpdateClick();
+                  onUpdateClick(warning.suggestedUpdate);
                 }
               };
 
@@ -668,7 +700,7 @@ function MandateRowContent({
                   primaryWarning.action === "update" &&
                   onUpdateClick
                 ) {
-                  onUpdateClick();
+                  onUpdateClick(primaryWarning.suggestedUpdate);
                 }
               };
 
@@ -835,11 +867,7 @@ function MandateRow({
   isAdded?: boolean;
   readOnly?: boolean;
   isFoundational?: boolean;
-  updateTargetMetadata?: {
-    title: string | null;
-    year: number | null;
-    body: string | null;
-  } | null;
+  updateTargetMetadata: ReplacementMetadata;
   allSymbols?: Set<string>;
   citationIndex?: EntityCitationIndex;
   newestWithNewerVersion?: Set<string>;
@@ -852,7 +880,9 @@ function MandateRow({
   const [sidebarInitialTab, setSidebarInitialTab] = useState<
     "info" | "decisions" | "activity" | "paragraphs" | undefined
   >(undefined);
-  const [newDocSidebarOpen, setNewDocSidebarOpen] = useState(false);
+  const [openReplacementSymbol, setOpenReplacementSymbol] = useState<
+    string | null
+  >(null);
   const [showUpdateSearch, setShowUpdateSearch] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   // Reason popup should only open when user actively makes a decision, not on mount
@@ -877,22 +907,14 @@ function MandateRow({
 
   const hasCompletedUpdate =
     currentDecision?.decision === "update" && currentDecision?.newSymbol;
-  const newSymbol = currentDecision?.newSymbol;
-
-  // Create a fake mandate object for the "new" row in update view
-  const newMandate: Mandate | null =
-    hasCompletedUpdate && newSymbol
-      ? {
-          ...mandate,
-          symbol: newSymbol,
-          title: updateTargetMetadata?.title || "",
-          year: updateTargetMetadata?.year || null,
-          body: updateTargetMetadata?.body || null,
-          link: null,
-          metadataFromDb: !!updateTargetMetadata,
-          isAdded: false,
-        }
-      : null;
+  const replacements = getTableReplacements(
+    getDecisionTracks(state?.decisions ?? []),
+    updateTargetMetadata,
+  );
+  const replacementRows = replacements.map((replacement) => ({
+    mandate: replacementTableMandate(mandate, replacement),
+    label: REPLACEMENT_LABELS[replacement.source],
+  }));
 
   const handleUpdateSelect = async (symbol: string) => {
     if (!(await onDecision("update", symbol))) return;
@@ -954,6 +976,7 @@ function MandateRow({
           <MandateRowContent
             subprogramme={subprogramme}
             mandate={mandate}
+            rowLabel={replacementRows.length ? "Original citation" : undefined}
             state={state}
             commentCount={commentCount}
             isReviewer={isReviewer}
@@ -1032,10 +1055,12 @@ function MandateRow({
               </div>
             )}
 
-          {/* New document row (shown when update is complete) */}
-          {hasCompletedUpdate && newMandate && (
+          {/* Each current replacement is visible, with identical proposals combined. */}
+          {replacementRows.map(({ mandate: replacementMandate, label }) => (
             <MandateRowContent
-              mandate={newMandate}
+              key={replacementMandate.symbol}
+              mandate={replacementMandate}
+              rowLabel={label}
               subprogramme={subprogramme}
               sourceSymbol={mandate.symbol}
               state={undefined}
@@ -1044,10 +1069,12 @@ function MandateRow({
               isUpdateTarget
               citationIndex={citationIndex}
               newestWithNewerVersion={newestWithNewerVersion}
-              onOpenSidebar={() => setNewDocSidebarOpen(true)}
+              onOpenSidebar={() =>
+                setOpenReplacementSymbol(replacementMandate.symbol)
+              }
               onDecision={async () => null}
             />
-          )}
+          ))}
         </div>
         {/* Sidebars and portal-based reason popups survive a filter changing while the user is interacting. */}
         {/* Sidebar (reuse DocumentSymbol for full sidebar) */}
@@ -1092,9 +1119,10 @@ function MandateRow({
             docType={mandate.docType}
             initialTab={sidebarInitialTab}
           />
-          {/* Sidebar for replacement document */}
-          {hasCompletedUpdate && newMandate && (
+          {/* Sidebars use the same documents and metadata as the replacement rows. */}
+          {replacementRows.map(({ mandate: newMandate }) => (
             <DocumentSymbol
+              key={newMandate.symbol}
               readOnly={readOnly}
               subprogramme={subprogramme}
               symbol={newMandate.symbol}
@@ -1112,8 +1140,10 @@ function MandateRow({
               entitySubprogrammes={newMandate.entitySubprogrammes}
               entityLongMap={newMandate.entityLongMap}
               allEntityRelevance={newMandate.allEntityRelevance}
-              isOpen={newDocSidebarOpen}
-              onOpenChange={setNewDocSidebarOpen}
+              isOpen={openReplacementSymbol === newMandate.symbol}
+              onOpenChange={(open) =>
+                setOpenReplacementSymbol(open ? newMandate.symbol : null)
+              }
               state={state}
               isReviewer={isReviewer}
               userEmail={userEmail}
@@ -1124,7 +1154,7 @@ function MandateRow({
               metadataFromDb={newMandate.metadataFromDb}
               docType={newMandate.docType}
             />
-          )}
+          ))}
         </div>
       </div>
 
@@ -1455,8 +1485,6 @@ function MandateSection({
   const tracksContext = useContext(DecisionTracksContext);
   const [showEditModal, setShowEditModal] = useState(false);
   const stateKey = (symbol: string) => `${symbol}:${subprogramme || ""}`;
-  const getUpdateTargetSymbol = (symbol: string) =>
-    states[stateKey(symbol)]?.decision?.newSymbol;
   const visibleSymbols = new Set(
     visibleMandates.map((mandate) => mandate.symbol),
   );
@@ -1551,7 +1579,6 @@ function MandateSection({
       </Dialog>
       <div>
         {sortedMandates.map((m) => {
-          const targetSymbol = getUpdateTargetSymbol(m.symbol);
           return (
             <MandateRow
               subprogramme={subprogramme}
@@ -1586,9 +1613,7 @@ function MandateSection({
                   : undefined
               }
               onComment={(comment) => onComment(m.symbol, comment)}
-              updateTargetMetadata={
-                targetSymbol ? updateTargetMetadata[targetSymbol] : undefined
-              }
+              updateTargetMetadata={updateTargetMetadata}
               onAcceptChange={
                 onAcceptChange ? () => onAcceptChange(m.symbol) : undefined
               }
@@ -1936,7 +1961,7 @@ export function EntityDetail({
       ...new Set(
         Object.values(states).flatMap((state) => {
           const tracks = getDecisionTracks(state.decisions || []);
-          return [tracks.submission, tracks.review]
+          return [tracks.submission, tracks.currentReview]
             .filter((decision) => decision?.decision === "update")
             .map((decision) => decision?.newSymbol)
             .filter((symbol): symbol is string => !!symbol);

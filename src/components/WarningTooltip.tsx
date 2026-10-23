@@ -14,7 +14,8 @@ import {
   UN_BLUE,
   POPUP_STYLES,
 } from "@/lib/theme";
-import { ArrowLeftRight } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, Search, X } from "lucide-react";
+import { Button } from "./ui/button";
 import { WarningIcon } from "./WarningIcon";
 import { getDocumentComparisonUrl } from "@/features/mandates/services/documents/comparison-link";
 
@@ -169,9 +170,12 @@ export function WarningTooltip({
                             e.stopPropagation();
                             setOpen(false);
                           }}
-                          className={`ml-2 inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-colors ${UN_BLUE.badge}`}
+                          className={`ml-2 inline-flex min-h-7 cursor-pointer items-center gap-1 rounded-md border border-un-blue-text/25 px-2 text-xs font-medium shadow-xs transition-colors focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 ${UN_BLUE.badge}`}
                         >
-                          <ArrowLeftRight className="h-3 w-3" />
+                          <ArrowLeftRight
+                            className="h-3 w-3"
+                            aria-hidden="true"
+                          />
                           Compare
                         </a>
                       )}
@@ -192,22 +196,45 @@ export function WarningTooltip({
                       </p>
                     )}
                     {warning.action && onAction && !disabled && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAction(warning);
-                          setOpen(false);
-                        }}
-                        className={`mt-2 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                          warning.action === "remove"
-                            ? `${DECISION_THEME.remove.bgStrong} ${DECISION_THEME.remove.text} hover:bg-red-200`
-                            : `${DECISION_THEME.update.bgStrong} ${DECISION_THEME.update.text} hover:bg-amber-200`
-                        }`}
-                      >
-                        {warning.action === "remove"
-                          ? "Consider removing"
-                          : "Consider updating"}
-                      </button>
+                      <div className="mt-3 space-y-1.5">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={
+                            warning.action === "remove" ? "outline" : "default"
+                          }
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAction(warning);
+                            setOpen(false);
+                          }}
+                          className={`cursor-pointer text-xs shadow-sm ${
+                            warning.action === "remove"
+                              ? `${DECISION_THEME.remove.border} ${DECISION_THEME.remove.text} ${DECISION_THEME.remove.hoverBg}`
+                              : UN_BLUE.button
+                          }`}
+                        >
+                          {warning.action === "remove" ? (
+                            <X className="size-3.5" aria-hidden="true" />
+                          ) : (
+                            <Search className="size-3.5" aria-hidden="true" />
+                          )}
+                          {warning.action === "remove"
+                            ? "Mark for removal"
+                            : "Find replacement…"}
+                          {warning.action === "update" && (
+                            <ArrowRight
+                              className="size-3.5"
+                              aria-hidden="true"
+                            />
+                          )}
+                        </Button>
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          {warning.action === "remove"
+                            ? "Records a Remove submission for this citation."
+                            : "Search for a replacement or enter a document manually."}
+                        </p>
+                      </div>
                     )}
                   </div>
                 </div>

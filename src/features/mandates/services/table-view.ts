@@ -1,4 +1,4 @@
-import type { Mandate, MandateDecision, MandateState } from "@/types";
+import type { Mandate, MandateState } from "@/types";
 import { getDecisionTracks } from "./decision-tracks";
 import { getAgeIndicator } from "./age-indicator";
 
@@ -54,6 +54,68 @@ export interface FacetOption {
   label: string;
   count: number;
 }
+export interface TableReplacement {
+  symbol: string;
+  title?: string | null;
+  body?: string | null;
+  year?: number | null;
+  docType?: string | null;
+  link?: string | null;
+  source: "submission" | "review" | "both";
+  metadataFromDb: boolean;
+}
+export type ReplacementMetadata = Record<
+  string,
+  { title: string | null; year: number | null; body: string | null } | null
+>;
+
+/** Render and filter the same current proposals; stale reviews remain in history. */
+export function getTableReplacements(
+  tracks: ReturnType<typeof getDecisionTracks>,
+  metadata: ReplacementMetadata,
+): TableReplacement[] {
+  const replacements = new Map<string, TableReplacement>();
+  for (const [source, decision] of [
+    ["submission", tracks.submission],
+    ["review", tracks.currentReview],
+  ] as const) {
+    if (decision?.decision !== "update" || !decision.newSymbol) continue;
+    const previous = replacements.get(decision.newSymbol);
+    replacements.set(decision.newSymbol, {
+      ...metadata[decision.newSymbol],
+      ...previous,
+      symbol: decision.newSymbol,
+      ...decision.manualMetadata,
+      source: previous ? "both" : source,
+      metadataFromDb: !!metadata[decision.newSymbol],
+    });
+  }
+  return [...replacements.values()];
+}
+
+export function replacementTableMandate(
+  original: Mandate,
+  replacement: TableReplacement,
+): Mandate {
+  return {
+    ...original,
+    symbol: replacement.symbol,
+    title: replacement.title ?? "",
+    body: replacement.body ?? null,
+    year: replacement.year ?? null,
+    docType: replacement.docType ?? null,
+    link: replacement.link ?? null,
+    metadataFromDb: replacement.metadataFromDb,
+    isAdded: false,
+  };
+}
+
+export const REPLACEMENT_LABELS: Record<TableReplacement["source"], string> = {
+  submission: "Submission replacement",
+  review: "Reviewer replacement",
+  both: "Submission + reviewer replacement",
+};
+
 export interface TableItem {
   mandate: Mandate;
   subprogramme: string | null;
@@ -62,14 +124,8 @@ export interface TableItem {
   tracks?: ReturnType<typeof getDecisionTracks>;
   totalComments: number;
   unreadComments: number;
-  /** Both tracks' replacements remain part of the original review item. */
-  replacements: {
-    symbol: string;
-    title?: string | null;
-    body?: string | null;
-    year?: number | null;
-    docType?: string | null;
-  }[];
+  /** Current proposals remain grouped with their original citation. */
+  replacements: TableReplacement[];
 }
 
 export function hasTableFilters(filters: TableFilters) {
@@ -386,10 +442,7 @@ export function buildEntityTableView({
   backgroundMandates: Mandate[];
   states: Record<string, MandateState>;
   addedMetadata: Record<string, AddedMetadata | null>;
-  updateTargetMetadata: Record<
-    string,
-    { title: string | null; year: number | null; body: string | null } | null
-  >;
+  updateTargetMetadata: ReplacementMetadata;
   entityLong: string | null;
   counts: Record<string, { total: number; unread: number }>;
   filters: TableFilters;
@@ -429,16 +482,7 @@ export function buildEntityTableView({
       mandates.map((mandate) => {
         const state = tableStates[`${mandate.symbol}:${subprogramme || ""}`];
         const tracks = getDecisionTracks(state?.decisions || []);
-        const replacements = [tracks.submission, tracks.review]
-          .filter(
-            (d): d is MandateDecision =>
-              !!d && d.decision === "update" && !!d.newSymbol,
-          )
-          .map((d) => ({
-            symbol: d.newSymbol!,
-            ...updateTargetMetadata[d.newSymbol!],
-            ...d.manualMetadata,
-          }));
+        const replacements = getTableReplacements(tracks, updateTargetMetadata);
         const commentCounts = counts[mandate.symbol];
         return {
           mandate,

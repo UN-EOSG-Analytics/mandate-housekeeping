@@ -125,6 +125,146 @@ test("searching either track's replacement preserves the original item and its s
   assert.equal(result.visibleItems[0].replacements.length, 2);
 });
 
+test("a GA reviewer replacement remains visible beside differing submission and original bodies", () => {
+  const submission = event("1", "update", { newSymbol: "764 (XXXIX)" });
+  const review = event("2", "update", {
+    decisionTrack: "review",
+    reviewedSubmissionId: "1",
+    newSymbol: "A/RES/80/157",
+  });
+  const result = build({
+    legislativeMandates: {
+      "Subprogramme 2": [mandate("A/RES/75/1", { body: "ECOSOC" })],
+    },
+    backgroundMandates: [],
+    states: { "A/RES/75/1:Subprogramme 2": state([submission, review]) },
+    updateTargetMetadata: {
+      "764 (XXXIX)": {
+        title: "Submission document",
+        body: "ECLAC",
+        year: 2022,
+      },
+      "A/RES/80/157": { title: "Reviewer document", body: "GA", year: 2025 },
+    },
+    filters: filters({ bodies: ["GA"] }),
+  });
+  assert.equal(result.visibleItems.length, 1);
+  const item = result.visibleItems[0];
+  assert.deepEqual(
+    item.replacements.map((r) => r.source),
+    ["submission", "review"],
+  );
+  assert.deepEqual(
+    item.replacements.map(
+      (r) => view.replacementTableMandate(item.mandate, r).body,
+    ),
+    ["ECLAC", "GA"],
+  );
+  assert.equal(item.mandate.body, "ECOSOC");
+  assert.equal(view.REPLACEMENT_LABELS.review, "Reviewer replacement");
+});
+
+test("identical replacements combine and manual metadata stays consistent with Body filters", () => {
+  const submission = event("1", "update", {
+    newSymbol: "A/RES/80/157",
+    manualMetadata: {
+      title: "Manual title",
+      body: "GA",
+      year: 2025,
+      link: "https://docs.un.org/en/A/RES/80/157",
+    },
+  });
+  const review = event("2", "update", {
+    decisionTrack: "review",
+    reviewedSubmissionId: "1",
+    newSymbol: submission.newSymbol,
+  });
+  const result = build({
+    states: { "A/RES/75/1:Subprogramme 2": state([submission, review]) },
+    updateTargetMetadata: {
+      "A/RES/80/157": { title: "Cached title", body: "ECOSOC", year: 2024 },
+    },
+  });
+  const item = result.tableItems.find(
+    (item) => item.mandate.symbol === "A/RES/75/1",
+  );
+  assert.equal(item.replacements.length, 1);
+  assert.equal(item.replacements[0].source, "both");
+  const displayed = view.replacementTableMandate(
+    item.mandate,
+    item.replacements[0],
+  );
+  assert.equal(displayed.title, "Manual title");
+  assert.equal(displayed.body, "GA");
+  assert.equal(displayed.year, 2025);
+  assert.equal(displayed.link, submission.manualMetadata.link);
+  assert(!view.matchesTableItem(item, filters({ bodies: ["ECOSOC"] })));
+});
+
+test("outdated reviewer replacements stop affecting rows, search, Body filters and facets", () => {
+  const submission = event("1", "retain");
+  const review = event("2", "update", {
+    decisionTrack: "review",
+    reviewedSubmissionId: "1",
+    newSymbol: "S/RES/9999",
+    manualMetadata: { title: "Old proposal", body: "SC", year: 2025 },
+  });
+  const edited = event("3", "retain");
+  const options = {
+    legislativeMandates: { "Subprogramme 2": [mandate("A/RES/75/1")] },
+    backgroundMandates: [],
+    states: {
+      "A/RES/75/1:Subprogramme 2": state([submission, review, edited]),
+    },
+  };
+  const result = build(options);
+  assert.equal(result.tableItems[0].replacements.length, 0);
+  assert.equal(result.tableItems[0].tracks.reviewStale, true);
+  assert.equal(result.tableItems[0].state.decisions.length, 3);
+  assert(!result.facets.bodies.some((option) => option.value === "SC"));
+  assert.equal(
+    build({ ...options, filters: filters({ bodies: ["SC"] }) }).visibleItems
+      .length,
+    0,
+  );
+  assert.equal(
+    build({ ...options, filters: filters({ search: "9999" }) }).visibleItems
+      .length,
+    0,
+  );
+  assert.equal(
+    build({ ...options, filters: filters({ reviewStatus: ["outdated"] }) })
+      .visibleItems.length,
+    1,
+  );
+});
+
+test("reviewer-only replacements are shown, while cleared reviews leave submission proposals intact", () => {
+  const review = event("1", "update", {
+    decisionTrack: "review",
+    reviewedSubmissionId: null,
+    newSymbol: "A/RES/80/157",
+  });
+  const reviewerOnly = view.getTableReplacements(
+    tracks.getDecisionTracks([review]),
+    {},
+  );
+  assert.equal(reviewerOnly.length, 1);
+  assert.equal(reviewerOnly[0].source, "review");
+  const submission = event("2", "update", { newSymbol: "A/RES/80/222" });
+  const cleared = event("3", "cancel", {
+    decisionTrack: "review",
+    reviewedSubmissionId: "2",
+  });
+  const remaining = view.getTableReplacements(
+    tracks.getDecisionTracks([submission, cleared]),
+    {},
+  );
+  assert.equal(remaining.length, 1);
+  assert.equal(remaining[0].source, "submission");
+  assert.equal(remaining[0].symbol, submission.newSymbol);
+});
+
 test("decision filters remain independent and stale reviews are distinct from unreviewed rows", () => {
   const original = event("1", "remove");
   const review = event("2", "retain", {
