@@ -3,11 +3,13 @@
 import {
   useState,
   useRef,
+  useEffect,
   useCallback,
   useId,
   isValidElement,
   cloneElement,
 } from "react";
+import { createPortal } from "react-dom";
 import { POPUP_STYLES } from "@/lib/theme";
 
 interface Props {
@@ -19,48 +21,49 @@ export function Tooltip({ content, children }: Props) {
   const [show, setShow] = useState(false);
   const tooltipId = useId();
   const [position, setPosition] = useState<"top" | "bottom">("top");
-  const [align, setAlign] = useState<"left" | "center" | "right">("center");
+  const [anchor, setAnchor] = useState({ left: 0, top: 0 });
   const triggerRef = useRef<HTMLSpanElement>(null);
-  const tooltipRef = useRef<HTMLSpanElement>(null);
 
-  // Calculate position when mouse enters - before showing
   const handleMouseEnter = useCallback(() => {
-    if (triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-
-      // Vertical position
-      setPosition(rect.top < 80 ? "bottom" : "top");
-
-      // Horizontal alignment - estimate the shared 320px maximum width.
-      const tooltipWidth =
-        typeof content === "string"
-          ? Math.min(320, content.length * 6 + 16)
-          : 320;
-      const centerX = rect.left + rect.width / 2;
-
-      if (centerX - tooltipWidth / 2 < 8) {
-        setAlign("left");
-      } else if (centerX + tooltipWidth / 2 > viewportWidth - 8) {
-        setAlign("right");
-      } else {
-        setAlign("center");
-      }
-    }
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const side = rect.top < 80 ? "bottom" : "top";
+    setPosition(side);
+    setAnchor({
+      left: rect.left + rect.width / 2,
+      top: side === "top" ? rect.top - 6 : rect.bottom + 6,
+    });
     setShow(true);
-  }, [content]);
+  }, []);
 
-  const alignClasses = {
-    left: "left-0",
-    center: "left-1/2 -translate-x-1/2",
-    right: "right-0",
-  };
+  // A portalled tooltip must not stay behind when its scroll container moves.
+  useEffect(() => {
+    if (!show) return;
+    const hide = () => setShow(false);
+    window.addEventListener("scroll", hide, true);
+    window.addEventListener("resize", hide);
+    return () => {
+      window.removeEventListener("scroll", hide, true);
+      window.removeEventListener("resize", hide);
+    };
+  }, [show]);
 
-  const arrowAlignClasses = {
-    left: "left-3",
-    center: "left-1/2 -translate-x-1/2",
-    right: "right-3",
-  };
+  const measureTooltip = useCallback(
+    (node: HTMLSpanElement | null) => {
+      if (!node) return;
+      const width = node.getBoundingClientRect().width;
+      const left = Math.max(
+        8 + width / 2,
+        Math.min(anchor.left, window.innerWidth - 8 - width / 2),
+      );
+      node.style.left = left + "px";
+      node.style.setProperty(
+        "--tooltip-arrow-left",
+        anchor.left - left + width / 2 + "px",
+      );
+    },
+    [anchor.left],
+  );
 
   const child = isValidElement<{
     "aria-describedby"?: string;
@@ -102,25 +105,33 @@ export function Tooltip({ content, children }: Props) {
       {interactiveChild && child
         ? cloneElement(child, { "aria-describedby": description })
         : children}
-      {show && (
-        <span
-          id={tooltipId}
-          role="tooltip"
-          ref={tooltipRef}
-          className={`absolute z-50 ${POPUP_STYLES.tooltipSize} rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-left text-xs text-gray-700 shadow-lg ${alignClasses[align]} ${
-            position === "top" ? "bottom-full mb-1.5" : "top-full mt-1.5"
-          }`}
-        >
-          {content}
+      {show &&
+        createPortal(
           <span
-            className={`absolute ${arrowAlignClasses[align]} h-2 w-2 rotate-45 border border-gray-200 bg-white ${
-              position === "top"
-                ? "top-full -mt-1 border-t-0 border-r border-b border-l-0"
-                : "bottom-full -mb-1 border-t border-r-0 border-b-0 border-l"
-            }`}
-          />
-        </span>
-      )}
+            id={tooltipId}
+            role="tooltip"
+            ref={measureTooltip}
+            style={{
+              left: anchor.left,
+              top: anchor.top,
+              transform:
+                position === "top"
+                  ? "translate(-50%, -100%)"
+                  : "translateX(-50%)",
+            }}
+            className={`pointer-events-none fixed z-[100] ${POPUP_STYLES.tooltipSize} rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-left text-xs text-gray-700 shadow-lg`}
+          >
+            {content}
+            <span
+              className={`absolute left-[var(--tooltip-arrow-left)] h-2 w-2 -translate-x-1/2 rotate-45 border border-gray-200 bg-white ${
+                position === "top"
+                  ? "top-full -mt-1 border-t-0 border-r border-b border-l-0"
+                  : "bottom-full -mb-1 border-t border-r-0 border-b-0 border-l"
+              }`}
+            />
+          </span>,
+          document.body,
+        )}
     </span>
   );
 }

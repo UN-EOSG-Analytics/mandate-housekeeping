@@ -1637,8 +1637,30 @@ export function EntityDetail({
     notificationId !== dismissedNotification &&
     notificationCycle === budgetVersion;
   const filterEntity: string | null = null;
-  const [tableFilters, setTableFilters] =
+  const [localTableFilters, setLocalTableFilters] =
     useState<TableFilters>(EMPTY_TABLE_FILTERS);
+  // Only the comments filter is shareable; other table controls stay local.
+  const commentsParam = searchParams.get("comments");
+  const tableFilters = useMemo<TableFilters>(() => ({
+    ...localTableFilters,
+    comments: [...new Set(
+      (commentsParam || "")
+        .split(",")
+        .filter((value) => ["has", "none", "unread"].includes(value)),
+    )],
+  }), [localTableFilters, commentsParam]);
+  const setTableFilters = (next: TableFilters) => {
+    setLocalTableFilters(next);
+    const url = new URL(window.location.href);
+    if (next.comments.length) {
+      url.searchParams.set("comments", next.comments.join(","));
+    } else {
+      url.searchParams.delete("comments");
+    }
+    if (url.href !== window.location.href) {
+      window.history.replaceState(null, "", url);
+    }
+  };
   const [tableSort, setTableSort] = useState<TableSort>({
     column: "title",
     direction: "asc",
@@ -2732,6 +2754,8 @@ export function EntityDetail({
     ],
   );
   const { tableStates, tableItems, visibleItems, sectionViews } = tableView;
+  const unreadEntryCount = tableItems.filter((item) => item.unreadComments > 0).length;
+  const unreadFocused = tableFilters.comments.length === 1 && tableFilters.comments[0] === "unread";
   const citationIndex = useMemo(
     () => buildEntityCitationIndex(tableItems, entity),
     [tableItems, entity],
@@ -3066,8 +3090,8 @@ export function EntityDetail({
             {/* <PhaseTracker /> */}
 
             {/* Global Search */}
-            <div className="mb-6">
-              <div className="relative">
+            <div className="mb-6 flex flex-wrap items-center gap-3">
+              <div className="relative min-w-64 flex-1">
                 <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
@@ -3092,6 +3116,27 @@ export function EntityDetail({
                   </button>
                 )}
               </div>
+              {(unreadEntryCount > 0 || unreadFocused) && (
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="inline-flex items-center gap-1.5" role="status">
+                    <MessageSquare className="h-4 w-4 text-un-blue-text" aria-hidden="true" />
+                    {unreadEntryCount > 0
+                      ? `${unreadEntryCount} ${unreadEntryCount === 1 ? "entry has" : "entries have"} unread comments`
+                      : "No unread comments remaining"}
+                  </span>
+                  <button
+                    type="button"
+                    aria-pressed={unreadFocused}
+                    onClick={() => setTableFilters({
+                      ...tableFilters,
+                      comments: unreadFocused ? [] : ["unread"],
+                    })}
+                    className="shrink-0 rounded-md border border-un-blue-text/30 px-2.5 py-1.5 text-xs font-medium text-un-blue-text transition-colors hover:bg-un-blue/5 focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 focus-visible:outline-none"
+                  >
+                    {unreadFocused ? "Show all entries" : "Focus on unread"}
+                  </button>
+                </div>
+              )}
             </div>
 
             <ActiveTableFilters
