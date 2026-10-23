@@ -10,11 +10,15 @@ import type { ResolutionCommentCounts } from "@/types/comments";
 export const CommentConversationContext = createContext<{
   budgetVersion: BudgetVersion;
   userEmail: string | null;
+  userEntity: string | null;
+  isReviewer: boolean;
   canComment: boolean;
   counts: Record<string, ResolutionCommentCounts>;
 }>({
   budgetVersion: CURRENT_BUDGET_VERSION,
   userEmail: null,
+  userEntity: null,
+  isReviewer: false,
   canComment: false,
   counts: {},
 });

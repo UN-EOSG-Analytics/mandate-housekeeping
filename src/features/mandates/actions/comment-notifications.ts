@@ -39,7 +39,7 @@ export async function getCommentReadStateAction(
     return {
       readCommentIds: await getCommentReadState(
         tx,
-        user.email,
+        user,
         documentSymbol,
         version,
       ),
@@ -78,8 +78,15 @@ export async function markCommentsReadAction(
       `INSERT INTO mandates_housekeeping.comment_reads (comment_id, budget_version, user_email)
        SELECT c.id, c.budget_version, $1 FROM mandates_housekeeping.mandate_comments c
        WHERE c.id = ANY($2::uuid[]) AND c.budget_version = $3 AND c.user_email <> $1
+         AND ($4::boolean OR c.entity = $5)
        ON CONFLICT (user_email, budget_version, comment_id) DO NOTHING`,
-      [user.email, [...new Set(commentIds)], version],
+      [
+        user.email,
+        [...new Set(commentIds)],
+        version,
+        user.isReviewer,
+        user.entity,
+      ],
     );
     return { success: true };
   }, version);
@@ -99,15 +106,17 @@ export async function openCommentNotificationAction(
   )
     return { error: "Invalid comment ID" };
   const row = await transaction(async (tx) => {
-    if (!(await getCurrentUser(tx))) return null;
+    const user = await getCurrentUser(tx);
+    if (!user) return null;
     const rows = await tx<{
       entity: string;
       document_symbol: string;
       subprogramme: string | null;
     }>(
       `SELECT entity, document_symbol, subprogramme
-       FROM mandates_housekeeping.mandate_comments WHERE id = $1 AND budget_version = $2`,
-      [commentId, version],
+       FROM mandates_housekeeping.mandate_comments WHERE id = $1 AND budget_version = $2
+         AND ($3::boolean OR entity = $4)`,
+      [commentId, version, user.isReviewer, user.entity],
     );
     return rows[0] ?? null;
   }, version);

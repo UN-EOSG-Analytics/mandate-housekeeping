@@ -59,15 +59,28 @@ export async function getRealtimeChangesAction(
            FROM mandates_housekeeping.mandate_decisions
            WHERE entity = $1 AND created_at >= $2::timestamptz - interval '30 seconds'
              AND created_at <= $3::timestamptz
+             AND ($4::boolean OR entity = $5 OR id IN (
+               SELECT DISTINCT ON (document_symbol, subprogramme, decision_track) id
+               FROM mandates_housekeeping.mandate_decisions
+               WHERE entity = $1
+               ORDER BY document_symbol, subprogramme, decision_track, created_at DESC, id DESC
+             ))
            UNION ALL
            SELECT id, 'mandate_comments'::text AS "table", document_symbol,
              subprogramme, GREATEST(created_at, updated_at, resolved_at)::text AS created_at
            FROM mandates_housekeeping.mandate_comments
            WHERE entity = $1 AND GREATEST(created_at, updated_at, resolved_at) >= $2::timestamptz - interval '30 seconds'
+             AND ($4::boolean OR entity = $5)
              AND GREATEST(created_at, updated_at, resolved_at) <= $3::timestamptz
          ) events
          ORDER BY ${since ? "" : '"table", document_symbol, subprogramme,'} created_at::timestamptz DESC, id DESC`,
-        [entity, sinceDate.toISOString(), clock.server_time],
+        [
+          entity,
+          sinceDate.toISOString(),
+          clock.server_time,
+          user.isReviewer,
+          user.entity,
+        ],
       );
       const sessions = await tx<{ id: string; started_by: string | null }>(
         `SELECT id::text, started_by FROM mandates_housekeeping.entity_review_mode

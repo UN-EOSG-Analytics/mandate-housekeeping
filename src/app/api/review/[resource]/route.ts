@@ -52,6 +52,7 @@ export async function GET(
   // These handlers already resolve the live user in their own transaction.
   const authenticatesUser = [
     "realtime",
+    "states",
     "activity",
     "notifications",
     "paragraphs",

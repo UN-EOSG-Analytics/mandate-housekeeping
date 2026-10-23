@@ -38,19 +38,19 @@ export const toCommentNotification = (
 /** All rows are selected-cycle scoped by RLS, and explicitly by cycle for clarity. */
 export async function getCommentNotificationSummary(
   tx: TransactionQueryFn,
-  user: { email: string; entity: string | null },
+  user: { email: string; entity: string | null; isReviewer: boolean },
   budgetVersion: BudgetVersion,
 ): Promise<CommentNotificationSummary> {
   await tx("SELECT set_config('app.user_email', $1, true)", [user.email]);
-  const params = [user.email, user.entity, budgetVersion];
+  const params = [user.email, user.entity, budgetVersion, user.isReviewer];
   // Participation is in the whole resolution conversation within this cycle.
   // Own-entity eligibility concerns the message's context, not its author's entity.
-  const eligible = `c.user_email <> $1 AND (c.entity = $2 OR EXISTS (
+  const eligible = `c.user_email <> $1 AND (c.entity = $2 OR ($4::boolean AND EXISTS (
     SELECT 1 FROM mandates_housekeeping.mandate_comments participation
     WHERE participation.budget_version = c.budget_version
       AND participation.document_symbol = c.document_symbol
       AND participation.user_email = $1
-  ))`;
+  )))`;
   const notifications = await tx<NotificationRow>(
     `SELECT c.*, u.entity AS user_entity, (r.comment_id IS NOT NULL) AS is_read
      FROM mandates_housekeeping.mandate_comments c
@@ -68,8 +68,7 @@ export async function getCommentNotificationSummary(
      WHERE c.budget_version = $3 AND ${eligible} AND r.comment_id IS NULL`,
     params,
   );
-  // The resolution table displays the whole shared conversation, including groups
-  // which do not qualify for a personal header notification.
+  // Counts follow the same entity visibility as the conversations themselves.
   const counts = await tx<{
     document_symbol: string;
     total: number;
@@ -80,8 +79,9 @@ export async function getCommentNotificationSummary(
      FROM mandates_housekeeping.mandate_comments c
      LEFT JOIN mandates_housekeeping.comment_reads r
        ON r.comment_id = c.id AND r.budget_version = c.budget_version AND r.user_email = $1
-     WHERE c.budget_version = $2 GROUP BY c.document_symbol`,
-    [user.email, budgetVersion],
+     WHERE c.budget_version = $2 AND ($3::boolean OR c.entity = $4)
+     GROUP BY c.document_symbol`,
+    [user.email, budgetVersion, user.isReviewer, user.entity],
   );
   return {
     budgetVersion,
@@ -98,18 +98,19 @@ export async function getCommentNotificationSummary(
 
 export async function getCommentReadState(
   tx: TransactionQueryFn,
-  userEmail: string,
+  user: { email: string; entity: string | null; isReviewer: boolean },
   documentSymbol: string,
   budgetVersion: BudgetVersion,
 ): Promise<string[]> {
-  await tx("SELECT set_config('app.user_email', $1, true)", [userEmail]);
+  await tx("SELECT set_config('app.user_email', $1, true)", [user.email]);
   const rows = await tx<{ id: string }>(
     `SELECT c.id FROM mandates_housekeeping.mandate_comments c
      LEFT JOIN mandates_housekeeping.comment_reads r
        ON r.comment_id = c.id AND r.budget_version = c.budget_version AND r.user_email = $1
      WHERE c.document_symbol = $2 AND c.budget_version = $3
-       AND (c.user_email = $1 OR r.comment_id IS NOT NULL)`,
-    [userEmail, documentSymbol, budgetVersion],
+       AND (c.user_email = $1 OR r.comment_id IS NOT NULL)
+       AND ($4::boolean OR c.entity = $5)`,
+    [user.email, documentSymbol, budgetVersion, user.isReviewer, user.entity],
   );
   return rows.map((row) => row.id);
 }

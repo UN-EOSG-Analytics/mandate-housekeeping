@@ -29,6 +29,8 @@ import {
 import { markCommentsReadAction } from "@/features/mandates/actions/comment-notifications";
 import { dispatchCommentNotificationsRefresh } from "@/hooks/useCommentNotifications";
 import { getDecisionTracks } from "@/features/mandates/services/decision-tracks";
+import { getVisibleDecisions } from "@/features/mandates/services/decision-visibility";
+import { getEntityPermissions } from "@/features/auth/permissions";
 import { DecisionDropdown } from "./DecisionDropdown";
 import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
 import {
@@ -124,6 +126,8 @@ export function CommentsDecisionPanel({
   comments,
   readCommentIds,
   userEmail,
+  userEntity,
+  isReviewer,
   budgetVersion,
   readOnly,
   loading = false,
@@ -145,6 +149,8 @@ export function CommentsDecisionPanel({
   comments: MandateComment[];
   readCommentIds: string[] | null;
   userEmail?: string | null;
+  userEntity: string | null;
+  isReviewer: boolean;
   budgetVersion: BudgetVersion;
   readOnly: boolean;
   loading?: boolean;
@@ -158,6 +164,7 @@ export function CommentsDecisionPanel({
   targetCommentId?: string | null;
 }) {
   const context = useContext(DecisionTracksContext);
+  const viewer = { entity: userEntity, isReviewer };
   const originKey = entity ? conversationGroupKey(entity, subprogramme) : "";
   const [expanded, setExpanded] = useState<Set<string>>(
     () => new Set([originKey]),
@@ -170,27 +177,34 @@ export function CommentsDecisionPanel({
   const acknowledgedRef = useRef(new Set<string>());
   const readIds = new Set(readCommentIds || []);
   // Include persisted local events immediately, before the next activity poll.
-  const decisionEvents = [
-    ...new Map(
-      [
-        ...decisions,
-        ...(state?.decisions || []),
-        ...(state?.decision ? [state.decision] : []),
-        ...(state?.reviewDecision ? [state.reviewDecision] : []),
-      ]
-        .filter((decision) => !!decision.id)
-        .map((decision) => [decision.id, decision]),
-    ).values(),
-  ];
+  const decisionEvents = getVisibleDecisions(
+    [
+      ...new Map(
+        [
+          ...decisions,
+          ...(state?.decisions || []),
+          ...(state?.decision ? [state.decision] : []),
+          ...(state?.reviewDecision ? [state.reviewDecision] : []),
+        ]
+          .filter((decision) => !!decision.id)
+          .map((decision) => [decision.id, decision]),
+      ).values(),
+    ],
+    viewer,
+  );
+  const visibleComments = comments.filter(
+    (comment) =>
+      getEntityPermissions(viewer, comment.entity).canViewConversation,
+  );
   const groups = conversationGroups({
     entity,
     subprogramme,
     entitySubprogrammes,
     allEntities,
-    comments,
+    comments: visibleComments,
     decisions: decisionEvents,
   });
-  const target = comments.find((c) => c.id === targetCommentId);
+  const target = visibleComments.find((c) => c.id === targetCommentId);
   const targetKey = target
     ? conversationGroupKey(target.entity, target.subprogramme)
     : null;
@@ -363,6 +377,10 @@ export function CommentsDecisionPanel({
         </div>
         {groups.map((group) => {
           const isCurrent = group.key === originKey;
+          const canViewConversation = getEntityPermissions(
+            viewer,
+            group.entity,
+          ).canViewConversation;
           const tracks = getDecisionTracks(group.decisions);
           const submission = isCurrent
             ? (state?.decision ?? tracks.submission)
@@ -376,7 +394,7 @@ export function CommentsDecisionPanel({
               : group.comments.filter(
                   (c) => c.userEmail !== userEmail && !readIds.has(c.id),
                 ).length;
-          const isExpanded = expanded.has(group.key);
+          const isExpanded = canViewConversation && expanded.has(group.key);
           const canEdit =
             isCurrent &&
             !readOnly &&
@@ -392,8 +410,9 @@ export function CommentsDecisionPanel({
               <div className={`${GROUP_GRID} min-h-12 py-2`}>
                 <button
                   type="button"
-                  aria-expanded={isExpanded}
-                  aria-controls={groupId}
+                  disabled={!canViewConversation}
+                  aria-expanded={canViewConversation ? isExpanded : undefined}
+                  aria-controls={canViewConversation ? groupId : undefined}
                   onClick={() =>
                     setExpanded((previous) => {
                       const next = new Set(previous);
@@ -402,11 +421,15 @@ export function CommentsDecisionPanel({
                       return next;
                     })
                   }
-                  className="flex min-w-0 items-center gap-2 rounded text-left focus-visible:ring-2 focus-visible:ring-un-blue"
+                  className="flex min-w-0 items-center gap-2 rounded text-left focus-visible:ring-2 focus-visible:ring-un-blue disabled:cursor-default"
                 >
-                  <ChevronDown
-                    className={`h-3.5 w-3.5 shrink-0 transition-transform ${isExpanded ? "" : "-rotate-90"}`}
-                  />
+                  {canViewConversation ? (
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 shrink-0 transition-transform ${isExpanded ? "" : "-rotate-90"}`}
+                    />
+                  ) : (
+                    <span className="w-3.5 shrink-0" aria-hidden="true" />
+                  )}
                   <span className="min-w-0 text-foreground">
                     <span
                       className="block truncate text-sm font-semibold"
@@ -445,11 +468,17 @@ export function CommentsDecisionPanel({
                 />
                 <span
                   className="inline-flex items-center gap-1 text-xs"
-                  title={`${group.comments.length} comments${unread ? `, ${unread} unread` : ""}`}
+                  title={
+                    canViewConversation
+                      ? `${group.comments.length} comments${unread ? `, ${unread} unread` : ""}`
+                      : "Comments are private to this entity and reviewers"
+                  }
                 >
-                  {loading && !group.comments.length
-                    ? "…"
-                    : group.comments.length}
+                  {!canViewConversation
+                    ? "—"
+                    : loading && !group.comments.length
+                      ? "…"
+                      : group.comments.length}
                   {unread > 0 && (
                     <span
                       className="h-2 w-2 shrink-0 rounded-full bg-un-blue-text"

@@ -19,6 +19,7 @@ import { getCurrentUser } from "@/features/auth/auth";
 import { getEntityPermissions } from "@/features/auth/permissions";
 import { lockEntityReview } from "@/lib/db/review-lock";
 import { getDecisionTracks } from "../services/decision-tracks";
+import { getVisibleDecisions } from "../services/decision-visibility";
 import { query, transaction } from "@/lib/db/db";
 import type { MandateComment, MandateDecision, MandateState } from "@/types";
 
@@ -127,6 +128,12 @@ export async function getEntityDecisionsAction(
   }
   return transaction(async (tx) => {
     // Related reads share one cycle-scoped transaction, including batch refreshes.
+    const user = await getCurrentUser(tx);
+    if (!user) return { success: false as const, error: "unauthorized" };
+    const canViewConversation = getEntityPermissions(
+      user,
+      entity,
+    ).canViewConversation;
     const [decisionRows, commentRows, totalCommentRows] = await Promise.all([
       tx<DecisionRow>(
         `SELECT d.*, u.entity as user_entity, approver.entity as approved_by_entity
@@ -137,20 +144,23 @@ export async function getEntityDecisionsAction(
        ORDER BY d.created_at, d.id`,
         [entity, documentSymbols ?? null],
       ),
-      tx<CommentRow>(
-        `SELECT c.*, u.entity as user_entity
+      canViewConversation
+        ? tx<CommentRow>(
+            `SELECT c.*, u.entity as user_entity
        FROM mandates_housekeeping.mandate_comments c
        LEFT JOIN mandates_housekeeping.users u ON c.user_email = u.email
        WHERE c.entity = $1 AND ($2::text[] IS NULL OR c.document_symbol = ANY($2))
        ORDER BY c.created_at`,
-        [entity, documentSymbols ?? null],
-      ),
+            [entity, documentSymbols ?? null],
+          )
+        : Promise.resolve<CommentRow[]>([]),
       tx<{ document_symbol: string; count: string }>(
         `SELECT document_symbol, COUNT(*)::text as count
        FROM mandates_housekeeping.mandate_comments
-       WHERE $1::text[] IS NULL OR document_symbol = ANY($1)
+       WHERE ($1::text[] IS NULL OR document_symbol = ANY($1))
+         AND ($2::boolean OR entity = $3)
        GROUP BY document_symbol`,
-        [documentSymbols ?? null],
+        [documentSymbols ?? null, user.isReviewer, user.entity],
       ),
     ]);
 
@@ -163,19 +173,21 @@ export async function getEntityDecisionsAction(
     // Group into MandateState objects
     const stateMap: Record<string, MandateState> = {};
 
-    for (const row of decisionRows) {
-      const key = `${row.document_symbol}:${row.subprogramme || ""}`;
+    for (const decision of getVisibleDecisions(
+      decisionRows.map(toDecision),
+      user,
+    )) {
+      const key = `${decision.documentSymbol}:${decision.subprogramme || ""}`;
       if (!stateMap[key]) {
         stateMap[key] = {
-          documentSymbol: row.document_symbol,
-          entity: row.entity,
-          subprogramme: row.subprogramme,
+          documentSymbol: decision.documentSymbol,
+          entity: decision.entity,
+          subprogramme: decision.subprogramme,
           decision: null,
           decisions: [],
           comments: [],
         };
       }
-      const decision = toDecision(row);
       stateMap[key].decisions.push(decision);
     }
 
@@ -226,6 +238,13 @@ export async function getSingleMandateStateAction(params: {
     return { success: false, error: "documentSymbol and entity required" };
   }
 
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "unauthorized" };
+  const canViewConversation = getEntityPermissions(
+    user,
+    entity,
+  ).canViewConversation;
+
   const decisionSubprogrammeCondition = subprogramme
     ? `AND d.subprogramme = $3`
     : `AND d.subprogramme IS NULL`;
@@ -248,21 +267,23 @@ export async function getSingleMandateStateAction(params: {
        ORDER BY d.created_at, d.id`,
       queryParams,
     ),
-    query<CommentRow>(
-      `SELECT c.*, u.entity as user_entity
+    canViewConversation
+      ? query<CommentRow>(
+          `SELECT c.*, u.entity as user_entity
        FROM mandates_housekeeping.mandate_comments c
        LEFT JOIN mandates_housekeeping.users u ON c.user_email = u.email
        WHERE c.document_symbol = $1 AND c.entity = $2 ${commentSubprogrammeCondition}
        ORDER BY c.created_at`,
-      queryParams,
-    ),
+          queryParams,
+        )
+      : Promise.resolve<CommentRow[]>([]),
   ]);
 
   if (decisionRows.length === 0 && commentRows.length === 0) {
     return { success: true, data: null };
   }
 
-  const decisions = decisionRows.map(toDecision);
+  const decisions = getVisibleDecisions(decisionRows.map(toDecision), user);
   const comments = commentRows.map(toComment);
 
   return {
@@ -319,9 +340,10 @@ export async function getDocumentDecisionsAction(
        LEFT JOIN mandates_housekeeping.users u ON d.user_email = u.email
        LEFT JOIN mandates_housekeeping.users approver ON d.approved_by = approver.email
        WHERE d.document_symbol = $1
-         AND ($2::timestamptz IS NULL OR d.created_at >= $2::timestamptz - interval '30 seconds')
+         AND ($2::timestamptz IS NULL OR d.created_at >= $2::timestamptz - interval '30 seconds'
+           OR (NOT $3::boolean AND d.entity IS DISTINCT FROM $4))
        ORDER BY d.created_at, d.id`,
-      [symbol, sinceDate?.toISOString() ?? null],
+      [symbol, sinceDate?.toISOString() ?? null, user.isReviewer, user.entity],
     );
     const commentRows = await tx<CommentRow>(
       `SELECT c.*, u.entity as user_entity
@@ -329,19 +351,23 @@ export async function getDocumentDecisionsAction(
        LEFT JOIN mandates_housekeeping.users u ON c.user_email = u.email
        WHERE c.document_symbol = $1
          AND ($2::timestamptz IS NULL OR GREATEST(c.created_at, c.updated_at, c.resolved_at) >= $2::timestamptz - interval '30 seconds')
+         AND ($3::boolean OR c.entity = $4)
        ORDER BY c.created_at, c.id`,
-      [symbol, sinceDate?.toISOString() ?? null],
+      [symbol, sinceDate?.toISOString() ?? null, user.isReviewer, user.entity],
     );
-    const readCommentIds = await getCommentReadState(
-      tx,
-      user.email,
-      symbol,
-      version,
-    );
+    const readCommentIds = await getCommentReadState(tx, user, symbol, version);
     return {
       success: true,
       data: {
-        decisions: decisionRows.map(toDecision),
+        decisions: getVisibleDecisions(
+          decisionRows.map(toDecision),
+          user,
+        ).filter(
+          (decision) =>
+            !sinceDate ||
+            new Date(decision.createdAt).getTime() >=
+              sinceDate.getTime() - 30_000,
+        ),
         comments: commentRows.map(toComment),
         readCommentIds,
         serverTime: clock.server_time,

@@ -8,6 +8,7 @@ export function getEntityPermissions(
   const ownsEntity = !!user.entity && user.entity === entity;
   return {
     ownsEntity,
+    canViewConversation: ownsEntity || user.isReviewer,
     canEditSubmission: !cycleReadOnly && ownsEntity && !submissionLocked,
     canReview: !cycleReadOnly && user.isReviewer,
     canComment: !cycleReadOnly && (ownsEntity || user.isReviewer),

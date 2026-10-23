@@ -269,7 +269,7 @@ export async function exportToXlsx(
   const decisionsSheet = workbook.addWorksheet("Decisions");
   const decisionsColumns = [
     { header: "Symbol", width: 22 },
-    { header: "Decision", width: 12 },
+    { header: "Submission", width: 12 },
     { header: "Old Symbol", width: 22 },
     { header: "Title", width: 60 },
     { header: "Body", width: 12 },

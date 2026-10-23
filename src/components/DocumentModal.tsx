@@ -882,6 +882,8 @@ export function DocumentSymbol({
   onUpdateClick: onUpdateClickProp,
   initialTab,
   userEmail,
+  userEntity,
+  isReviewer,
   budgetVersion: budgetVersionProp,
   targetCommentId,
 }: Props) {
@@ -1238,6 +1240,8 @@ export function DocumentSymbol({
                 comments={allComments}
                 readCommentIds={readCommentIds}
                 userEmail={currentUserEmail}
+                userEntity={userEntity ?? conversationContext.userEntity}
+                isReviewer={!!isReviewer || conversationContext.isReviewer}
                 budgetVersion={budgetVersion}
                 readOnly={readOnly}
                 state={state}

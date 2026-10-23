@@ -436,7 +436,7 @@ function ColumnHeaders({ controls }: { controls: EntityTableViewControls }) {
       />
       <EntityTableColumnHeader
         column="submissions"
-        label="Decision"
+        label="Submission"
         controls={controls}
       />
       <EntityTableColumnHeader
@@ -1548,7 +1548,7 @@ function MandateSection({
           </DialogHeader>
         </DialogContent>
       </Dialog>
-      <div className="space-y-1.5">
+      <div>
         {sortedMandates.map((m) => {
           const targetSymbol = getUpdateTargetSymbol(m.symbol);
           return (
@@ -1659,6 +1659,7 @@ export function EntityDetail({
     {},
   );
   const [isReviewer, setIsReviewer] = useState(false);
+  const [canViewAllConversations, setCanViewAllConversations] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userEntity, setUserEntity] = useState<string | null>(null);
   const [isUnderReview, setIsUnderReview] = useState(false);
@@ -1769,6 +1770,7 @@ export function EntityDetail({
         setStates(map);
         setTotalComments(decisions.data.totalComments);
         setIsReviewer(!cycleReadOnly && (role.data.isReviewer ?? false));
+        setCanViewAllConversations(role.data.isReviewer);
         setUserEmail(role.data.email);
         setUserEntity(role.data.entity ?? null);
         setIsUnderReview(review.data.isUnderReview);
@@ -2541,6 +2543,8 @@ export function EntityDetail({
           ...previous,
           [key]: {
             ...previous[key],
+            decision: previous[key]?.decision ?? null,
+            decisions: previous[key]?.decisions ?? [],
             documentSymbol: symbol,
             entity,
             subprogramme,
@@ -2893,6 +2897,8 @@ export function EntityDetail({
       value={{
         budgetVersion,
         userEmail,
+        userEntity,
+        isReviewer: canViewAllConversations,
         canComment,
         counts: commentSummary?.resolutions || {},
       }}

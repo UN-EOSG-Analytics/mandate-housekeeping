@@ -13,6 +13,8 @@
  */
 
 import { query } from "@/lib/db/db";
+import { getCurrentUser } from "@/features/auth/auth";
+import { getEntityPermissions } from "@/features/auth/permissions";
 import type {
   Decision,
   MandateDecision,
@@ -185,6 +187,11 @@ export async function getEntityReviewChangesAction(
   if (!entity || !reviewSessionId) {
     return { success: false, error: "entity and reviewSessionId required" };
   }
+
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "unauthorized" };
+  if (!getEntityPermissions(user, entity).canViewConversation)
+    return { success: true, data: {} };
 
   // Get the FIRST review session start time (establishes true baseline)
   const firstReviewRows = await query<{ started_at: string }>(

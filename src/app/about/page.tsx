@@ -252,7 +252,7 @@ export default async function AboutPage() {
             >
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">Decision:</span>
+                  <span className="text-xs text-gray-500">Submission:</span>
                   <MockDecision decision="Retain" color="retain" />
                 </div>
                 <div className="flex items-center gap-2">
