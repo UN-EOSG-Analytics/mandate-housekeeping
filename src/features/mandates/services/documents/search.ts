@@ -40,11 +40,11 @@ const searchCatalogue = unstable_cache(
       }));
     }, version);
   },
-  ["document-search"],
+  ["document-search", "digital-library-only"],
   { revalidate: 60 },
 );
 
-/** Registry-wide catalogue search intentionally includes PPB-only documents. */
+/** Search catalogue metadata only for documents present in the Digital Library. */
 export async function searchDocuments(
   searchQuery: string,
 ): Promise<DocumentSearchResult[]> {
