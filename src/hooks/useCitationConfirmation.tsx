@@ -64,8 +64,8 @@ export function useCitationConfirmation(citations: EntityCitationIndex) {
         <DialogHeader>
           <DialogTitle>Resolution already cited</DialogTitle>
           <DialogDescription>
-            {pending?.symbol} is already included elsewhere in this entity. Do
-            you want to proceed?
+            {pending?.symbol} is already included in this entity. Do you want to
+            proceed?
           </DialogDescription>
         </DialogHeader>
         <ul className="space-y-2 text-sm">

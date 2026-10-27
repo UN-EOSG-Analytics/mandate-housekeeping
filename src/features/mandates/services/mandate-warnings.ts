@@ -164,11 +164,7 @@ function duplicateWarning(
   mandate: Pick<Mandate, "symbol" | "isAdded">,
   context: CitationWarningContext,
 ): MandateWarning | null {
-  // Background references coexist with legislative citations by design.
-  if (citationSection(context.subprogramme).level === "background") return null;
-  const locations = (
-    context.citations.get(citationSymbolKey(mandate.symbol)) ?? []
-  ).filter((location) => location.level !== "background");
+  const locations = context.citations.get(citationSymbolKey(mandate.symbol)) ?? [];
   if (!locations.some((location) => ownCitation(location, mandate, context)))
     return null;
   const others = locations.filter(
@@ -201,31 +197,44 @@ function duplicateWarning(
   };
 }
 
-/** Preview the same duplicate notice before an addition/replacement is saved. */
+/** Confirmation is entity-wide, including background and same-section citations. */
 export function getPendingCitationWarning(
   symbol: string,
   subprogramme: string | null,
   citations: EntityCitationIndex,
   sourceSymbol?: string,
 ): MandateWarning | null {
-  const key = citationSymbolKey(symbol);
-  const projected = new Map(citations);
-  const current: CitationLocation = {
-    subprogramme,
-    ...citationSection(subprogramme),
-    sourceSymbol: sourceSymbol ?? symbol,
-    kind: sourceSymbol ? "replacement" : "addition",
-  };
-  const existing = citations.get(key) ?? [];
-  projected.set(key, [...existing, current]);
-  return duplicateWarning(
-    { symbol, isAdded: !sourceSymbol },
-    {
-      citations: projected,
-      subprogramme,
-      sourceSymbol,
-    },
+  const context = { citations, subprogramme, sourceSymbol };
+  const others = (citations.get(citationSymbolKey(symbol)) ?? []).filter(
+    (location) => !sourceSymbol || !ownCitation(location, { symbol }, context),
   );
+  if (!others.length) return null;
+  const levels = [
+    ...others,
+    { subprogramme, ...citationSection(subprogramme) },
+  ];
+  const hasProgramme = levels.some(
+    (location) => location.level === "programme",
+  );
+  const subprogrammes = new Set(
+    levels
+      .filter((location) => location.level === "subprogramme")
+      .map((location) => location.subprogramme),
+  );
+  return {
+    id: "duplicate-citation",
+    message: "This resolution is already included in this entity.",
+    severity: "info",
+    icon: "info",
+    colorScheme: "blue",
+    locations: warningLocations(others, context),
+    advice:
+      hasProgramme && subprogrammes.size
+        ? "Consider keeping a single citation at programme level."
+        : subprogrammes.size > 1
+          ? "Consider moving this citation to programme level instead of repeating it across subprogrammes."
+          : undefined,
+  };
 }
 
 /** Citation context must come from the selected entity/cycle, before filters. */

@@ -217,10 +217,10 @@ test("cancelled additions disappear; review-only additions count", () => {
     ]),
   );
 });
-test("background references do not count as legislative duplicates", () => {
+test("row notices include duplicates between background and legislative sections", () => {
   const row = item(next);
-  assert.equal(check(row, [row, item(next, null)]), undefined);
-  assert.equal(check(item(next, null), [row, item(next, null)]), undefined);
+  assert.equal(check(row, [row, item(next, null)]).locations[0].label, "Mandates and background");
+  assert.equal(check(item(next, null), [row, item(next, null)]).locations[0].label, sp1);
 });
 test("whitespace aliases match; issuers and foreign entities stay distinct", () => {
   const row = item(next);
@@ -279,14 +279,27 @@ test("pending replacements report other originals and skip the edited citation i
   assert.equal(warnings.getPendingCitationWarning(next, sp1, alreadyUpdated, old), null);
 });
 
-test("pending confirmation respects removed citations, entity scope and background exception", () => {
+test("pending confirmation includes background and same-section citations but respects entity scope", () => {
   const index = locations.buildEntityCitationIndex([
     item(next, sp1, [event("remove")]),
     { ...item(next, sp2), entity: "DESA" },
-    item(next, null),
   ], "OCHA");
   assert.equal(warnings.getPendingCitationWarning(next, sp2, index), null);
+  const background = locations.buildEntityCitationIndex([item(next, null)], "OCHA");
+  assert.equal(warnings.getPendingCitationWarning(next, sp2, background).locations[0].label, "Mandates and background");
   const legislative = locations.buildEntityCitationIndex([item(next, sp1)], "OCHA");
-  assert.equal(warnings.getPendingCitationWarning(next, null, legislative), null);
+  assert.ok(warnings.getPendingCitationWarning(next, null, legislative));
+  assert.ok(warnings.getPendingCitationWarning(next, sp1, legislative));
   assert.equal(warnings.getPendingCitationWarning("S/RES/79/1", sp2, legislative), null);
+});
+
+test("pending confirmation finds newly added symbols and replacements in the same section", () => {
+  const additions = locations.buildEntityCitationIndex([
+    item(next, sp1, [event("add")], { isAdded: true }),
+  ], "OCHA");
+  assert.match(warnings.getPendingCitationWarning(next, sp1, additions).locations[0].detail, /Added citation/);
+  const replacements = locations.buildEntityCitationIndex([
+    item(old, sp1, [event("update", { newSymbol: next })]),
+  ], "OCHA");
+  assert.match(warnings.getPendingCitationWarning(next, sp1, replacements).locations[0].detail, /Via update/);
 });
