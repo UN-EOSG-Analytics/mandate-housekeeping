@@ -28,11 +28,16 @@ interface ReasonPopupProps {
   decision: DecisionType;
   reason: string | null;
   otherReason: string | null;
-  onChange: (reason: string | null, otherReason: string | null) => void;
+  onChange: (
+    reason: string | null,
+    otherReason: string | null,
+  ) => Promise<boolean>;
   onClose: () => void;
   isOpen: boolean;
   symbol?: string;
   onRestoreFocus?: () => void;
+  saving?: boolean;
+  error?: string | null;
 }
 
 /**
@@ -109,11 +114,14 @@ export function ReasonPopup({
   isOpen,
   symbol,
   onRestoreFocus,
+  saving = false,
+  error,
 }: ReasonPopupProps) {
   const [localOtherReason, setLocalOtherReason] = React.useState(
     otherReason ?? "",
   );
   const [localReason, setLocalReason] = React.useState<string | null>(reason);
+  const wasOpen = React.useRef(false);
 
   const reasons = getReasonsForDecision(decision);
 
@@ -125,19 +133,22 @@ export function ReasonPopup({
 
   // Sync local state with props
   React.useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLocalOtherReason(otherReason ?? "");
-    setLocalReason(reason);
-  }, [otherReason, reason]);
+    if (isOpen && !wasOpen.current) {
+      // Initialize a newly opened editor; retain drafts while saving.
+      setLocalOtherReason(otherReason ?? "");
+      setLocalReason(reason);
+    }
+    wasOpen.current = isOpen;
+  }, [isOpen, otherReason, reason]);
 
-  const handleReasonSelect = (reasonId: string) => {
+  const handleReasonSelect = async (reasonId: string) => {
+    if (saving) return;
+    setLocalReason(reasonId);
     if (reasonId === "other") {
       // Set local state to show textarea, but don't persist yet
-      // The onChange will be called in handleOtherSubmit when user clicks Done or presses Enter
-      setLocalReason("other");
+      // Save when the user confirms the text or presses Enter.
     } else {
-      onChange(reasonId, null);
-      onClose();
+      if (await onChange(reasonId, null)) onClose();
     }
   };
 
@@ -145,9 +156,9 @@ export function ReasonPopup({
     setLocalOtherReason(text);
   };
 
-  const handleOtherSubmit = () => {
-    onChange("other", localOtherReason || null);
-    onClose();
+  const handleOtherSubmit = async () => {
+    if (saving) return;
+    if (await onChange("other", localOtherReason || null)) onClose();
   };
 
   const decisionLabel = decision.charAt(0).toUpperCase() + decision.slice(1);
@@ -156,7 +167,7 @@ export function ReasonPopup({
     <Dialog
       open={isOpen}
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open && !saving) onClose();
       }}
     >
       <DialogContent
@@ -180,19 +191,45 @@ export function ReasonPopup({
           </DialogTitle>
           <button
             onClick={onClose}
+            disabled={saving}
             aria-label="Close reason selection"
             className="rounded p-1 text-foreground transition-colors hover:bg-white/50 focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 focus-visible:outline-none"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
+        <p className="px-4 pt-3 pb-2 text-sm text-gray-600">
+          The decision saves automatically. Choose a reason to save it too, or
+          close to add one later.
+        </p>
+        {saving && (
+          <p role="status" className="px-4 py-2 text-sm text-un-blue-text">
+            Saving…
+          </p>
+        )}
+        {error && (
+          <div className="px-4 py-2 text-sm text-red-700">
+            <p role="alert">{error} Your reason is preserved.</p>
+            {localReason && localReason !== "other" && (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void handleReasonSelect(localReason)}
+                className="mt-1 underline underline-offset-2"
+              >
+                Retry save reason
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Options */}
         <div className="max-h-[70vh] scrollbar-thin overflow-y-auto py-1">
           {reasons.map((r, index) => (
             <button
               key={r.id}
-              onClick={() => handleReasonSelect(r.id)}
+              onClick={() => void handleReasonSelect(r.id)}
+              disabled={saving}
               aria-pressed={localReason === r.id}
               className={cn(
                 "flex w-full items-start gap-3 px-4 py-3 text-left text-foreground transition-colors focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:outline-none focus-visible:ring-inset",
@@ -222,28 +259,38 @@ export function ReasonPopup({
         {localReason === "other" && (
           <div className="border-t border-gray-100 p-4">
             <textarea
+              aria-label="Other reason"
+              disabled={saving}
               value={localOtherReason}
               onChange={(e) => handleOtherReasonChange(e.target.value)}
-              onKeyDown={(e) =>
-                e.key === "Enter" && !e.shiftKey && handleOtherSubmit()
-              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void handleOtherSubmit();
+                }
+              }}
               placeholder="Please specify the reason..."
               className={cn(
                 typography.body,
-                "w-full resize-none rounded border border-border px-3 py-2 text-foreground placeholder:text-muted-foreground focus-visible:border-un-blue focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 focus-visible:outline-none",
+                "w-full resize-none rounded border border-border px-3 py-2 text-foreground placeholder:text-gray-600 focus-visible:border-un-blue focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 focus-visible:outline-none",
               )}
               rows={3}
               autoFocus
             />
             <div className="mt-3 flex justify-end">
               <button
-                onClick={handleOtherSubmit}
+                onClick={() => void handleOtherSubmit()}
+                disabled={saving}
                 className={cn(
                   typography.label,
-                  "rounded bg-un-blue-surface px-4 py-2 text-un-blue-text transition-colors hover:bg-un-blue/20 focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 focus-visible:outline-none",
+                  "rounded bg-un-blue-surface px-4 py-2 text-un-blue-text-aaa transition-colors hover:bg-un-blue/20 focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 focus-visible:outline-none",
                 )}
               >
-                Done
+                {saving
+                  ? "Saving…"
+                  : error
+                    ? "Retry save reason"
+                    : "Save reason"}
               </button>
             </div>
           </div>

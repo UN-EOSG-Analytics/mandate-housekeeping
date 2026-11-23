@@ -35,7 +35,7 @@ const variantStyles: Record<
     container: "border-l-4 border-un-blue bg-gray-50 px-6 py-3",
     text: "text-gray-600",
     icon: Info,
-    iconColor: "text-un-blue",
+    iconColor: "text-un-blue-text",
   },
   success: {
     container:
@@ -93,7 +93,8 @@ export function Banner({
         {onDismiss && (
           <button
             onClick={onDismiss}
-            className={`flex items-center gap-1.5 ${styles.dismissButton || "text-gray-500 hover:text-gray-700"}`}
+            aria-label={dismissLabel || "Dismiss notice"}
+            className={`flex items-center gap-1.5 ${styles.dismissButton || "text-gray-600 hover:text-gray-700"}`}
           >
             {dismissLabel && (
               <span className="text-xs font-medium">{dismissLabel}</span>
@@ -135,7 +136,8 @@ export function ReadOnlyNoticeBanner({
       >
         {userEntity}
       </Link>
-      . You can only make housekeeping decisions for your own entity.
+      . This workspace is read-only for you. Open your own entity to edit its
+      primary submission.
     </Banner>
   );
 }
@@ -151,8 +153,9 @@ export function ReviewerModeBanner({
     <Banner variant="reviewer-mode" icon={false}>
       <span className="font-medium text-amber-700">Reviewer Mode:</span> You are
       reviewing{" "}
-      <span className="font-medium text-un-blue">{reviewingEntity}</span>. As a
-      reviewer, you can make decisions and approve them for any entity.
+      <span className="font-medium text-un-blue-text">{reviewingEntity}</span>.
+      Record your review in the review track. The entity submission remains
+      visible alongside it.
     </Banner>
   );
 }
@@ -180,8 +183,9 @@ export function ReviewInProgressBanner({
     >
       <div>
         <p className="font-medium">This submission is currently under review</p>
-        <p className="text-xs text-amber-600">
-          Your submission is locked while review is in progress.
+        <p className="text-xs text-amber-800">
+          Primary submission edits are paused while review is in progress. You
+          can still inspect the citations and discussion.
           {isReviewer && startedBy && (
             <span className="ml-1">
               Review started by <span className="font-medium">{startedBy}</span>

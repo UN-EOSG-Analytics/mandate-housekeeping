@@ -28,6 +28,8 @@ const warnings = load(root + "mandate-warnings.ts", {
 const view = load(root + "table-view.ts", {
   "./decision-tracks": tracks,
   "./age-indicator": load(root + "age-indicator.ts"),
+  "./citation-locations": locations,
+  "./mandate-warnings": warnings,
 });
 const old = "A/RES/78/1",
   next = "A/RES/79/1";
@@ -120,17 +122,26 @@ test("newest already cited version wins, including updates", () => {
   assert.equal(warning.linkedSymbol, latest);
   assert.match(warning.locations[0].detail, /Via update of A\/RES\/77\/1/);
 });
-test("duplicates name other subprogrammes and only suggest consolidation", () => {
+test("duplicate notes name every legislative location including the current citation", () => {
   const row = item(next);
   const warning = check(row, [row, item(next, sp2)]);
-  assert.equal(warning.locations[0].label, sp2);
+  assert.deepEqual(
+    warning.locations.map((location) => location.label),
+    [sp1, sp2],
+  );
+  assert.deepEqual(
+    warning.locations.map((location) => location.isCurrent),
+    [true, false],
+  );
+  assert.equal(warning.citationCount, 2);
+  assert.equal(warnings.getWarningSummary(warning), "Cited twice");
   assert.match(warning.advice, /moving.*programme level/);
   assert.equal(warning.action, undefined);
 });
 test("new addition detects a programme-level citation", () => {
   const row = item(next, sp1, [event("add")], { isAdded: true });
   const warning = check(row, [row, item(next, programme)]);
-  assert.match(warning.message, /added resolution/);
+  assert.match(warning.message, /document.*twice.*legislative/);
   assert.equal(warning.locations[0].label, "Programme level");
   assert.match(warning.advice, /single citation at programme level/);
 });
@@ -171,7 +182,12 @@ test("replacement row can warn about a separate direct citation", () => {
     "duplicate-citation",
     { sourceSymbol: old },
   );
-  assert.equal(warning.locations[0].label, sp2);
+  assert.deepEqual(
+    warning.locations.map((location) => location.label),
+    [sp1, sp2],
+  );
+  assert.equal(warning.locations[0].isCurrent, true);
+  assert.equal(warning.locations[0].target.sourceSymbol, old);
 });
 test("removals and symbols updated away no longer count; cancelling a source decision restores it", () => {
   const row = item(next);
@@ -217,10 +233,26 @@ test("cancelled additions disappear; review-only additions count", () => {
     ]),
   );
 });
-test("row notices include duplicates between background and legislative sections", () => {
+test("background references do not create or increase legislative duplicate notes", () => {
   const row = item(next);
-  assert.equal(check(row, [row, item(next, null)]).locations[0].label, "Mandates and background");
-  assert.equal(check(item(next, null), [row, item(next, null)]).locations[0].label, sp1);
+  const background = item(next, null);
+  assert.equal(check(row, [row, background]), undefined);
+  assert.equal(check(background, [row, background]), undefined);
+  const warning = check(row, [row, item(next, sp2), background]);
+  assert.equal(warning.citationCount, 2);
+  assert.deepEqual(
+    warning.locations.map((location) => location.label),
+    [sp1, sp2],
+  );
+  assert.ok(
+    warning.locations.every(
+      (location) => location.target.level !== "background",
+    ),
+  );
+  assert.equal(
+    check(background, [row, item(next, sp2), background]),
+    undefined,
+  );
 });
 test("whitespace aliases match; issuers and foreign entities stay distinct", () => {
   const row = item(next);
@@ -256,50 +288,233 @@ test("filters do not hide duplicates from the warning calculation", () => {
 });
 
 test("pending additions show the saved duplicate notice before the new row exists", () => {
-  const index = locations.buildEntityCitationIndex([item(next, programme)], "OCHA");
+  const index = locations.buildEntityCitationIndex(
+    [item(next, programme)],
+    "OCHA",
+  );
   const warning = warnings.getPendingCitationWarning(next, sp1, index);
   assert.equal(warning.id, "duplicate-citation");
   assert.equal(warning.locations[0].label, "Programme level");
   assert.match(warning.advice, /single citation at programme level/);
-  assert.equal(index.get(locations.citationSymbolKey(next)).length, 1,
-    "preview must not change the effective citation index");
+  assert.equal(
+    index.get(locations.citationSymbolKey(next)).length,
+    1,
+    "preview must not change the effective citation index",
+  );
 });
 
 test("pending replacements report other originals and skip the edited citation itself", () => {
-  const index = locations.buildEntityCitationIndex([
-    item(old, sp1), item("A/RES/77/1", sp2, [event("update", { newSymbol: next })]),
-  ], "OCHA");
-  const warning = warnings.getPendingCitationWarning(" A/RES/79/1 ", sp1, index, old);
+  const index = locations.buildEntityCitationIndex(
+    [
+      item(old, sp1),
+      item("A/RES/77/1", sp2, [event("update", { newSymbol: next })]),
+    ],
+    "OCHA",
+  );
+  const warning = warnings.getPendingCitationWarning(
+    " A/RES/79/1 ",
+    sp1,
+    index,
+    old,
+  );
   assert.equal(warning.locations[0].label, sp2);
   assert.match(warning.locations[0].detail, /Via update of A\/RES\/77\/1/);
   assert.match(warning.advice, /moving this citation to programme level/);
-  const alreadyUpdated = locations.buildEntityCitationIndex([
-    item(old, sp1, [event("update", { newSymbol: next })]),
-  ], "OCHA");
-  assert.equal(warnings.getPendingCitationWarning(next, sp1, alreadyUpdated, old), null);
+  const alreadyUpdated = locations.buildEntityCitationIndex(
+    [item(old, sp1, [event("update", { newSymbol: next })])],
+    "OCHA",
+  );
+  assert.equal(
+    warnings.getPendingCitationWarning(next, sp1, alreadyUpdated, old),
+    null,
+  );
 });
 
-test("pending confirmation includes background and same-section citations but respects entity scope", () => {
-  const index = locations.buildEntityCitationIndex([
-    item(next, sp1, [event("remove")]),
-    { ...item(next, sp2), entity: "DESA" },
-  ], "OCHA");
+test("pending confirmation ignores background overlap, retains same-section collisions and respects entity scope", () => {
+  const index = locations.buildEntityCitationIndex(
+    [
+      item(next, sp1, [event("remove")]),
+      { ...item(next, sp2), entity: "DESA" },
+    ],
+    "OCHA",
+  );
   assert.equal(warnings.getPendingCitationWarning(next, sp2, index), null);
-  const background = locations.buildEntityCitationIndex([item(next, null)], "OCHA");
-  assert.equal(warnings.getPendingCitationWarning(next, sp2, background).locations[0].label, "Mandates and background");
-  const legislative = locations.buildEntityCitationIndex([item(next, sp1)], "OCHA");
-  assert.ok(warnings.getPendingCitationWarning(next, null, legislative));
+  const background = locations.buildEntityCitationIndex(
+    [item(next, null)],
+    "OCHA",
+  );
+  assert.equal(warnings.getPendingCitationWarning(next, sp2, background), null);
+  assert.equal(
+    warnings.getPendingCitationWarning(next, null, background).locations[0]
+      .label,
+    "Mandates and background",
+  );
+  const legislative = locations.buildEntityCitationIndex(
+    [item(next, sp1)],
+    "OCHA",
+  );
+  assert.equal(
+    warnings.getPendingCitationWarning(next, null, legislative),
+    null,
+  );
   assert.ok(warnings.getPendingCitationWarning(next, sp1, legislative));
-  assert.equal(warnings.getPendingCitationWarning("S/RES/79/1", sp2, legislative), null);
+  assert.equal(
+    warnings.getPendingCitationWarning("S/RES/79/1", sp2, legislative),
+    null,
+  );
 });
 
 test("pending confirmation finds newly added symbols and replacements in the same section", () => {
-  const additions = locations.buildEntityCitationIndex([
-    item(next, sp1, [event("add")], { isAdded: true }),
-  ], "OCHA");
-  assert.match(warnings.getPendingCitationWarning(next, sp1, additions).locations[0].detail, /Added citation/);
-  const replacements = locations.buildEntityCitationIndex([
-    item(old, sp1, [event("update", { newSymbol: next })]),
-  ], "OCHA");
-  assert.match(warnings.getPendingCitationWarning(next, sp1, replacements).locations[0].detail, /Via update/);
+  const additions = locations.buildEntityCitationIndex(
+    [item(next, sp1, [event("add")], { isAdded: true })],
+    "OCHA",
+  );
+  assert.match(
+    warnings.getPendingCitationWarning(next, sp1, additions).locations[0]
+      .detail,
+    /Added citation/,
+  );
+  const replacements = locations.buildEntityCitationIndex(
+    [item(old, sp1, [event("update", { newSymbol: next })])],
+    "OCHA",
+  );
+  assert.match(
+    warnings.getPendingCitationWarning(next, sp1, replacements).locations[0]
+      .detail,
+    /Via update/,
+  );
+});
+
+test("three legislative citations use an exact count and stable programme-first locations", () => {
+  const current = item(next, sp2);
+  const warning = check(current, [
+    current,
+    item(next, programme),
+    item(next, sp1),
+    item(next, null),
+  ]);
+  assert.equal(warning.citationCount, 3);
+  assert.equal(warnings.getWarningSummary(warning), "Cited 3x");
+  assert.deepEqual(
+    warning.locations.map((location) => location.label),
+    ["Programme level", sp1, sp2],
+  );
+  assert.deepEqual(
+    warning.locations.map((location) => location.isCurrent),
+    [false, false, true],
+  );
+  assert.ok(
+    warning.locations.every(
+      (location) => location.target.sourceSymbol === next,
+    ),
+  );
+});
+
+test("same-section replacements retain distinct actual source targets and current replacement identity", () => {
+  const first = item(old, sp1, [event("update", { newSymbol: next })]);
+  const second = item("A/RES/77/1", sp1, [
+    event("update", { newSymbol: next }),
+  ]);
+  const warning = check(
+    item(next),
+    [first, second, item(next)],
+    "duplicate-citation",
+    { sourceSymbol: old },
+  );
+  assert.equal(warning.citationCount, 3);
+  assert.deepEqual(
+    warning.locations.map((location) => location.target.sourceSymbol),
+    ["A/RES/77/1", old, next],
+  );
+  assert.deepEqual(
+    warning.locations.map((location) => location.isCurrent),
+    [false, true, false],
+  );
+  assert.equal(warning.locations[1].target.kind, "replacement");
+  assert.equal(warning.locations[1].target.subprogramme, sp1);
+});
+
+test("repeated source records are one citation and missing links offer a library symbol or manual link", () => {
+  const row = item(next);
+  assert.equal(check(row, [row, row]), undefined);
+  const warning = check(
+    item(next, sp1, [], { link: null }),
+    [row],
+    "missing-link",
+  );
+  assert.equal(warning.action, "update");
+  assert.equal(warning.actionLabel, "Update with library symbol or manual link");
+  assert.equal(warning.suggestedUpdate, next);
+});
+
+test("pending warnings keep only relevant legislative or same-background collisions", () => {
+  const index = locations.buildEntityCitationIndex(
+    [item(next, sp1), item(next, null)],
+    "OCHA",
+  );
+  const legislative = warnings.getPendingCitationWarning(next, sp2, index);
+  assert.deepEqual(
+    legislative.locations.map((location) => location.label),
+    [sp1],
+  );
+  const background = warnings.getPendingCitationWarning(next, null, index);
+  assert.deepEqual(
+    background.locations.map((location) => location.label),
+    ["Mandates and background"],
+  );
+});
+
+test("updated and retained additions keep source identity and cancellation consequences", () => {
+  const updated = item(
+    old,
+    sp1,
+    [
+      event("add"),
+      event("update", {
+        id: "update",
+        createdAt: "2026-10-22T00:00:00Z",
+        newSymbol: next,
+      }),
+    ],
+    { isAdded: true },
+  );
+  const retained = item(
+    next,
+    sp2,
+    [
+      event("add"),
+      event("retain", { id: "retain", createdAt: "2026-10-22T00:00:00Z" }),
+    ],
+    { isAdded: true },
+  );
+  const warning = check(item(next), [updated, retained], "duplicate-citation", {
+    sourceSymbol: old,
+  });
+  assert.equal(warning.citationCount, 2);
+  assert.deepEqual(
+    warning.locations.map((location) => location.target.isAdded),
+    [true, true],
+  );
+  assert.equal(warning.locations[0].target.kind, "replacement");
+  assert.equal(warning.locations[1].target.kind, "addition");
+  assert.match(warning.locations[0].detail, /Via update of added citation/);
+  assert.equal(
+    locations.getCitationDropDescription(warning.locations[0].target),
+    `Dropping cancels the added citation for ${old}, including its proposed replacement.`,
+  );
+  assert.equal(
+    locations.getCitationDropDescription(warning.locations[1].target),
+    "Dropping cancels this added citation.",
+  );
+  const baseline = locations
+    .buildEntityCitationIndex(
+      [item(old, sp1, [event("update", { newSymbol: next })])],
+      "OCHA",
+    )
+    .get(locations.citationSymbolKey(next))[0];
+  assert.equal(baseline.isAdded, false);
+  assert.match(
+    locations.getCitationDropDescription(baseline),
+    /removes the entire entry/,
+  );
 });

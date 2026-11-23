@@ -8,23 +8,69 @@ import {
   useId,
   isValidElement,
   cloneElement,
+  type HTMLAttributes,
+  type Ref,
 } from "react";
 import { createPortal } from "react-dom";
+import { Slot } from "@radix-ui/react-slot";
 import { POPUP_STYLES } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 
-interface Props {
-  content: string | React.ReactNode;
+interface Props extends Omit<
+  HTMLAttributes<HTMLElement>,
+  "content" | "children"
+> {
+  content: React.ReactNode;
   children: React.ReactNode;
+  /** Compose onto the existing trigger without changing its layout. */
+  asChild?: boolean;
+  ref?: Ref<HTMLElement>;
 }
 
-export function Tooltip({ content, children }: Props) {
+export function Tooltip({
+  content,
+  children,
+  asChild = false,
+  ref: forwardedRef,
+  className,
+  tabIndex,
+  onFocus,
+  onBlur,
+  onPointerEnter,
+  onPointerLeave,
+  onPointerDown,
+  onKeyDown,
+  "aria-describedby": describedBy,
+  ...triggerProps
+}: Props) {
   const [show, setShow] = useState(false);
   const tooltipId = useId();
   const [position, setPosition] = useState<"top" | "bottom">("top");
   const [anchor, setAnchor] = useState({ left: 0, top: 0 });
-  const triggerRef = useRef<HTMLSpanElement>(null);
+  const triggerRef = useRef<HTMLElement>(null);
+  const enabled = content !== undefined && content !== null && content !== "";
+  const setTriggerRef = useCallback(
+    (node: HTMLElement | null) => {
+      triggerRef.current = node;
+      if (typeof forwardedRef === "function") {
+        const cleanup = forwardedRef(node);
+        return () => {
+          triggerRef.current = null;
+          if (cleanup) cleanup();
+          else forwardedRef(null);
+        };
+      }
+      if (forwardedRef) forwardedRef.current = node;
+      return () => {
+        triggerRef.current = null;
+        if (forwardedRef) forwardedRef.current = null;
+      };
+    },
+    [forwardedRef],
+  );
 
   const handleMouseEnter = useCallback(() => {
+    if (!enabled) return;
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const side = rect.top < 80 ? "bottom" : "top";
@@ -34,7 +80,7 @@ export function Tooltip({ content, children }: Props) {
       top: side === "top" ? rect.top - 6 : rect.bottom + 6,
     });
     setShow(true);
-  }, []);
+  }, [enabled]);
 
   // A portalled tooltip must not stay behind when its scroll container moves.
   useEffect(() => {
@@ -68,6 +114,9 @@ export function Tooltip({ content, children }: Props) {
   const child = isValidElement<{
     "aria-describedby"?: string;
     tabIndex?: number;
+    onClick?: unknown;
+    href?: string;
+    type?: string;
   }>(children)
     ? children
     : null;
@@ -75,37 +124,72 @@ export function Tooltip({ content, children }: Props) {
     child &&
     ((typeof child.type === "string" &&
       ["button", "a", "input", "select", "textarea"].includes(child.type)) ||
-      child.props.tabIndex !== undefined);
-  const description = [child?.props["aria-describedby"], tooltipId]
-    .filter(Boolean)
-    .join(" ");
+      child.props.tabIndex !== undefined ||
+      child.props.onClick ||
+      child.props.href ||
+      child.props.type === "button" ||
+      triggerProps.onClick);
+  const description =
+    [
+      child?.props["aria-describedby"],
+      describedBy,
+      enabled && show ? tooltipId : undefined,
+    ]
+      .filter(Boolean)
+      .join(" ") || undefined;
+  const Trigger = asChild ? Slot : "span";
 
   return (
-    <span
-      ref={triggerRef}
-      className="relative inline-block max-w-full"
-      tabIndex={interactiveChild ? undefined : 0}
-      aria-describedby={interactiveChild ? undefined : tooltipId}
-      onFocus={handleMouseEnter}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setShow(false);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && show) {
-          event.stopPropagation();
-          setShow(false);
+    <>
+      <Trigger
+        {...triggerProps}
+        ref={setTriggerRef}
+        className={
+          asChild
+            ? className
+            : cn("relative inline-block max-w-full", className)
         }
-      }}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={() => {
-        if (!triggerRef.current?.contains(document.activeElement))
+        tabIndex={tabIndex ?? (enabled && !interactiveChild ? 0 : undefined)}
+        aria-describedby={
+          asChild || !interactiveChild ? description : undefined
+        }
+        onFocus={(event) => {
+          onFocus?.(event);
+          if (!event.defaultPrevented) handleMouseEnter();
+        }}
+        onBlur={(event) => {
+          onBlur?.(event);
+          if (!event.currentTarget.contains(event.relatedTarget))
+            setShow(false);
+        }}
+        onKeyDown={(event) => {
+          onKeyDown?.(event);
+          if (!event.defaultPrevented && event.key === "Escape" && show) {
+            event.stopPropagation();
+            setShow(false);
+          }
+        }}
+        onPointerEnter={(event) => {
+          onPointerEnter?.(event);
+          if (!event.defaultPrevented && event.pointerType !== "touch")
+            handleMouseEnter();
+        }}
+        onPointerLeave={(event) => {
+          onPointerLeave?.(event);
+          if (!triggerRef.current?.contains(document.activeElement))
+            setShow(false);
+        }}
+        onPointerDown={(event) => {
+          onPointerDown?.(event);
           setShow(false);
-      }}
-    >
-      {interactiveChild && child
-        ? cloneElement(child, { "aria-describedby": description })
-        : children}
+        }}
+      >
+        {(asChild || interactiveChild) && child
+          ? cloneElement(child, { "aria-describedby": description })
+          : children}
+      </Trigger>
       {show &&
+        enabled &&
         createPortal(
           <span
             id={tooltipId}
@@ -119,10 +203,11 @@ export function Tooltip({ content, children }: Props) {
                   ? "translate(-50%, -100%)"
                   : "translateX(-50%)",
             }}
-            className={`pointer-events-none fixed z-[100] ${POPUP_STYLES.tooltipSize} rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-left text-xs text-gray-700 shadow-lg`}
+            className={`pointer-events-none fixed z-[100] ${POPUP_STYLES.tooltipSize} rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-left text-xs text-foreground shadow-lg`}
           >
             {content}
             <span
+              aria-hidden="true"
               className={`absolute left-[var(--tooltip-arrow-left)] h-2 w-2 -translate-x-1/2 rotate-45 border border-gray-200 bg-white ${
                 position === "top"
                   ? "top-full -mt-1 border-t-0 border-r border-b border-l-0"
@@ -132,6 +217,6 @@ export function Tooltip({ content, children }: Props) {
           </span>,
           document.body,
         )}
-    </span>
+    </>
   );
 }

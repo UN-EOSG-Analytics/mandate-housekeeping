@@ -386,6 +386,10 @@ export async function createDecisionAction(
     subprogramme: string | null;
     decision: string;
     decisionTrack?: "entity" | "review";
+    /** Optional compare-and-set guard for the latest event in this track. */
+    expectedDecisionId?: string | null;
+    /** Guard the review event that determined a duplicate location's state. */
+    expectedReviewId?: string | null;
     reviewedSubmissionId?: string | null;
     agreeWithSubmission?: boolean;
     newSymbol?: string | null;
@@ -441,6 +445,30 @@ export async function createDecisionAction(
       [entity, documentSymbol, subprogramme || null],
     );
     const submission = submissions[0];
+    const needsReviewGuard =
+      (track === "review" && params.expectedDecisionId !== undefined) ||
+      params.expectedReviewId !== undefined;
+    const latestReview = needsReviewGuard
+      ? (
+          await tx<{ id: string }>(
+            `SELECT id FROM mandates_housekeeping.mandate_decisions
+             WHERE entity = $1 AND document_symbol = $2 AND subprogramme IS NOT DISTINCT FROM $3
+               AND decision_track = 'review' ORDER BY created_at DESC, id DESC LIMIT 1`,
+            [entity, documentSymbol, subprogramme || null],
+          )
+        )[0]
+      : undefined;
+    if (
+      (params.expectedDecisionId !== undefined &&
+        params.expectedDecisionId !==
+          ((track === "entity" ? submission : latestReview)?.id ?? null)) ||
+      (params.expectedReviewId !== undefined &&
+        params.expectedReviewId !== (latestReview?.id ?? null))
+    )
+      return {
+        success: false,
+        error: "Decision changed. Refresh this citation and try again.",
+      };
     if (
       track === "review" &&
       params.reviewedSubmissionId !== (submission?.id ?? null)

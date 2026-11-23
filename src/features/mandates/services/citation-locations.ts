@@ -7,6 +7,8 @@ export interface CitationLocation {
   level: "programme" | "subprogramme" | "background";
   sourceSymbol: string;
   kind: "existing" | "addition" | "replacement";
+  /** The source entry was added by a review participant, even if later updated or retained. */
+  isAdded: boolean;
 }
 export type EntityCitationIndex = ReadonlyMap<
   string,
@@ -51,6 +53,7 @@ export function buildEntityCitationIndex(
       subprogramme: item.subprogramme,
       ...citationSection(item.subprogramme),
       sourceSymbol: item.mandate.symbol,
+      isAdded: !!item.mandate.isAdded,
       kind: replacement
         ? "replacement"
         : item.mandate.isAdded
@@ -72,4 +75,16 @@ export function buildEntityCitationIndex(
     index.set(symbol, locations);
   }
   return index;
+}
+
+/** Describe the source entry affected by a per-location drop. */
+export function getCitationDropDescription(location: CitationLocation): string {
+  if (location.isAdded || location.kind === "addition") {
+    return location.kind === "replacement"
+      ? `Dropping cancels the added citation for ${location.sourceSymbol}, including its proposed replacement.`
+      : "Dropping cancels this added citation.";
+  }
+  return location.kind === "replacement"
+    ? `Dropping removes the entire entry for ${location.sourceSymbol} from this section, including its proposed replacement.`
+    : "Dropping marks this citation for removal from this section.";
 }

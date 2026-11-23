@@ -10,7 +10,8 @@ export function LoginForm() {
       onSubmit={requestMagicLinkAction}
       labels={{
         title: "Sign in",
-        intro: "Enter your UN entity email address to receive a sign-in link.",
+        intro:
+          "Sign in with your UN email, choose your entity, and review the citations supporting its budget submission.",
         emailLabel: "Email address",
         emailPlaceholder: "your.name@un.org",
         submit: "Send sign-in link",

@@ -356,3 +356,45 @@ test("cached data and read receipts cannot cross budget cycles for the same user
   assert.deepEqual(archive.allComments, []);
   assert.equal(archive.readCommentIds, null);
 });
+
+test("Document tab keeps replacement conversation on source but loads displayed fulltext and versions", async () => {
+  const h = harness();
+  h.render({
+    symbol: "A/RES/70/1",
+    documentSymbol: "A/RES/80/1",
+    activeTab: "review",
+  });
+  assert.deepEqual(
+    h.requests.map((r) => [r.kind, r.args[0]]),
+    [["activity", "A/RES/70/1"]],
+  );
+  h.requests[0].resolve(activity());
+  await settle();
+  h.render({ activeTab: "document" });
+  assert.deepEqual(
+    h.requests.map((r) => [r.kind, r.args[0]]),
+    [
+      ["activity", "A/RES/70/1"],
+      ["paragraphs", "A/RES/80/1"],
+      ["versions", "A/RES/80/1"],
+    ],
+  );
+});
+
+test("Switching displayed replacement preserves the source activity request and discards late fulltext", async () => {
+  const h = harness();
+  h.render({
+    symbol: "A/RES/70/1",
+    documentSymbol: "A/RES/80/1",
+    activeTab: "document",
+  });
+  const first = h.requests.find((r) => r.kind === "paragraphs");
+  h.render({ documentSymbol: "A/RES/81/1" });
+  assert.equal(h.requests.filter((r) => r.kind === "activity").length, 1);
+  const second = h.requests.filter((r) => r.kind === "paragraphs").at(-1);
+  second.resolve([{ text: "new replacement" }]);
+  await settle();
+  first.resolve([{ text: "old replacement" }]);
+  await settle();
+  assert.equal(h.render().paragraphs[0].text, "new replacement");
+});

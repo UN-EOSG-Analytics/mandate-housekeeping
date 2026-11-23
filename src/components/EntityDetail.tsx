@@ -1,7 +1,8 @@
 "use client";
 
 import {
-  buildEntityCitationIndex,
+  citationSymbolKey,
+  type CitationLocation,
   type EntityCitationIndex,
 } from "@/features/mandates/services/citation-locations";
 import { useCitationConfirmation } from "@/hooks/useCitationConfirmation";
@@ -17,6 +18,7 @@ import type {
   DecisionReasonChangeHandler,
 } from "@/types";
 import { DocumentSymbol as DocumentSymbolBadge } from "@un-eosg/ui/components/document-symbol";
+import { Button } from "@un-eosg/ui/components/button";
 import { typography } from "@un-eosg/ui/typography";
 
 import {
@@ -35,8 +37,8 @@ import {
   useRealtimeDecisions,
   type RealtimeChange,
 } from "@/hooks/useRealtimeDecisions";
-import { BODY_ABBREVS, FEATURE_FLAGS } from "@/lib/constants";
-import { abbreviateBody, cn } from "@/lib/utils";
+import { FEATURE_FLAGS } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 import {
   DECISION_THEME,
   DECISION_BADGE_STYLES,
@@ -44,7 +46,9 @@ import {
   CHANGE_INDICATOR,
   UN_BLUE,
 } from "@/lib/theme";
-import { getAgeIndicator } from "@/features/mandates/services/age-indicator";
+import { groupCitations } from "@/features/mandates/services/citation-groups";
+import { ViewDetailsLabel } from "./ViewDetailsLabel";
+import { CitationYear } from "./CitationYear";
 import {
   clearAllEntityDecisionsAction,
   createDecisionAction,
@@ -70,6 +74,8 @@ import { getEntityPermissions } from "@/features/auth/permissions";
 import {
   getMandateWarnings,
   getWarningIcon,
+  getWarningSummary,
+  newestVersionWarningSymbols,
 } from "@/features/mandates/services/mandate-warnings";
 import type {
   Decision,
@@ -94,6 +100,7 @@ import {
   MoreHorizontal,
   MessageSquare,
   Pencil,
+  Plus,
   RefreshCw,
   Search,
   Star,
@@ -107,6 +114,8 @@ import {
   SubprogrammeContents,
   EntityTableFilterContext,
   OtherEntitiesCell,
+  BodyTypeFilter,
+  ENTITY_TOOLBAR_CONTROL,
   type EntityTableViewControls,
 } from "./EntityTableControls";
 import {
@@ -114,6 +123,8 @@ import {
   isVisibleAddedState,
   buildEntityTableView,
   hasTableFilters,
+  isRequiredSubmission,
+  hasSubmissionDecision,
   getTableReplacements,
   replacementTableMandate,
   REPLACEMENT_LABELS,
@@ -129,6 +140,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -159,6 +171,7 @@ import {
 } from "@/features/mandates/services/decision-reasons";
 
 interface Props {
+  bodyFullNames: Record<string, string>;
   cycleReadOnly?: boolean;
   budgetVersion?: BudgetVersion;
   entity: string;
@@ -376,8 +389,11 @@ function getDecisionChange(
 //   );
 // }
 
-const GRID_COLS =
-  "grid-cols-[130px_minmax(180px,1fr)_68px_64px_48px_80px_56px_108px_140px_32px]";
+function tableGrid(showReviewer: boolean) {
+  return showReviewer
+    ? "grid-cols-[106px_minmax(128px,1fr)_60px_56px_112px_120px_128px_28px_80px] xl:grid-cols-[136px_minmax(220px,1fr)_68px_60px_138px_132px_142px_40px_84px]"
+    : "grid-cols-[112px_minmax(160px,1fr)_60px_56px_118px_120px_28px_80px] xl:grid-cols-[136px_minmax(220px,1fr)_68px_60px_138px_132px_40px_84px]";
+}
 
 // Preserve the responsive CSS layout while exposing real row/column relationships.
 function CitationTableRow({
@@ -386,13 +402,16 @@ function CitationTableRow({
   spanAll = false,
   ...props
 }: ComponentProps<"div"> & { header?: boolean; spanAll?: boolean }) {
+  const controls = useContext(EntityTableFilterContext);
   return (
     <div {...props} role="row">
       {Children.map(children, (child) =>
         child == null ? null : (
           <div
             role={header ? "columnheader" : "cell"}
-            aria-colspan={spanAll ? 10 : undefined}
+            aria-colspan={
+              spanAll ? (controls?.showReviewerColumn ? 9 : 8) : undefined
+            }
             className="contents"
           >
             {child}
@@ -409,7 +428,7 @@ function ColumnHeaders({ controls }: { controls: EntityTableViewControls }) {
       header
       className={cn(
         typography.tableHeader,
-        `grid ${GRID_COLS} h-10 items-center gap-x-1 tracking-normal text-foreground normal-case`,
+        `grid ${tableGrid(controls.showReviewerColumn)} h-10 items-center gap-x-1.5 tracking-normal text-foreground normal-case xl:gap-x-2`,
       )}
     >
       <div className="pl-3">
@@ -419,19 +438,17 @@ function ColumnHeaders({ controls }: { controls: EntityTableViewControls }) {
           controls={controls}
         />
       </div>
-      <div className="pl-6">
+      <div className="min-w-0">
         <EntityTableColumnHeader
           column="title"
           label="Title"
           controls={controls}
         />
       </div>
-      <EntityTableColumnHeader column="body" label="Body" controls={controls} />
       <EntityTableColumnHeader column="year" label="Year" controls={controls} />
-      <EntityTableColumnHeader column="age" label="Age" controls={controls} />
       <EntityTableColumnHeader
         column="others"
-        label="Others"
+        label="Also cited by"
         controls={controls}
       />
       <EntityTableColumnHeader
@@ -441,20 +458,23 @@ function ColumnHeaders({ controls }: { controls: EntityTableViewControls }) {
       />
       <EntityTableColumnHeader
         column="submissions"
-        label="Submission"
+        label={controls.submissionLabel}
         controls={controls}
       />
-      <EntityTableColumnHeader
-        column="reviews"
-        label="Reviewer"
-        controls={controls}
-      />
+      {controls.showReviewerColumn && (
+        <EntityTableColumnHeader
+          column="reviews"
+          label="Reviewer decision"
+          controls={controls}
+        />
+      )}
       <EntityTableColumnHeader
         column="comments"
         label="Comments"
         icon={<MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />}
         controls={controls}
       />
+      <span className="sr-only">Document details</span>
     </CitationTableRow>
   );
 }
@@ -514,8 +534,37 @@ function MandateRowContent({
   const unreadCommentCount = sharedCounts?.unread ?? 0;
   const trackContext = useContext(DecisionTracksContext);
   const canEditSubmission = !readOnly && !!trackContext?.canEditSubmission;
-  const ageInfo = getAgeIndicator(mandate.year);
   const currentDecision = state?.decision;
+  const citationRow = useRef<HTMLDivElement>(null);
+  async function dropFromNote(location: CitationLocation) {
+    const details = [
+      ...document.querySelectorAll<HTMLButtonElement>(
+        "[data-citation-visible='true'] [data-view-details]",
+      ),
+    ];
+    const here = citationRow.current?.querySelector<HTMLButtonElement>(
+      "[data-view-details]",
+    );
+    const index = here ? details.indexOf(here) : -1;
+    const saved = await trackContext?.onDropCitation?.(location);
+    if (saved)
+      requestAnimationFrame(() => {
+        // Removing the final duplicate can unmount a focused note button.
+        if (document.activeElement !== document.body) return;
+        const candidates = [
+          here,
+          ...details.slice(index + 1),
+          ...details.slice(0, Math.max(index, 0)).reverse(),
+        ];
+        (
+          candidates.find(
+            (button) => button?.isConnected && button.getClientRects().length,
+          ) ??
+          document.querySelector<HTMLInputElement>("[data-workspace-search]")
+        )?.focus();
+      });
+    return !!saved;
+  }
   const tableControls = useContext(EntityTableFilterContext);
   const bodyFilters = tableControls?.filters.bodies ?? [];
   const bodyFilterActive = bodyFilters.length > 0;
@@ -530,9 +579,9 @@ function MandateRowContent({
   const bgColorClass = isUpdateTarget ? "bg-secondary/40" : "";
 
   return (
-    <div className="relative">
+    <div className="relative" ref={citationRow}>
       <CitationTableRow
-        className={`grid ${GRID_COLS} min-h-10 cursor-pointer items-center gap-x-1 border-b border-border py-1 text-sm transition-colors ${
+        className={`grid ${tableGrid(!!tableControls?.showReviewerColumn)} min-h-12 cursor-pointer items-center gap-x-1.5 border-b border-border py-1 text-sm transition-colors xl:gap-x-2 ${
           bgColorClass || "hover:bg-muted"
         }`}
         onClick={onOpenSidebar}
@@ -542,97 +591,65 @@ function MandateRowContent({
           className="flex items-center gap-1 pl-3"
         >
           {isUpdateTarget && (
-            <span className="mr-1 text-xs text-amber-500">↳</span>
+            <span className="mr-1 text-xs text-amber-800">↳</span>
           )}
-          <a
-            href={mandate.link || "#"}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={mandate.symbol.length > 18 ? mandate.symbol : undefined}
-            className="inline-block whitespace-nowrap focus-visible:rounded focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2"
-            onClick={(e) => !mandate.link && e.preventDefault()}
+          <Tooltip
+            asChild
+            content={mandate.symbol.length > 18 ? mandate.symbol : undefined}
           >
-            <DocumentSymbolBadge>
-              {mandate.symbol.length > 18
-                ? `${mandate.symbol.slice(0, 18)}…`
-                : mandate.symbol}
-            </DocumentSymbolBadge>
-          </a>
-        </div>
-        <div
-          className="flex min-w-0 cursor-help items-center gap-1.5 text-foreground"
-          title={mandate.title || undefined}
-        >
-          <span className="inline-flex w-4 shrink-0 items-center justify-center">
-            {isFoundational && (
-              <Tooltip
-                content={
-                  readOnly
-                    ? "Foundational mandate"
-                    : "Foundational mandate — also cited in Mandates and Background"
-                }
-              >
+            <a
+              href={mandate.link || "#"}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={mandate.symbol}
+              className="min-w-0 truncate whitespace-nowrap focus-visible:rounded focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2"
+              onClick={(e) => !mandate.link && e.preventDefault()}
+            >
+              <DocumentSymbolBadge>
+                {mandate.symbol.length > 18
+                  ? `${mandate.symbol.slice(0, 18)}…`
+                  : mandate.symbol}
+              </DocumentSymbolBadge>
+            </a>
+          </Tooltip>
+          {isFoundational && (
+            <Tooltip content="Also cited in Mandates and background">
+              <span className="inline-flex shrink-0">
                 <Star
-                  className="h-4 w-4 fill-un-blue text-un-blue"
+                  aria-hidden="true"
+                  className="h-3.5 w-3.5 fill-un-blue text-un-blue"
                   strokeWidth={0.5}
                 />
-              </Tooltip>
-            )}
-          </span>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpenSidebar?.();
-            }}
-            aria-label={`Review document ${mandate.symbol}`}
-            className="min-w-0 flex-1 truncate text-left focus-visible:ring-2 focus-visible:ring-un-blue"
-          >
-            <span className="block truncate">
-              {mandate.title || (
-                <span className="text-muted-foreground italic">No title</span>
-              )}
-            </span>
-            {rowDescription && (
-              <span className="block truncate text-xs font-normal text-muted-foreground">
-                {rowDescription}
+                <span className="sr-only">Foundational mandate</span>
               </span>
-            )}
-          </button>
-        </div>
-        <div
-          className={cn(
-            typography.label,
-            mandate.body ? "text-foreground" : "text-muted-foreground",
-            matchesBodyFilter &&
-              "w-fit rounded border border-un-blue-text/25 bg-un-blue-surface px-1.5 py-0.5 font-semibold text-un-blue-text",
+            </Tooltip>
           )}
-          title={
-            matchesBodyFilter
-              ? "Matches Body filter"
-              : (mandate.body ?? undefined)
-          }
-        >
-          {matchesBodyFilter && (
-            <span className="sr-only">Matches Body filter: </span>
-          )}
-          {abbreviateBody(mandate.body, BODY_ABBREVS) ?? "—"}
         </div>
-        <div
-          className={cn(
-            typography.numeric,
-            mandate.year != null ? "text-foreground" : "text-muted-foreground",
-          )}
-        >
-          {mandate.year ?? "—"}
+        <div className="flex min-w-0 items-center text-foreground">
+          <Tooltip asChild content={mandate.title || undefined}>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenSidebar?.();
+              }}
+              aria-label={`Review document ${mandate.symbol}`}
+              className="min-w-0 flex-1 text-left focus-visible:ring-2 focus-visible:ring-un-blue"
+            >
+              <span className="line-clamp-2 leading-snug">
+                {mandate.title || (
+                  <span className="text-muted-foreground italic">No title</span>
+                )}
+              </span>
+              {rowDescription && (
+                <span className="block truncate text-xs font-normal text-muted-foreground">
+                  {rowDescription}
+                </span>
+              )}
+            </button>
+          </Tooltip>
         </div>
-        <Tooltip content={ageInfo.tooltip}>
-          <span
-            className={`cursor-help rounded px-1.5 py-0.5 text-xs font-medium text-foreground ${ageInfo.bgColor}`}
-          >
-            {ageInfo.label}
-          </span>
-        </Tooltip>
+        <CitationYear year={mandate.year} />
         <OtherEntitiesCell
           entities={[
             ...new Set(
@@ -670,8 +687,8 @@ function MandateRowContent({
                 warnings[0];
               const isAddressed =
                 !!primaryWarning.action &&
-                currentDecision?.decision != null &&
-                currentDecision.decision !== "cancel";
+                (currentDecision?.decision === "remove" ||
+                  currentDecision?.decision === "update");
 
               const icon =
                 primaryWarning.icon || getWarningIcon(primaryWarning.severity);
@@ -692,44 +709,36 @@ function MandateRowContent({
                 }
               };
 
-              const handlePrimaryClick = () => {
-                if (!canEditSubmission) return;
-                if (primaryWarning.action === "remove") {
-                  onDecision("remove");
-                } else if (
-                  primaryWarning.action === "update" &&
-                  onUpdateClick
-                ) {
-                  onUpdateClick(primaryWarning.suggestedUpdate);
-                }
-              };
-
               return (
                 <WarningTooltip
                   warnings={warnings}
                   onAction={handleAction}
-                  onPrimaryClick={
-                    primaryWarning.action ? handlePrimaryClick : undefined
-                  }
+                  canDropCitation={trackContext?.canDropCitation}
+                  onDropCitation={dropFromNote}
                   disabled={isAddressed || !canEditSubmission}
                   currentSymbol={mandate.symbol}
                 >
                   <button
-                    aria-label="View citation warnings"
-                    className={`group relative inline-flex h-6 min-w-6 items-center justify-center rounded-full transition-all ${
+                    type="button"
+                    aria-label={`View citation notes: ${warnings.map(getWarningSummary).join(", ")}`}
+                    onClick={(event) => event.stopPropagation()}
+                    className={`relative inline-grid min-h-6 max-w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-1 rounded-md px-1.5 py-1 text-left transition-colors ${
                       isAddressed
-                        ? "cursor-default bg-gray-100 text-gray-400"
+                        ? "cursor-pointer bg-gray-100 text-gray-600"
                         : colorClasses[colorScheme]
                     }`}
                   >
-                    <span className="px-1">
+                    <span aria-hidden="true" className="mt-px">
                       <WarningIcon icon={icon} />
                     </span>
                     {warnings.length > 1 && (
-                      <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-medium text-white shadow-sm">
+                      <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-800 text-[10px] font-medium text-white shadow-sm">
                         {warnings.length}
                       </span>
                     )}
+                    <span className="min-w-0 text-xs leading-4">
+                      {getWarningSummary(primaryWarning)}
+                    </span>
                   </button>
                 </WarningTooltip>
               );
@@ -738,6 +747,7 @@ function MandateRowContent({
         <div
           onClick={(e) => e.stopPropagation()}
           className="relative flex items-center"
+          data-workspace-decision
         >
           {!isUpdateTarget &&
             canEditSubmission &&
@@ -773,19 +783,21 @@ function MandateRowContent({
             />
           )}
         </div>
-        <div>
-          {!isUpdateTarget && (
-            <ReviewDecisionControl
-              compact
-              entity={mandate.entity || trackContext?.entity || ""}
-              symbol={mandate.symbol}
-              subprogramme={subprogramme}
-              submission={state?.decision ?? null}
-              review={state?.reviewDecision ?? null}
-              editable={!readOnly}
-            />
-          )}
-        </div>
+        {tableControls?.showReviewerColumn && (
+          <div>
+            {!isUpdateTarget && (
+              <ReviewDecisionControl
+                compact
+                entity={mandate.entity || trackContext?.entity || ""}
+                symbol={mandate.symbol}
+                subprogramme={subprogramme}
+                submission={state?.decision ?? null}
+                review={state?.reviewDecision ?? null}
+                editable={!readOnly}
+              />
+            )}
+          </div>
+        )}
         <div>
           {!isUpdateTarget && (
             <Tooltip
@@ -793,8 +805,10 @@ function MandateRowContent({
                 unreadCommentCount > 0
                   ? `${unreadCommentCount} unread comments`
                   : displayedCommentCount > 0
-                    ? "Click to view comments"
-                    : "Click to add a comment"
+                    ? "View comments"
+                    : conversationContext.canComment
+                      ? "Add a comment"
+                      : "No comments — commenting is unavailable for this view"
               }
             >
               <button
@@ -806,7 +820,8 @@ function MandateRowContent({
                 aria-label={`${mandate.symbol}: ${displayedCommentCount} comments${unreadCommentCount ? `, ${unreadCommentCount} unread` : ""}`}
                 className={`inline-flex cursor-pointer items-center gap-1 text-xs ${displayedCommentCount > 0 ? "font-medium text-un-blue-text" : "text-foreground"}`}
               >
-                {displayedCommentCount > 0 ? displayedCommentCount : "—"}
+                <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>{displayedCommentCount}</span>
                 {unreadCommentCount > 0 && (
                   <span
                     className="h-2 w-2 rounded-full bg-un-blue-text"
@@ -817,6 +832,18 @@ function MandateRowContent({
             </Tooltip>
           )}
         </div>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenSidebar?.();
+          }}
+          data-view-details
+          aria-label={`View details for ${mandate.symbol}`}
+          className="group me-2 inline-flex justify-self-end rounded focus-visible:ring-2 focus-visible:ring-un-blue"
+        >
+          <ViewDetailsLabel />
+        </button>
       </CitationTableRow>
     </div>
   );
@@ -877,6 +904,37 @@ function MandateRow({
   onRevertChange?: () => void;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [continuingDecision, setContinuingDecision] = useState(false);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const rowVisible = visible || continuingDecision;
+  const closeReasonPopup = () => {
+    setShowReasonPopup(false);
+    setContinuingDecision(false);
+    if (!visible) {
+      const rows = [
+        ...document.querySelectorAll<HTMLElement>(
+          "[data-citation-visible='true']",
+        ),
+      ];
+      const index = rows.indexOf(rowRef.current!);
+      const next = rows[index + 1] ?? rows[index - 1];
+      requestAnimationFrame(() => {
+        if (next)
+          next.querySelector<HTMLButtonElement>("[data-view-details]")?.focus();
+        else
+          document
+            .querySelector<HTMLInputElement>("[data-workspace-search]")
+            ?.focus();
+      });
+    }
+  };
+  const continueDecision: DecisionChangeHandler = async (
+    decision,
+    newSymbol,
+  ) => {
+    setContinuingDecision(decision !== "cancel");
+    return onDecision(decision, newSymbol);
+  };
   const [sidebarInitialTab, setSidebarInitialTab] = useState<
     "info" | "decisions" | "activity" | "paragraphs" | undefined
   >(undefined);
@@ -902,11 +960,6 @@ function MandateRow({
     (w) => w.suggestedUpdate,
   )?.suggestedUpdate;
 
-  // Check if there's a completed update (has newSymbol)
-  const currentDecision = state?.decision;
-
-  const hasCompletedUpdate =
-    currentDecision?.decision === "update" && currentDecision?.newSymbol;
   const replacements = getTableReplacements(
     getDecisionTracks(state?.decisions ?? []),
     updateTargetMetadata,
@@ -917,17 +970,25 @@ function MandateRow({
   }));
 
   const handleUpdateSelect = async (symbol: string) => {
-    if (!(await onDecision("update", symbol))) return;
+    if (!(await continueDecision("update", symbol))) return;
     setShowUpdateSearch(false);
     setShowReasonPopup(true);
     setUpdatePrefillSymbol(undefined);
   };
 
   const handleUpdateManual = async (data: ManualEntryData) => {
+    setContinuingDecision(true);
     if (!(await onUpdateWithManual(data.symbol, data))) return;
     setShowUpdateSearch(false);
     setShowReasonPopup(true);
     setUpdatePrefillSymbol(undefined);
+  };
+
+  const openUpdateSearch = (prefillSymbol?: string) => {
+    setSidebarOpen(false);
+    setOpenReplacementSymbol(null);
+    setUpdatePrefillSymbol(prefillSymbol);
+    setShowUpdateSearch(true);
   };
 
   const handleCancelUpdate = () => {
@@ -969,9 +1030,9 @@ function MandateRow({
       : rawResponse;
 
   return (
-    <div className="relative">
+    <div className="relative" ref={rowRef} data-citation-visible={rowVisible}>
       <div className="overflow-visible bg-white">
-        <div hidden={!visible}>
+        <div hidden={!rowVisible}>
           {/* Original row */}
           <MandateRowContent
             subprogramme={subprogramme}
@@ -995,23 +1056,20 @@ function MandateRow({
               setSidebarInitialTab("activity");
               setSidebarOpen(true);
             }}
-            onDecision={onDecision}
+            onDecision={continueDecision}
             onReasonChange={onReasonChange}
-            onUpdateClick={(prefillSymbol) => {
-              setUpdatePrefillSymbol(prefillSymbol);
-              setShowUpdateSearch(true);
-            }}
+            onUpdateClick={openUpdateSearch}
             showReasonPopup={showReasonPopup}
-            onReasonPopupClose={() => setShowReasonPopup(false)}
+            onReasonPopupClose={closeReasonPopup}
             onEdit={handleEdit}
             onAcceptChange={onAcceptChange}
             onRevertChange={onRevertChange}
           />
 
           {/* Update search input (shown when user selects "update" from dropdown) */}
-          {!readOnly && showUpdateSearch && !hasCompletedUpdate && (
+          {!readOnly && showUpdateSearch && (
             <div className="border-t border-gray-100 bg-amber-50/30 px-4 py-3">
-              <div className="mb-3 text-xs font-medium text-amber-600">
+              <div className="mb-3 text-xs font-medium text-amber-800">
                 Select replacement document:
               </div>
               <DocumentSearchInput
@@ -1067,6 +1125,9 @@ function MandateRow({
               commentCount={0}
               isReviewer={false}
               isUpdateTarget
+              isFoundational={citationIndex
+                ?.get(citationSymbolKey(replacementMandate.symbol))
+                ?.some((location) => location.level === "background")}
               citationIndex={citationIndex}
               newestWithNewerVersion={newestWithNewerVersion}
               onOpenSidebar={() =>
@@ -1110,11 +1171,7 @@ function MandateRow({
             onDecision={onDecision}
             onReasonChange={onReasonChange}
             onComment={onComment}
-            onUpdateClick={(prefillSymbol) => {
-              setSidebarOpen(false);
-              setUpdatePrefillSymbol(prefillSymbol);
-              setShowUpdateSearch(true);
-            }}
+            onUpdateClick={openUpdateSearch}
             metadataFromDb={mandate.metadataFromDb}
             docType={mandate.docType}
             initialTab={sidebarInitialTab}
@@ -1126,6 +1183,10 @@ function MandateRow({
               readOnly={readOnly}
               subprogramme={subprogramme}
               symbol={newMandate.symbol}
+              sourceSymbol={mandate.symbol}
+              isFoundational={citationIndex
+                ?.get(citationSymbolKey(newMandate.symbol))
+                ?.some((location) => location.level === "background")}
               link={newMandate.link}
               title={newMandate.title}
               year={newMandate.year}
@@ -1151,6 +1212,7 @@ function MandateRow({
               onDecision={onDecision}
               onReasonChange={onReasonChange}
               onComment={onComment}
+              onUpdateClick={openUpdateSearch}
               metadataFromDb={newMandate.metadataFromDb}
               docType={newMandate.docType}
             />
@@ -1233,7 +1295,7 @@ function MandateRow({
                   <div className="space-y-2.5">
                     {/* Before Review */}
                     <div>
-                      <div className="text-[10px] font-medium tracking-wide whitespace-nowrap text-gray-500 uppercase">
+                      <div className="text-[10px] font-medium tracking-wide whitespace-nowrap text-gray-700 uppercase">
                         Before Review
                       </div>
                       <div className="space-y-1.5">
@@ -1259,7 +1321,7 @@ function MandateRow({
 
                     {/* After Review */}
                     <div className="space-y-1.5">
-                      <div className="text-[10px] font-medium tracking-wide whitespace-nowrap text-gray-500 uppercase">
+                      <div className="text-[10px] font-medium tracking-wide whitespace-nowrap text-gray-700 uppercase">
                         After Review
                       </div>
                       <div className="space-y-1.5">
@@ -1290,8 +1352,8 @@ function MandateRow({
                       <div
                         className={`flex items-center gap-1.5 text-xs ${
                           changeResponse.responseType === "accept"
-                            ? "text-green-600"
-                            : "text-amber-600"
+                            ? "text-green-800"
+                            : "text-amber-800"
                         }`}
                       >
                         {changeResponse.responseType === "accept" ? (
@@ -1374,22 +1436,20 @@ function MandateRow({
   );
 }
 
-// Wrapper for the "Add" row at bottom of sections
 function AddEntryRow({
   onAdd,
   onAddManual,
-  disabled,
+  sectionTitle,
 }: {
   onAdd: (symbol: string) => void;
   onAddManual: (data: ManualEntryData) => void;
-  disabled?: boolean;
+  sectionTitle: string;
 }) {
-  if (disabled) return null;
   return (
     <DocumentSearchInput
       onSelect={onAdd}
       onManualSubmit={onAddManual}
-      placeholder="Add mandate document from database — search by symbol or title and click to select."
+      placeholder={`Add a citation to ${sectionTitle} — search by symbol or title`}
       submitLabel="Add"
       formTitle="Add document manually"
     />
@@ -1423,7 +1483,9 @@ function MandateSection({
   onRevertChange,
   visibleMandates,
   sectionId,
+  bodyFullNames,
 }: {
+  bodyFullNames: Record<string, string>;
   title: string;
   mandates: Mandate[];
   entity: string;
@@ -1484,14 +1546,14 @@ function MandateSection({
 }) {
   const tracksContext = useContext(DecisionTracksContext);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showAddCitation, setShowAddCitation] = useState(false);
   const stateKey = (symbol: string) => `${symbol}:${subprogramme || ""}`;
   const visibleSymbols = new Set(
     visibleMandates.map((mandate) => mandate.symbol),
   );
-  const sortedMandates = [
-    ...visibleMandates,
-    ...mandates.filter((mandate) => !visibleSymbols.has(mandate.symbol)),
-  ];
+  const citationGroups = groupCitations(mandates, bodyFullNames);
+  const canAddCitation =
+    !readOnly && (tracksContext?.canEditSubmission || tracksContext?.canReview);
 
   // Build set of all symbols for warning system (to detect newer-already-cited)
   const allSymbols = useMemo(
@@ -1499,44 +1561,26 @@ function MandateSection({
     [mandates],
   );
 
-  // Build set of symbols that are the newest citation among those sharing the same newer version
-  // Only these should show the "newer version available" warning
-  const newestWithNewerVersion = useMemo(() => {
-    const allMandates = mandates;
-    // Group by newer version symbol
-    const byNewerVersion = new Map<string, Mandate[]>();
-    for (const m of allMandates) {
-      if (m.newerVersion?.symbol) {
-        const existing = byNewerVersion.get(m.newerVersion.symbol) || [];
-        existing.push(m);
-        byNewerVersion.set(m.newerVersion.symbol, existing);
-      }
-    }
-    // For each group, find the one with the highest year
-    const newestSymbols = new Set<string>();
-    for (const group of byNewerVersion.values()) {
-      const newest = group.reduce((a, b) =>
-        (a.year ?? 0) >= (b.year ?? 0) ? a : b,
-      );
-      newestSymbols.add(newest.symbol);
-    }
-    return newestSymbols;
-  }, [mandates]);
+  const newestWithNewerVersion = useMemo(
+    () => newestVersionWarningSymbols(mandates),
+    [mandates],
+  );
 
   return (
     <section
       id={sectionId}
       role="rowgroup"
       aria-label={title}
-      className="scroll-mt-10"
+      className="scroll-mt-2 focus:outline-none lg:scroll-mt-10"
+      tabIndex={-1}
       style={visibleMandates.length ? undefined : { display: "contents" }}
     >
       <CitationTableRow
         spanAll
-        hidden={!visibleMandates.length}
-        className="sticky top-10 z-10"
+        hidden={!visibleMandates.length && !canAddCitation}
+        className="lg:sticky lg:top-10 lg:z-10"
       >
-        <div className="flex h-8 items-center gap-2 border-b border-border bg-muted px-3 text-sm">
+        <div className="flex h-10 items-center gap-2 border-y border-foreground/15 bg-secondary px-3 text-sm">
           <h3 className="truncate font-semibold text-foreground">{title}</h3>
           <span className="shrink-0 text-xs text-foreground tabular-nums">
             {visibleMandates.length}
@@ -1545,17 +1589,30 @@ function MandateSection({
               : ""}
           </span>
           {!readOnly && title !== "Programme level" && (
-            <button
-              type="button"
-              onClick={() => setShowEditModal(true)}
-              className="rounded text-foreground"
-              title="Edit subprogramme"
-            >
-              <Pencil className="h-3 w-3" />
-            </button>
+            <Tooltip asChild content="Edit subprogramme">
+              <button
+                type="button"
+                onClick={() => setShowEditModal(true)}
+                className="rounded text-foreground"
+                aria-label="Edit subprogramme"
+              >
+                <Pencil className="h-3 w-3" />
+              </button>
+            </Tooltip>
           )}
           {readOnly && (
             <span className="text-xs text-foreground">· reference</span>
+          )}
+          {canAddCitation && (
+            <button
+              type="button"
+              data-workspace-add
+              onClick={() => setShowAddCitation((open) => !open)}
+              aria-expanded={showAddCitation}
+              className="ml-2 inline-flex shrink-0 items-center gap-1 rounded px-2 py-1 text-xs font-medium text-un-blue-text-aaa hover:bg-un-blue-surface focus-visible:ring-2 focus-visible:ring-un-blue"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add citation
+            </button>
           )}
         </div>
       </CitationTableRow>
@@ -1569,7 +1626,7 @@ function MandateSection({
               necessary, please reach out to{" "}
               <a
                 href="mailto:support@eosg.dev"
-                className="text-un-blue hover:underline"
+                className="text-un-blue-text hover:underline"
               >
                 support@eosg.dev
               </a>
@@ -1578,68 +1635,93 @@ function MandateSection({
         </DialogContent>
       </Dialog>
       <div>
-        {sortedMandates.map((m) => {
-          return (
-            <MandateRow
-              subprogramme={subprogramme}
-              key={m.symbol}
-              visible={visibleSymbols.has(m.symbol)}
-              mandate={{ ...m, entity }}
-              isAdded={m.isAdded}
-              state={states[stateKey(m.symbol)]}
-              commentCount={totalComments[m.symbol] || 0}
-              isReviewer={isReviewer}
-              userEmail={userEmail}
-              userEntity={userEntity}
-              readOnly={readOnly}
-              isFoundational={foundationalSymbols?.has(m.symbol)}
-              allSymbols={allSymbols}
-              citationIndex={citationIndex}
-              newestWithNewerVersion={newestWithNewerVersion}
-              reviewChangeInfo={reviewChanges?.[stateKey(m.symbol)]}
-              isUnderReview={isUnderReview}
-              onDecision={(decision, newSymbol) =>
-                onDecision(m.symbol, decision, newSymbol)
-              }
-              onReasonChange={(reason, otherReason, savedDecision) =>
-                onReasonChange(m.symbol, reason, otherReason, savedDecision)
-              }
-              onUpdateWithManual={(newSymbol, manualData) =>
-                onUpdateWithManual(m.symbol, newSymbol, manualData)
-              }
-              onEditManual={
-                onEditManual
-                  ? (data) => onEditManual(m.symbol, data)
-                  : undefined
-              }
-              onComment={(comment) => onComment(m.symbol, comment)}
-              updateTargetMetadata={updateTargetMetadata}
-              onAcceptChange={
-                onAcceptChange ? () => onAcceptChange(m.symbol) : undefined
-              }
-              onRevertChange={
-                onRevertChange ? () => onRevertChange(m.symbol) : undefined
-              }
+        {showAddCitation && canAddCitation && visibleMandates.length > 0 && (
+          <CitationTableRow spanAll>
+            <AddEntryRow
+              sectionTitle={title}
+              onAdd={onAdd}
+              onAddManual={onAddManual}
             />
-          );
-        })}
-        {visibleMandates.length > 0 &&
-          !readOnly &&
-          (tracksContext?.canEditSubmission || tracksContext?.canReview) && (
-            <CitationTableRow spanAll>
-              <AddEntryRow
-                onAdd={onAdd}
-                onAddManual={onAddManual}
-                disabled={false}
-              />
+          </CitationTableRow>
+        )}
+        {citationGroups.map((group) => (
+          <div key={group.key}>
+            <CitationTableRow
+              spanAll
+              hidden={
+                !group.citations.some((m) => visibleSymbols.has(m.symbol))
+              }
+              className="lg:sticky lg:top-20 lg:z-9"
+            >
+              <h4 className="flex min-h-8 items-center border-b border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground">
+                {group.label}
+              </h4>
             </CitationTableRow>
-          )}
+            {group.citations.map((m) => {
+              return (
+                <MandateRow
+                  subprogramme={subprogramme}
+                  key={m.symbol}
+                  visible={visibleSymbols.has(m.symbol)}
+                  mandate={{ ...m, entity }}
+                  isAdded={m.isAdded}
+                  state={states[stateKey(m.symbol)]}
+                  commentCount={totalComments[m.symbol] || 0}
+                  isReviewer={isReviewer}
+                  userEmail={userEmail}
+                  userEntity={userEntity}
+                  readOnly={readOnly}
+                  isFoundational={foundationalSymbols?.has(
+                    citationSymbolKey(m.symbol),
+                  )}
+                  allSymbols={allSymbols}
+                  citationIndex={citationIndex}
+                  newestWithNewerVersion={newestWithNewerVersion}
+                  reviewChangeInfo={reviewChanges?.[stateKey(m.symbol)]}
+                  isUnderReview={isUnderReview}
+                  onDecision={(decision, newSymbol) =>
+                    onDecision(m.symbol, decision, newSymbol)
+                  }
+                  onReasonChange={(reason, otherReason, savedDecision) =>
+                    onReasonChange(m.symbol, reason, otherReason, savedDecision)
+                  }
+                  onUpdateWithManual={(newSymbol, manualData) =>
+                    onUpdateWithManual(m.symbol, newSymbol, manualData)
+                  }
+                  onEditManual={
+                    onEditManual
+                      ? (data) => onEditManual(m.symbol, data)
+                      : undefined
+                  }
+                  onComment={(comment) => onComment(m.symbol, comment)}
+                  updateTargetMetadata={updateTargetMetadata}
+                  onAcceptChange={
+                    onAcceptChange ? () => onAcceptChange(m.symbol) : undefined
+                  }
+                  onRevertChange={
+                    onRevertChange ? () => onRevertChange(m.symbol) : undefined
+                  }
+                />
+              );
+            })}
+          </div>
+        ))}
+        {!showAddCitation && canAddCitation && visibleMandates.length > 0 && (
+          <CitationTableRow spanAll>
+            <AddEntryRow
+              sectionTitle={title}
+              onAdd={onAdd}
+              onAddManual={onAddManual}
+            />
+          </CitationTableRow>
+        )}
       </div>
     </section>
   );
 }
 
 export function EntityDetail({
+  bodyFullNames,
   cycleReadOnly = false,
   budgetVersion = CURRENT_BUDGET_VERSION,
   entity,
@@ -1663,18 +1745,24 @@ export function EntityDetail({
     notificationId !== dismissedNotification &&
     notificationCycle === budgetVersion;
   const filterEntity: string | null = null;
+  const [remainingSelected, setShowRemaining] = useState(false);
   const [localTableFilters, setLocalTableFilters] =
     useState<TableFilters>(EMPTY_TABLE_FILTERS);
   // Only the comments filter is shareable; other table controls stay local.
   const commentsParam = searchParams.get("comments");
-  const tableFilters = useMemo<TableFilters>(() => ({
-    ...localTableFilters,
-    comments: [...new Set(
-      (commentsParam || "")
-        .split(",")
-        .filter((value) => ["has", "none", "unread"].includes(value)),
-    )],
-  }), [localTableFilters, commentsParam]);
+  const tableFilters = useMemo<TableFilters>(
+    () => ({
+      ...localTableFilters,
+      comments: [
+        ...new Set(
+          (commentsParam || "")
+            .split(",")
+            .filter((value) => ["has", "none", "unread"].includes(value)),
+        ),
+      ],
+    }),
+    [localTableFilters, commentsParam],
+  );
   const setTableFilters = (next: TableFilters) => {
     setLocalTableFilters(next);
     const url = new URL(window.location.href);
@@ -1701,6 +1789,7 @@ export function EntityDetail({
     initialStatus?.context === loadKey && initialStatus.loaded;
   const initialError =
     initialStatus?.context === loadKey ? initialStatus.error : null;
+  const pendingDrops = useRef(new Set<string>());
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [states, setStates] = useState<Record<string, MandateState>>({});
   const [totalComments, setTotalComments] = useState<Record<string, number>>(
@@ -1764,15 +1853,10 @@ export function EntityDetail({
   );
   const isOwnEntity = initialLoaded && permissions.ownsEntity;
   const { canEditSubmission, canReview, canComment } = permissions;
+  const showRemaining = canEditSubmission && remainingSelected;
   // Additions belong to the entity submission when the viewer can edit it.
   // Reviewers working on a locked or another entity's submission add to review.
   const additionTrack = canEditSubmission ? "entity" : "review";
-
-  // Set of background mandate symbols (for foundational highlighting in legislative sections)
-  const foundationalSymbols = useMemo(
-    () => new Set(backgroundMandates.map((m) => m.symbol)),
-    [backgroundMandates],
-  );
 
   // Helper to refetch review changes after a decision is made during review
   const refreshReviewChanges = useCallback(async () => {
@@ -2763,6 +2847,7 @@ export function EntityDetail({
         filters: tableFilters,
         sort: tableSort,
         sharedEntity: filterEntity,
+        showRemaining,
       }),
     [
       entity,
@@ -2777,15 +2862,27 @@ export function EntityDetail({
       tableFilters,
       tableSort,
       filterEntity,
+      showRemaining,
     ],
   );
-  const { tableStates, tableItems, visibleItems, sectionViews } = tableView;
-  const unreadEntryCount = tableItems.filter((item) => item.unreadComments > 0).length;
-  const unreadFocused = tableFilters.comments.length === 1 && tableFilters.comments[0] === "unread";
-  const citationIndex = useMemo(
-    () => buildEntityCitationIndex(tableItems, entity),
-    [tableItems, entity],
+  const { tableStates, tableItems, visibleItems, sectionViews, citationIndex } =
+    tableView;
+  const foundationalSymbols = useMemo(
+    () =>
+      new Set(
+        [...citationIndex]
+          .filter(([, locations]) =>
+            locations.some((location) => location.level === "background"),
+          )
+          .map(([symbol]) => symbol),
+      ),
+    [citationIndex],
   );
+  const unreadEntryCount = tableItems.filter(
+    (item) => item.unreadComments > 0,
+  ).length;
+  const unreadFocused =
+    tableFilters.comments.length === 1 && tableFilters.comments[0] === "unread";
   // Notification links use the same unfiltered citation data as row sidebars,
   // including additions. Filters must not strip metadata from a deep link.
   const notificationMandate = notificationOpen
@@ -2801,7 +2898,17 @@ export function EntityDetail({
   const notificationMetadata =
     notificationMandate ?? addedMetadata[notificationSymbol || ""];
 
+  const showReviewerColumn =
+    canReview ||
+    isUnderReview ||
+    tableItems.some((item) =>
+      item.state?.decisions.some(
+        (decision) => decision.decisionTrack === "review",
+      ),
+    );
   const tableControls: EntityTableViewControls = {
+    showReviewerColumn,
+    submissionLabel: isOwnEntity ? "Your submission" : "Entity submission",
     filters: tableFilters,
     setFilters: setTableFilters,
     sort: tableSort,
@@ -2818,8 +2925,12 @@ export function EntityDetail({
   };
   const clearTableFilters = () => {
     setTableFilters(EMPTY_TABLE_FILTERS);
+    setShowRemaining(false);
   };
-  const filtersActive = hasTableFilters(tableFilters) || !!filterEntity;
+  const filtersActive =
+    hasTableFilters(tableFilters) || !!filterEntity || showRemaining;
+  const requiredItems = tableItems.filter(isRequiredSubmission);
+  const decidedCitations = requiredItems.filter(hasSubmissionDecision).length;
   const totalMandates = tableItems.length;
   const filteredTotal = visibleItems.length;
   const totalUniqueDocuments = new Set(
@@ -2854,6 +2965,73 @@ export function EntityDetail({
     });
   }
 
+  function canDropCitation(location: CitationLocation) {
+    if (!canEditSubmission || location.subprogramme === null) return false;
+    const state =
+      tableStates[`${location.sourceSymbol}:${location.subprogramme}`];
+    if (state?.decisions.some((event) => !event.id)) return false;
+    // Only withdraw an addition or replacement proposed by this entity.
+    if (
+      location.isAdded &&
+      (!state?.decision ||
+        state.decision.decision === "cancel" ||
+        !state.decisions.some(
+          (event) =>
+            event.decisionTrack !== "review" && event.decision === "add",
+        ))
+    )
+      return false;
+    if (location.kind === "replacement") {
+      const { submission, currentReview } = getDecisionTracks(
+        state?.decisions || [],
+      );
+      return (
+        submission?.decision === "update" &&
+        !!submission.newSymbol &&
+        (!currentReview ||
+          (currentReview.decision === "update" &&
+            citationSymbolKey(currentReview.newSymbol || "") ===
+              citationSymbolKey(submission.newSymbol)))
+      );
+    }
+    return true;
+  }
+
+  async function dropCitation(location: CitationLocation) {
+    if (!canDropCitation(location)) return false;
+    const key = `${location.sourceSymbol}:${location.subprogramme}`;
+    if (pendingDrops.current.has(key)) return false;
+    pendingDrops.current.add(key);
+    const state = tableStates[key];
+    try {
+      const result = await createDecisionAction(
+        {
+          entity,
+          documentSymbol: location.sourceSymbol,
+          subprogramme: location.subprogramme,
+          decision: location.isAdded ? "cancel" : "remove",
+          expectedDecisionId: state?.decision?.id ?? null,
+          expectedReviewId: state?.reviewDecision?.id ?? null,
+        },
+        budgetVersion,
+      );
+      if (result.success && result.data) {
+        onTrackSaved(result.data);
+        if (reviewSessionId) refreshReviewChanges();
+        return true;
+      }
+      if (!result.success) {
+        if (result.error === "review_mode_blocked")
+          setShowReviewBlockedDialog(true);
+        else showError(result.error);
+        await refreshDecisions();
+      }
+      return false;
+    } finally {
+      pendingDrops.current.delete(key);
+    }
+  }
+
   // Shared props for all MandateSection instances
   const sharedSectionProps = {
     entity,
@@ -2872,7 +3050,8 @@ export function EntityDetail({
     reviewSessionId,
   };
 
-  const { confirmCitation, citationConfirmation } = useCitationConfirmation(citationIndex);
+  const { confirmCitation, citationConfirmation } =
+    useCitationConfirmation(citationIndex);
   const handleDecision = async (
     symbol: string,
     subprogramme: string | null,
@@ -2880,15 +3059,42 @@ export function EntityDetail({
     newSymbol?: string,
     decisionTrack: "entity" | "review" = "entity",
   ) => {
-    const target = decision === "add" ? symbol : decision === "update" ? newSymbol : undefined;
-    if (target && !(await confirmCitation(target, subprogramme, decision === "update" ? symbol : undefined))) return null;
-    return saveDecision(symbol, subprogramme, decision, newSymbol, decisionTrack);
+    const target =
+      decision === "add"
+        ? symbol
+        : decision === "update"
+          ? newSymbol
+          : undefined;
+    if (
+      target &&
+      !(await confirmCitation(
+        target,
+        subprogramme,
+        decision === "update" ? symbol : undefined,
+      ))
+    )
+      return null;
+    return saveDecision(
+      symbol,
+      subprogramme,
+      decision,
+      newSymbol,
+      decisionTrack,
+    );
   };
-  const handleUpdateWithManual = async (symbol: string, subprogramme: string | null, newSymbol: string, data: ManualEntryData) => {
+  const handleUpdateWithManual = async (
+    symbol: string,
+    subprogramme: string | null,
+    newSymbol: string,
+    data: ManualEntryData,
+  ) => {
     if (!(await confirmCitation(newSymbol, subprogramme, symbol))) return false;
     return saveUpdateWithManual(symbol, subprogramme, newSymbol, data);
   };
-  const handleAddManual = async (subprogramme: string | null, data: ManualEntryData) => {
+  const handleAddManual = async (
+    subprogramme: string | null,
+    data: ManualEntryData,
+  ) => {
     if (!(await confirmCitation(data.symbol, subprogramme))) return;
     return saveAddManual(subprogramme, data);
   };
@@ -2981,6 +3187,8 @@ export function EntityDetail({
           canReview,
           onSaved: onTrackSaved,
           confirmCitation,
+          canDropCitation,
+          onDropCitation: dropCitation,
         }}
       >
         <EntityTableFilterContext.Provider value={tableControls}>
@@ -3007,7 +3215,9 @@ export function EntityDetail({
                   notificationMandate?.allEntityRelevance ?? {}
                 }
                 metadataFromDb={notificationMandate?.metadataFromDb}
-                isFoundational={foundationalSymbols.has(notificationSymbol)}
+                isFoundational={foundationalSymbols.has(
+                  citationSymbolKey(notificationSymbol),
+                )}
                 budgetVersion={budgetVersion}
                 targetCommentId={notificationId}
                 isOpen
@@ -3038,6 +3248,14 @@ export function EntityDetail({
                     reason,
                     other,
                     saved,
+                  )
+                }
+                onUpdateWithManual={(newSymbol, data) =>
+                  handleUpdateWithManual(
+                    notificationSymbol,
+                    notificationSubprogramme,
+                    newSymbol,
+                    data,
                   )
                 }
                 onComment={
@@ -3074,7 +3292,7 @@ export function EntityDetail({
                 <button
                   onClick={() => setErrorMessage(null)}
                   aria-label="Dismiss error"
-                  className="ml-auto shrink-0 text-red-400 hover:text-red-600"
+                  className="ml-auto shrink-0 text-red-700 hover:text-red-800"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -3108,6 +3326,13 @@ export function EntityDetail({
               entity={entity}
               entityLong={entityLong}
               partName={partName}
+              decidedCitations={decidedCitations}
+              requiredCitations={requiredItems.length}
+              showRemaining={showRemaining}
+              onShowRemainingChange={setShowRemaining}
+              budgetVersion={budgetVersion}
+              canEditSubmission={canEditSubmission}
+              cycleReadOnly={cycleReadOnly}
               filterEntity={filterEntity}
               filtersActive={filtersActive}
               filteredCitations={filteredTotal}
@@ -3137,53 +3362,115 @@ export function EntityDetail({
             {/* Phase Tracker */}
             {/* <PhaseTracker /> */}
 
-            {/* Global Search */}
-            <div className="mb-6 flex flex-wrap items-center gap-3">
-              <div className="relative min-w-64 flex-1">
-                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <div
+              role="search"
+              aria-label="Search and filter citations"
+              className="flex flex-wrap items-center gap-2"
+            >
+              <div className="relative min-w-56 flex-1">
+                <Search
+                  className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-foreground/75"
+                  aria-hidden="true"
+                />
                 <input
                   type="text"
-                  placeholder="Search across all mandates by symbol, title, or body..."
+                  data-workspace-search
+                  aria-label="Search all citations"
+                  placeholder="Search symbol, title or body…"
                   value={tableFilters.search}
-                  onChange={(e) =>
+                  onChange={(event) =>
                     setTableFilters({
                       ...tableFilters,
-                      search: e.target.value,
+                      search: event.target.value,
                     })
                   }
-                  className="w-full rounded-lg border border-gray-300 py-2 pr-10 pl-10 text-sm focus:border-un-blue focus:ring-1 focus:ring-un-blue focus:outline-none"
+                  className="h-9 w-full rounded-md border border-input bg-white pr-9 pl-9 text-sm text-foreground placeholder:text-gray-600 focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:outline-none"
                 />
                 {tableFilters.search && (
                   <button
+                    type="button"
+                    aria-label="Clear citation search"
                     onClick={() =>
                       setTableFilters({ ...tableFilters, search: "" })
                     }
-                    className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute top-1/2 right-2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-foreground/75 hover:bg-muted focus-visible:ring-2 focus-visible:ring-un-blue"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-4 w-4" aria-hidden="true" />
                   </button>
                 )}
               </div>
+              <BodyTypeFilter controls={tableControls} />
+              <Button
+                type="button"
+                variant="outline"
+                aria-pressed={tableFilters.notes.includes("with-notes")}
+                onClick={() =>
+                  setTableFilters({
+                    ...tableFilters,
+                    notes: tableFilters.notes.includes("with-notes")
+                      ? []
+                      : ["with-notes"],
+                  })
+                }
+                className={cn(
+                  ENTITY_TOOLBAR_CONTROL,
+                  tableFilters.notes.includes("with-notes") &&
+                    "border-un-blue-text bg-un-blue-surface text-un-blue-text",
+                )}
+              >
+                With notes{" "}
+                <span className="text-foreground tabular-nums">
+                  {
+                    tableItems.filter(
+                      (item) => (item.warningIds?.length ?? 0) > 0,
+                    ).length
+                  }
+                </span>
+              </Button>
               {(unreadEntryCount > 0 || unreadFocused) && (
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="inline-flex items-center gap-1.5" role="status">
-                    <MessageSquare className="h-4 w-4 text-un-blue-text" aria-hidden="true" />
+                <>
+                  <span role="status" className="sr-only">
                     {unreadEntryCount > 0
                       ? `${unreadEntryCount} ${unreadEntryCount === 1 ? "entry has" : "entries have"} unread comments`
                       : "No unread comments remaining"}
                   </span>
-                  <button
-                    type="button"
-                    aria-pressed={unreadFocused}
-                    onClick={() => setTableFilters({
-                      ...tableFilters,
-                      comments: unreadFocused ? [] : ["unread"],
-                    })}
-                    className="shrink-0 rounded-md border border-un-blue-text/30 px-2.5 py-1.5 text-xs font-medium text-un-blue-text transition-colors hover:bg-un-blue/5 focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 focus-visible:outline-none"
+                  <Tooltip
+                    asChild
+                    content={
+                      unreadFocused
+                        ? "Show all entries"
+                        : "Focus on unread comments"
+                    }
                   >
-                    {unreadFocused ? "Show all entries" : "Focus on unread"}
-                  </button>
-                </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      aria-pressed={unreadFocused}
+                      aria-label={
+                        unreadFocused
+                          ? "Show all entries, clear unread comments filter"
+                          : `Focus on ${unreadEntryCount} ${unreadEntryCount === 1 ? "entry" : "entries"} with unread comments`
+                      }
+                      onClick={() =>
+                        setTableFilters({
+                          ...tableFilters,
+                          comments: unreadFocused ? [] : ["unread"],
+                        })
+                      }
+                      className={cn(
+                        ENTITY_TOOLBAR_CONTROL,
+                        unreadFocused &&
+                          "border-un-blue-text bg-un-blue-surface text-un-blue-text",
+                      )}
+                    >
+                      <MessageSquare className="h-4 w-4" aria-hidden="true" />
+                      Unread comments{" "}
+                      <span className="text-foreground tabular-nums">
+                        {unreadEntryCount}
+                      </span>
+                    </Button>
+                  </Tooltip>
+                </>
               )}
             </div>
 
@@ -3192,22 +3479,24 @@ export function EntityDetail({
               sharedEntity={null}
               onClearAll={clearTableFilters}
             />
-            {/* One horizontal scroll area keeps columns aligned. On narrow screens it also provides a bounded vertical scroll area for sticky section headings. */}
+            {/* The page scrolls vertically; narrower screens retain horizontal access to all columns. */}
             <div
               role="region"
               aria-label="Resolution review sections"
               tabIndex={0}
-              className="isolate max-h-[75vh] overflow-auto rounded-lg border border-border bg-white focus-visible:ring-2 focus-visible:ring-un-blue xl:max-h-none xl:overflow-clip"
+              className="relative isolate overflow-x-auto rounded-lg border border-border bg-white focus-visible:ring-2 focus-visible:ring-un-blue lg:overflow-visible"
             >
               <div
                 role="table"
                 aria-label={`${entity} mandate review decisions`}
-                aria-colcount={10}
-                className="min-w-[960px]"
+                aria-colcount={showReviewerColumn ? 9 : 8}
+                className={
+                  showReviewerColumn ? "min-w-[966px]" : "min-w-[876px]"
+                }
               >
                 <div
                   role="rowgroup"
-                  className="sticky top-0 z-20 border-b border-border bg-muted"
+                  className="rounded-t-lg border-b border-foreground/20 bg-muted lg:sticky lg:top-0 lg:z-20"
                 >
                   <ColumnHeaders controls={tableControls} />
                 </div>
@@ -3220,6 +3509,7 @@ export function EntityDetail({
                         : formatSubprogrammeName(section.subprogramme)
                     }
                     sectionId={section.id}
+                    bodyFullNames={bodyFullNames}
                     mandates={section.mandates}
                     visibleMandates={section.visibleMandates}
                     subprogramme={section.subprogramme}
@@ -3235,7 +3525,13 @@ export function EntityDetail({
             </div>
             {filteredTotal === 0 && (
               <div className="rounded-lg border border-border bg-white p-8 text-center text-foreground">
-                <p>No citations match these filters.</p>
+                <p>
+                  {showRemaining &&
+                  requiredItems.length > 0 &&
+                  decidedCitations === requiredItems.length
+                    ? "All submission citations have a recorded decision."
+                    : "No citations match these filters."}
+                </p>
                 <button
                   type="button"
                   onClick={clearTableFilters}

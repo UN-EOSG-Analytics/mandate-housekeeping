@@ -11,11 +11,20 @@ import {
   REVIEW_POLL_INTERVAL_MS,
   REVIEW_RECONCILE_INTERVAL_MS,
 } from "@/lib/polling";
-import { type BudgetVersion } from "@/lib/db/budget-version";
+import { SUBMISSION_CYCLES, type BudgetVersion } from "@/lib/db/budget-version";
 import { CommentsDecisionPanel } from "./CommentsDecisionPanel";
 
 import React, { useContext } from "react";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { DocumentSearchInput } from "@/features/mandates/ui/DocumentSearchInput";
+import type { ManualEntryData } from "@/features/mandates/ui/ManualDocumentForm";
+import { citationSection } from "@/features/mandates/services/citation-locations";
 import { DecisionTracksContext } from "./ReviewDecisionControl";
 import { CommentConversationContext } from "./CommentConversationContext";
 import { DocumentSymbol as SharedDocumentSymbol } from "@un-eosg/ui/components/document-symbol";
@@ -29,7 +38,7 @@ import {
   isMainPreambular,
   shouldCollapsePreamble,
 } from "@/features/mandates/services/documents/paragraph-presentation";
-import { getAgeIndicator } from "@/features/mandates/services/age-indicator";
+import { CitationYear } from "./CitationYear";
 import { getParagraphTextSegments } from "@/features/mandates/services/documents/paragraph-highlights";
 import { fetchParagraphs } from "@/features/mandates/services/documents/client-data-service";
 import {
@@ -55,19 +64,21 @@ import {
   ChevronDown,
   ExternalLink,
   FileText,
-  Info,
+  MessageSquare,
   Loader2,
   Search,
   Sparkles,
   Star,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Tooltip } from "./Tooltip";
 
 interface Props {
   readOnly?: boolean;
   symbol: string;
+  /** Original citation whose decisions/conversation apply to a displayed replacement. */
+  sourceSymbol?: string;
   subprogramme: string | null;
   link: string | null;
   title?: string;
@@ -98,8 +109,32 @@ interface Props {
   budgetVersion?: BudgetVersion;
   targetCommentId?: string | null;
   onUpdateClick?: (prefillSymbol?: string) => void; // Called when user selects "update" from sidebar
+  onUpdateWithManual?: (
+    newSymbol: string,
+    data: ManualEntryData,
+  ) => Promise<boolean>;
   metadataFromDb?: boolean;
-  initialTab?: "info" | "decisions" | "activity" | "paragraphs"; // Initial tab to open
+  initialTab?:
+    | "review"
+    | "document"
+    | "info"
+    | "decisions"
+    | "activity"
+    | "paragraphs";
+}
+
+type SidebarTab = "review" | "document";
+
+function initialSidebarTab(
+  initialTab: Props["initialTab"],
+  targetCommentId?: string | null,
+): SidebarTab {
+  if (targetCommentId) return "review";
+  return initialTab === "document" ||
+    initialTab === "paragraphs" ||
+    initialTab === "info"
+    ? "document"
+    : "review";
 }
 
 function cleanPrefix(prefix: string) {
@@ -128,7 +163,7 @@ function ParaBox({
       <div className="rounded-lg bg-gray-100 p-3">
         <div className="flex gap-2">
           {label && (
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-un-blue text-[10px] font-medium text-white">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-un-blue-text text-[10px] font-medium text-white">
               {label}
             </span>
           )}
@@ -136,33 +171,41 @@ function ParaBox({
             {getParagraphTextSegments(p, searchQuery, entity, entityLong).map(
               (segment, index) =>
                 segment.search ? (
-                  <mark
-                    key={index}
-                    title={
+                  <Tooltip
+                    asChild
+                    content={
                       segment.action ? "Automatic action annotation" : undefined
                     }
-                    className={cn(
-                      "rounded bg-yellow-200 px-0.5",
-                      segment.action
-                        ? "font-bold text-un-blue"
-                        : "text-foreground",
-                      segment.entity && "font-bold",
-                    )}
+                    key={index}
                   >
-                    {segment.text}
-                  </mark>
+                    <mark
+                      className={cn(
+                        "rounded bg-yellow-200 px-0.5",
+                        segment.action
+                          ? "font-bold text-un-blue-text"
+                          : "text-foreground",
+                        segment.entity && "font-bold",
+                      )}
+                    >
+                      {segment.text}
+                    </mark>
+                  </Tooltip>
                 ) : segment.action || segment.entity ? (
-                  <strong
-                    key={index}
-                    title={
+                  <Tooltip
+                    asChild
+                    content={
                       segment.action ? "Automatic action annotation" : undefined
                     }
-                    className={
-                      segment.action ? "text-un-blue" : "text-foreground"
-                    }
+                    key={index}
                   >
-                    {segment.text}
-                  </strong>
+                    <strong
+                      className={
+                        segment.action ? "text-un-blue-text" : "text-foreground"
+                      }
+                    >
+                      {segment.text}
+                    </strong>
+                  </Tooltip>
                 ) : (
                   segment.text
                 ),
@@ -193,7 +236,7 @@ function ParaBox({
         </div>
       )}
       {p.note_references?.length ? (
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-gray-600">
           Footnotes: {p.note_references.map((n) => n.note_id).join(", ")}
         </p>
       ) : null}
@@ -222,7 +265,7 @@ function CollapsedGap({
   return (
     <button
       onClick={onToggle}
-      className="flex w-full items-center gap-2 py-1.5 text-xs text-gray-400 hover:text-gray-600"
+      className="flex w-full items-center gap-2 py-1.5 text-xs text-gray-600 hover:text-gray-600"
     >
       <ChevronDown
         className={`h-3.5 w-3.5 transition-transform ${expanded ? "" : "-rotate-90"}`}
@@ -353,10 +396,10 @@ function FilteredParagraphTree({
       {hasSearchQuery && !hasResults && (
         <div className="py-8 text-center">
           <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100">
-            <Search className="h-5 w-5 text-gray-400" />
+            <Search className="h-5 w-5 text-gray-600" />
           </div>
           <p className="text-sm font-medium text-gray-600">No results found</p>
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-gray-600">
             Try a different search term
           </p>
         </div>
@@ -366,7 +409,7 @@ function FilteredParagraphTree({
         <>
           <button
             onClick={() => setShowPreamble(!showPreamble)}
-            className="flex items-center gap-2 py-1.5 text-xs text-gray-500 hover:text-foreground"
+            className="flex items-center gap-2 py-1.5 text-xs text-gray-600 hover:text-foreground"
           >
             <ChevronDown
               className={`h-3.5 w-3.5 transition-transform ${showPreamble ? "" : "-rotate-90"}`}
@@ -515,10 +558,10 @@ function FullParagraphTree({
       {hasSearchQuery && !hasResults && (
         <div className="py-8 text-center">
           <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100">
-            <Search className="h-5 w-5 text-gray-400" />
+            <Search className="h-5 w-5 text-gray-600" />
           </div>
           <p className="text-sm font-medium text-gray-600">No results found</p>
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-gray-600">
             Try a different search term
           </p>
         </div>
@@ -528,7 +571,7 @@ function FullParagraphTree({
         <>
           <button
             onClick={() => setShowPreamble(!showPreamble)}
-            className="flex items-center gap-2 py-1.5 text-xs text-gray-500 hover:text-foreground"
+            className="flex items-center gap-2 py-1.5 text-xs text-gray-600 hover:text-foreground"
           >
             <ChevronDown
               className={`h-3.5 w-3.5 transition-transform ${showPreamble ? "" : "-rotate-90"}`}
@@ -586,10 +629,11 @@ function FullParagraphTree({
   );
 }
 
-/** Load the conversation first; fulltext is only needed by the Paragraphs tab. */
+/** Load the conversation first; parsed text is only needed by the Document tab. */
 export function useDocumentSidebarData({
   open,
   symbol,
+  documentSymbol = symbol,
   budgetVersion,
   activeTab,
   userEmail = null,
@@ -597,8 +641,9 @@ export function useDocumentSidebarData({
   userEmail?: string | null;
   open: boolean;
   symbol: string;
+  documentSymbol?: string;
   budgetVersion: BudgetVersion;
-  activeTab: "info" | "paragraphs";
+  activeTab: SidebarTab | "info" | "paragraphs";
 }) {
   const activityKey = JSON.stringify([userEmail, budgetVersion, symbol]);
   const cacheKey = userEmail ? activityKey : null;
@@ -747,42 +792,43 @@ export function useDocumentSidebarData({
   ]);
 
   useEffect(() => {
-    if (!open || activeTab !== "paragraphs") return;
+    if (!open || (activeTab !== "document" && activeTab !== "paragraphs"))
+      return;
     let cancelled = false;
     // Retain the request across tab switches and close/reopen, including while
     // pending. A late response for another document cannot overwrite this one.
-    let request = paragraphRequests.current.get(symbol);
+    let request = paragraphRequests.current.get(documentSymbol);
     if (!request) {
-      request = fetchParagraphs(symbol).then(
+      request = fetchParagraphs(documentSymbol).then(
         (paragraphs) => ({ paragraphs: paragraphs || [], error: false }),
         () => ({ paragraphs: [], error: true }),
       );
-      paragraphRequests.current.set(symbol, request);
+      paragraphRequests.current.set(documentSymbol, request);
     }
     void request.then((result) => {
-      if (!cancelled) setParagraphResult({ symbol, ...result });
+      if (!cancelled) setParagraphResult({ symbol: documentSymbol, ...result });
     });
     return () => {
       cancelled = true;
     };
-  }, [open, activeTab, symbol]);
+  }, [open, activeTab, documentSymbol]);
 
   useEffect(() => {
     if (!open || (loadedActivityKey !== activityKey && !hasCachedActivity))
       return;
     let cancelled = false;
-    let request = versionRequests.current.get(symbol);
+    let request = versionRequests.current.get(documentSymbol);
     if (!request) {
-      request = getDocumentVersionsAction(symbol).catch(() => ({
+      request = getDocumentVersionsAction(documentSymbol).catch(() => ({
         success: false as const,
         error: "Failed to load",
       }));
-      versionRequests.current.set(symbol, request);
+      versionRequests.current.set(documentSymbol, request);
     }
     void request.then((result) => {
       if (!cancelled) {
         setVersionsResult({
-          symbol,
+          symbol: documentSymbol,
           versions: result.success ? result.data || [] : [],
         });
       }
@@ -790,7 +836,7 @@ export function useDocumentSidebarData({
     return () => {
       cancelled = true;
     };
-  }, [open, symbol, loadedActivityKey, activityKey, hasCachedActivity]);
+  }, [open, documentSymbol, loadedActivityKey, activityKey, hasCachedActivity]);
 
   const localActivity =
     loadedActivityKey === activityKey
@@ -848,12 +894,15 @@ export function useDocumentSidebarData({
     setAllComments: setLocalComments,
     handleRead,
     paragraphs:
-      paragraphResult?.symbol === symbol ? paragraphResult.paragraphs : null,
-    paragraphsLoading: paragraphResult?.symbol !== symbol,
-    fulltextError: paragraphResult?.symbol === symbol && paragraphResult.error,
+      paragraphResult?.symbol === documentSymbol
+        ? paragraphResult.paragraphs
+        : null,
+    paragraphsLoading: paragraphResult?.symbol !== documentSymbol,
+    fulltextError:
+      paragraphResult?.symbol === documentSymbol && paragraphResult.error,
     documentVersions:
-      versionsResult?.symbol === symbol ? versionsResult.versions : [],
-    versionsLoading: versionsResult?.symbol !== symbol,
+      versionsResult?.symbol === documentSymbol ? versionsResult.versions : [],
+    versionsLoading: versionsResult?.symbol !== documentSymbol,
   };
 }
 
@@ -861,6 +910,7 @@ export function DocumentSymbol({
   subprogramme,
   readOnly = false,
   symbol,
+  sourceSymbol,
   link,
   title,
   year,
@@ -880,6 +930,7 @@ export function DocumentSymbol({
   onReasonChange: onReasonChangeProp,
   onComment: onCommentProp,
   onUpdateClick: onUpdateClickProp,
+  onUpdateWithManual,
   initialTab,
   userEmail,
   userEntity,
@@ -891,18 +942,32 @@ export function DocumentSymbol({
   const trackContext = useContext(DecisionTracksContext);
   const budgetVersion = budgetVersionProp ?? conversationContext.budgetVersion;
   const currentUserEmail = userEmail ?? conversationContext.userEmail;
+  const citationSymbol = sourceSymbol ?? symbol;
   const onDecision = readOnly ? undefined : onDecisionProp;
   const onReasonChange = readOnly ? undefined : onReasonChangeProp;
   const onComment = conversationContext.canComment ? onCommentProp : undefined;
-  const onUpdateClick = readOnly ? undefined : onUpdateClickProp;
+  const [replacementSearch, setReplacementSearch] = useState<{
+    prefill?: string;
+  } | null>(null);
+  const [replacementSaving, setReplacementSaving] = useState(false);
+  const [replacementError, setReplacementError] = useState<string | null>(null);
+  const replacementSavingRef = useRef(false);
+  const onUpdateClick = readOnly
+    ? undefined
+    : (onUpdateClickProp ??
+      (onUpdateWithManual
+        ? (prefill?: string) => {
+            setReplacementError(null);
+            setReplacementSearch({ prefill });
+          }
+        : undefined));
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
   const [selectedEntity, setSelectedEntity] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  // Keep legacy entry points for comments/decisions opening the merged Info tab.
-  const [activeTab, setActiveTab] = useState<"info" | "paragraphs">(
-    initialTab === "paragraphs" ? "paragraphs" : "info",
+  const [activeTab, setActiveTab] = useState<SidebarTab>(() =>
+    initialSidebarTab(initialTab, targetCommentId),
   );
   const {
     activityLoading,
@@ -920,37 +985,71 @@ export function DocumentSymbol({
     versionsLoading,
   } = useDocumentSidebarData({
     open,
-    symbol,
+    symbol: citationSymbol,
+    documentSymbol: symbol,
     budgetVersion,
     activeTab,
     userEmail: currentUserEmail,
   });
   const openerRef = useRef<HTMLElement | null>(null);
-  const commentsSectionRef = useRef<HTMLElement>(null);
+  const openerRowRef = useRef<HTMLElement | null>(null);
+  const tabId = useId();
+  const reviewTabRef = useRef<HTMLButtonElement>(null);
+  const documentTabRef = useRef<HTMLButtonElement>(null);
 
   // Set initial tab when modal opens with a specific tab
   useEffect(() => {
-    if (open && initialTab) {
+    if (open) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- Sync state with props on modal open
-      setActiveTab(initialTab === "paragraphs" ? "paragraphs" : "info");
+      setActiveTab(initialSidebarTab(initialTab, targetCommentId));
     }
-  }, [open, initialTab]);
+  }, [open, initialTab, targetCommentId]);
 
-  // Table comment buttons still land directly on the conversation section.
-  // Notifications with an exact comment let the panel scroll to that message.
   useEffect(() => {
-    if (
-      !open ||
-      activeTab !== "info" ||
-      targetCommentId ||
-      (initialTab !== "activity" && initialTab !== "decisions")
-    )
-      return;
-    const frame = requestAnimationFrame(() =>
-      commentsSectionRef.current?.scrollIntoView({ block: "start" }),
-    );
-    return () => cancelAnimationFrame(frame);
-  }, [open, activeTab, initialTab, targetCommentId]);
+    // A reopened sidebar starts in review rather than an abandoned picker.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!open) setReplacementSearch(null);
+  }, [open]);
+
+  async function saveReplacement(
+    newSymbol: string,
+    manualData?: ManualEntryData,
+  ) {
+    if (replacementSavingRef.current) return;
+    replacementSavingRef.current = true;
+    setReplacementSaving(true);
+    setReplacementError(null);
+    try {
+      const saved = manualData
+        ? await onUpdateWithManual?.(newSymbol, manualData)
+        : await onDecision?.("update", newSymbol);
+      if (saved) setReplacementSearch(null);
+      else
+        setReplacementError(
+          "The replacement was not saved. Choose a document to try again.",
+        );
+    } catch {
+      setReplacementError("Could not save the replacement. Please try again.");
+    } finally {
+      replacementSavingRef.current = false;
+      setReplacementSaving(false);
+    }
+  }
+
+  function handleTabKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const next: SidebarTab =
+      event.key === "Home"
+        ? "review"
+        : event.key === "End"
+          ? "document"
+          : activeTab === "review"
+            ? "document"
+            : "review";
+    setActiveTab(next);
+    (next === "review" ? reviewTabRef : documentTabRef).current?.focus();
+  }
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -1069,10 +1168,63 @@ export function DocumentSymbol({
             document.activeElement instanceof HTMLElement
               ? document.activeElement
               : null;
+          openerRowRef.current =
+            openerRef.current?.closest<HTMLElement>(
+              "[data-citation-visible]",
+            ) ?? null;
         }}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
-          if (openerRef.current?.isConnected) openerRef.current.focus();
+          requestAnimationFrame(() => {
+            const active = document.activeElement;
+            // Updating a citation moves directly into the replacement search.
+            // Preserve focus when that next control has already claimed it.
+            if (
+              active instanceof HTMLElement &&
+              active !== document.body &&
+              active.isConnected &&
+              active.getClientRects().length > 0 &&
+              !active.closest('[data-state="closed"]')
+            )
+              return;
+            const opener = openerRef.current;
+            if (opener?.isConnected && opener.getClientRects().length > 0) {
+              opener.focus();
+              return;
+            }
+            // A saved action can hide its row in "Show remaining". Continue
+            // with the next visible citation, or return to the list search.
+            const details = [
+              ...document.querySelectorAll<HTMLButtonElement>(
+                "[data-citation-visible='true'] [data-view-details]",
+              ),
+            ].filter(
+              (button) =>
+                !button.disabled && button.getClientRects().length > 0,
+            );
+            const row = openerRowRef.current;
+            const next = row?.isConnected
+              ? details.find(
+                  (button) =>
+                    row.compareDocumentPosition(button) &
+                    Node.DOCUMENT_POSITION_FOLLOWING,
+                )
+              : details[0];
+            const previous = row?.isConnected
+              ? details.findLast(
+                  (button) =>
+                    row.compareDocumentPosition(button) &
+                    Node.DOCUMENT_POSITION_PRECEDING,
+                )
+              : undefined;
+            (
+              next ??
+              previous ??
+              document.querySelector<HTMLInputElement>(
+                "[data-workspace-search]",
+              )
+            )?.focus();
+          });
         }}
         className="top-0 right-0 left-auto flex h-dvh w-full max-w-full translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 bg-white p-0 shadow-xl data-[state=closed]:animate-none data-[state=open]:animate-none sm:max-w-xl"
       >
@@ -1097,145 +1249,125 @@ export function DocumentSymbol({
                   {title}
                 </p>
               )}
+              {sourceSymbol && sourceSymbol !== symbol && (
+                <p
+                  className={cn(
+                    typography.body,
+                    "mt-2 font-medium text-foreground",
+                  )}
+                >
+                  Proposed replacement for {sourceSymbol}
+                </p>
+              )}
+              <p className="mt-2 text-xs leading-relaxed text-gray-600">
+                {SUBMISSION_CYCLES[budgetVersion].label}
+                {entity && <> · {entity}</>}
+                {entity && <> · {citationSection(subprogramme).label}</>}
+                {readOnly && (
+                  <span className="ml-2 font-medium">Read-only</span>
+                )}
+              </p>
             </div>
             <button
               onClick={() => setOpen(false)}
               aria-label="Close sidebar"
-              className="ml-2 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+              className="ml-2 rounded-lg p-1.5 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-600"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
 
           {/* Tabs */}
-          <div className="mt-5 flex gap-1">
-            <button
-              onClick={() => setActiveTab("info")}
-              className={`flex items-center gap-1.5 rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors ${
-                activeTab === "info"
-                  ? "bg-gray-100 text-foreground"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-foreground"
-              }`}
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+            <div
+              role="tablist"
+              aria-label="Citation sidebar"
+              className="flex gap-1"
             >
-              <Info className="h-4 w-4" />
-              Info
-            </button>
-            <button
-              onClick={() => setActiveTab("paragraphs")}
-              className={`flex items-center gap-1.5 rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors ${
-                activeTab === "paragraphs"
-                  ? "bg-gray-100 text-foreground"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-foreground"
-              }`}
+              <button
+                ref={reviewTabRef}
+                type="button"
+                id={`${tabId}-review-tab`}
+                role="tab"
+                aria-selected={activeTab === "review"}
+                aria-controls={`${tabId}-review-panel`}
+                tabIndex={activeTab === "review" ? 0 : -1}
+                onKeyDown={handleTabKeyDown}
+                onClick={() => setActiveTab("review")}
+                className={`flex items-center gap-1.5 rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors ${
+                  activeTab === "review"
+                    ? "bg-gray-100 text-foreground"
+                    : "text-gray-600 hover:bg-gray-50 hover:text-foreground"
+                }`}
+              >
+                <MessageSquare className="h-4 w-4" aria-hidden="true" />
+                Review
+              </button>
+              <button
+                ref={documentTabRef}
+                type="button"
+                id={`${tabId}-document-tab`}
+                role="tab"
+                aria-selected={activeTab === "document"}
+                aria-controls={`${tabId}-document-panel`}
+                tabIndex={activeTab === "document" ? 0 : -1}
+                onKeyDown={handleTabKeyDown}
+                onClick={() => setActiveTab("document")}
+                className={`flex items-center gap-1.5 rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors ${
+                  activeTab === "document"
+                    ? "bg-gray-100 text-foreground"
+                    : "text-gray-600 hover:bg-gray-50 hover:text-foreground"
+                }`}
+              >
+                <FileText className="h-4 w-4" aria-hidden="true" />
+                Document
+              </button>
+            </div>
+            <a
+              href={link || `https://docs.un.org/en/${symbol}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mb-1 inline-flex items-center gap-1.5 rounded px-2 py-1.5 text-sm font-medium text-un-blue-text-aaa hover:bg-un-blue-surface hover:underline focus-visible:ring-2 focus-visible:ring-un-blue"
             >
-              <FileText className="h-4 w-4" />
-              Paragraphs
-              {paragraphs && paragraphs.length > 0 && (
-                <span className="ml-1 rounded-full bg-gray-200 px-1.5 py-0.5 text-xs text-gray-600">
-                  {paragraphs.length}
-                </span>
-              )}
-            </button>
+              View PDF{" "}
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            </a>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto bg-gray-100 p-5">
-          {/* Keep Info mounted across tabs so comment drafts survive. */}
-          <div hidden={activeTab !== "info"} className="space-y-4">
-            <section className="rounded-xl bg-white p-3 shadow-sm">
-              <h3 className={cn(typography.eyebrow, "mb-2")}>
-                Document Details
-              </h3>
-              <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1.5 text-sm text-foreground">
-                {year != null &&
-                  (() => {
-                    const ageInfo = getAgeIndicator(year);
-                    return (
-                      <>
-                        <dt className="text-xs">Year</dt>
-                        <dd className="flex items-center gap-2 font-medium">
-                          {year}
-                          <Tooltip content={ageInfo.tooltip}>
-                            <span
-                              className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${ageInfo.color} ${ageInfo.bgColor}`}
-                            >
-                              {ageInfo.label}
-                            </span>
-                          </Tooltip>
-                        </dd>
-                      </>
-                    );
-                  })()}
-                {body && (
-                  <>
-                    <dt className="text-xs">Issuing body</dt>
-                    <dd className="font-medium">{issuingBody}</dd>
-                  </>
-                )}
-                {docType && (
-                  <>
-                    <dt className="text-xs">Document type</dt>
-                    <dd className="font-medium">{docType}</dd>
-                  </>
-                )}
-                {link && (
-                  <>
-                    <dt className="text-xs">Source</dt>
-                    <dd>
-                      <a
-                        href={link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 font-medium text-un-blue-text hover:underline"
-                      >
-                        View PDF <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </dd>
-                  </>
-                )}
-                {citingEntities.length > 0 ? (
-                  <>
-                    <dt className="self-start pt-0.5 text-xs">Also cited by</dt>
-                    <dd className="flex flex-wrap gap-1">
-                      {citingEntities.map((citingEntity) => (
-                        <Chip
-                          key={citingEntity}
-                          density="dense"
-                          tone="neutral"
-                          href={`/entity/${encodeURIComponent(citingEntity)}/`}
-                          title={entityLongMap?.[citingEntity] || citingEntity}
-                        >
-                          {citingEntity}
-                        </Chip>
-                      ))}
-                    </dd>
-                  </>
-                ) : otherEntitiesCount != null && otherEntitiesCount > 0 ? (
-                  <>
-                    <dt className="text-xs">Also cited by</dt>
-                    <dd>
-                      {otherEntitiesCount} other{" "}
-                      {otherEntitiesCount === 1 ? "entity" : "entities"}
-                    </dd>
-                  </>
-                ) : null}
-              </dl>
-            </section>
-
-            <section ref={commentsSectionRef} className="scroll-mt-2">
+          {/* Keep both panels mounted so comment and document drafts survive tab switches. */}
+          <div
+            id={`${tabId}-review-panel`}
+            role="tabpanel"
+            aria-labelledby={`${tabId}-review-tab`}
+            hidden={activeTab !== "review"}
+            tabIndex={0}
+            className="space-y-4 rounded focus-visible:outline-2 focus-visible:outline-un-blue"
+          >
+            <section className="scroll-mt-2">
               {activityError && (
                 <p role="alert" className="mb-2 text-sm text-red-700">
                   Could not refresh comments and decisions. Retrying…
                 </p>
               )}
               <CommentsDecisionPanel
-                key={`${budgetVersion}:${symbol}:${entity}:${subprogramme || ""}`}
-                symbol={symbol}
+                key={`${budgetVersion}:${citationSymbol}:${entity}:${subprogramme || ""}`}
+                symbol={citationSymbol}
+                entityLongMap={entityLongMap}
+                active={open && activeTab === "review"}
+                focusComposer={
+                  open &&
+                  activeTab === "review" &&
+                  initialTab === "activity" &&
+                  !targetCommentId
+                }
                 entity={entity}
                 subprogramme={subprogramme}
                 entitySubprogrammes={entitySubprogrammes}
                 allEntities={allEntities}
-                loading={activityLoading}
+                loading={activityLoading && !activityError}
+                activityError={activityError}
                 decisions={allDecisions}
                 comments={allComments}
                 readCommentIds={readCommentIds}
@@ -1271,6 +1403,74 @@ export function DocumentSymbol({
                 onRead={handleRead}
               />
             </section>
+          </div>
+          <div
+            id={`${tabId}-document-panel`}
+            role="tabpanel"
+            aria-labelledby={`${tabId}-document-tab`}
+            hidden={activeTab !== "document"}
+            tabIndex={0}
+            className="space-y-4 rounded focus-visible:outline-2 focus-visible:outline-un-blue"
+          >
+            <section className="rounded-xl bg-white p-3 shadow-sm">
+              <h3 className={cn(typography.eyebrow, "mb-2")}>
+                Document Details
+              </h3>
+              <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1.5 text-sm text-foreground">
+                {year != null && (
+                  <>
+                    <dt className="text-xs">Year</dt>
+                    <dd>
+                      <CitationYear year={year} />
+                    </dd>
+                  </>
+                )}
+                {body && (
+                  <>
+                    <dt className="text-xs">Issuing body</dt>
+                    <dd className="font-medium">{issuingBody}</dd>
+                  </>
+                )}
+                {docType && (
+                  <>
+                    <dt className="text-xs">Document type</dt>
+                    <dd className="font-medium">{docType}</dd>
+                  </>
+                )}
+                {citingEntities.length > 0 ? (
+                  <>
+                    <dt className="self-start pt-0.5 text-xs">Also cited by</dt>
+                    <dd className="flex flex-wrap gap-1">
+                      {citingEntities.map((citingEntity) => (
+                        <Tooltip
+                          asChild
+                          content={
+                            entityLongMap?.[citingEntity] || citingEntity
+                          }
+                          key={citingEntity}
+                        >
+                          <Chip
+                            density="dense"
+                            tone="neutral"
+                            href={`/entity/${encodeURIComponent(citingEntity)}/`}
+                          >
+                            {citingEntity}
+                          </Chip>
+                        </Tooltip>
+                      ))}
+                    </dd>
+                  </>
+                ) : otherEntitiesCount != null && otherEntitiesCount > 0 ? (
+                  <>
+                    <dt className="text-xs">Also cited by</dt>
+                    <dd>
+                      {otherEntitiesCount} other{" "}
+                      {otherEntitiesCount === 1 ? "entity" : "entities"}
+                    </dd>
+                  </>
+                ) : null}
+              </dl>
+            </section>
 
             {/* Newer Versions */}
             {!versionsLoading &&
@@ -1292,110 +1492,143 @@ export function DocumentSymbol({
                         Newer Versions ({newerVersions.length})
                       </h3>
                       {/* Header row */}
-                      <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] items-center gap-x-3 gap-y-2 text-xs">
-                        <span className="font-medium text-gray-500">Year</span>
-                        <span className="font-medium text-gray-500">
-                          Symbol
-                        </span>
-                        <span className="text-center font-medium text-gray-500">
-                          vs Original
-                        </span>
-                        <span className="text-center font-medium text-gray-500">
-                          vs Previous
-                        </span>
-                        <span className="font-medium text-gray-500">PDF</span>
-                        <span className="font-medium text-gray-500">
-                          Action
-                        </span>
+                      <div className="overflow-x-auto">
+                        <div className="grid min-w-[26rem] grid-cols-[auto_1fr_auto_auto_auto_auto] items-center gap-x-3 gap-y-2 text-xs">
+                          <span className="font-medium text-gray-600">
+                            Year
+                          </span>
+                          <span className="font-medium text-gray-600">
+                            Symbol
+                          </span>
+                          <span className="text-center font-medium text-gray-600">
+                            vs Original
+                          </span>
+                          <span className="text-center font-medium text-gray-600">
+                            vs Previous
+                          </span>
+                          <span className="font-medium text-gray-600">PDF</span>
+                          <span className="font-medium text-gray-600">
+                            Action
+                          </span>
 
-                        {newerVersions.map((version, idx) => {
-                          // Previous version is either the one before in newerVersions, or the current document
-                          const previousSymbol =
-                            idx === 0 ? symbol : newerVersions[idx - 1].symbol;
-                          return (
-                            <React.Fragment key={version.symbol}>
-                              {/* Year */}
-                              <span className="text-sm text-foreground">
-                                {version.year}
-                              </span>
+                          {newerVersions.map((version, idx) => {
+                            // Previous version is either the one before in newerVersions, or the current document
+                            const previousSymbol =
+                              idx === 0
+                                ? symbol
+                                : newerVersions[idx - 1].symbol;
+                            return (
+                              <React.Fragment key={version.symbol}>
+                                {/* Year */}
+                                <span className="text-sm text-foreground">
+                                  {version.year}
+                                </span>
 
-                              {/* Symbol */}
-                              <span className="truncate text-sm font-medium text-foreground">
-                                {version.symbol}
-                              </span>
+                                {/* Symbol */}
+                                <span className="truncate text-sm font-medium text-foreground">
+                                  {version.symbol}
+                                </span>
 
-                              {/* Compare with Original */}
-                              <a
-                                href={getDocumentComparisonUrl(
-                                  symbol,
-                                  version.symbol,
-                                )}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={`inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${UN_BLUE.badge}`}
-                                title={`Compare ${version.symbol} with ${symbol} in a new tab`}
-                              >
-                                <ArrowLeftRight className="h-3 w-3" />
-                              </a>
-
-                              {/* Compare with Previous */}
-                              <a
-                                href={
-                                  idx === 0
-                                    ? undefined
-                                    : getDocumentComparisonUrl(
-                                        previousSymbol,
-                                        version.symbol,
-                                      )
-                                }
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-disabled={idx === 0}
-                                tabIndex={idx === 0 ? -1 : undefined}
-                                className={`inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
-                                  idx === 0
-                                    ? "cursor-not-allowed bg-gray-100 text-gray-400"
-                                    : UN_BLUE.badge
-                                }`}
-                                title={
-                                  idx === 0
-                                    ? "Same as original"
-                                    : `Compare ${version.symbol} with ${previousSymbol} in a new tab`
-                                }
-                              >
-                                <ArrowLeftRight className="h-3 w-3" />
-                              </a>
-
-                              {/* View PDF */}
-                              <a
-                                href={`https://docs.un.org/en/${version.symbol}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center justify-center rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-200"
-                                title="View PDF in ODS in a new tab"
-                              >
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
-
-                              {/* Update To */}
-                              {trackContext?.canEditSubmission &&
-                              onUpdateClick ? (
-                                <button
-                                  onClick={() => {
-                                    onUpdateClick(version.symbol);
-                                  }}
-                                  className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
-                                  title="Update the mandate citation to this newer version"
+                                {/* Compare with Original */}
+                                <Tooltip
+                                  asChild
+                                  content={`Compare ${version.symbol} with ${symbol} in a new tab`}
                                 >
-                                  <ArrowRight className="h-3 w-3" />
-                                  Update
-                                </button>
-                              ) : (
-                                <span className="text-xs text-gray-400">—</span>
-                              )}
-                            </React.Fragment>
-                          );
-                        })}
+                                  <a
+                                    href={getDocumentComparisonUrl(
+                                      symbol,
+                                      version.symbol,
+                                    )}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={`inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${UN_BLUE.badge}`}
+                                    aria-label={`Compare ${version.symbol} with ${symbol} in a new tab`}
+                                  >
+                                    <ArrowLeftRight className="h-3 w-3" />
+                                  </a>
+                                </Tooltip>
+
+                                {/* Compare with Previous */}
+                                <Tooltip
+                                  asChild
+                                  content={
+                                    idx === 0
+                                      ? "Same as original"
+                                      : `Compare ${version.symbol} with ${previousSymbol} in a new tab`
+                                  }
+                                >
+                                  <a
+                                    href={
+                                      idx === 0
+                                        ? undefined
+                                        : getDocumentComparisonUrl(
+                                            previousSymbol,
+                                            version.symbol,
+                                          )
+                                    }
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    aria-disabled={idx === 0}
+                                    tabIndex={idx === 0 ? -1 : undefined}
+                                    className={`inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
+                                      idx === 0
+                                        ? "cursor-not-allowed bg-gray-100 text-gray-600"
+                                        : UN_BLUE.badge
+                                    }`}
+                                    aria-label={
+                                      idx === 0
+                                        ? "Same as original"
+                                        : `Compare ${version.symbol} with ${previousSymbol} in a new tab`
+                                    }
+                                  >
+                                    <ArrowLeftRight className="h-3 w-3" />
+                                  </a>
+                                </Tooltip>
+
+                                {/* View PDF */}
+                                <Tooltip
+                                  asChild
+                                  content={"View PDF in ODS in a new tab"}
+                                >
+                                  <a
+                                    href={`https://docs.un.org/en/${version.symbol}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center justify-center rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-200"
+                                    aria-label={"View PDF in ODS in a new tab"}
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                </Tooltip>
+
+                                {/* Update To */}
+                                {trackContext?.canEditSubmission &&
+                                onUpdateClick ? (
+                                  <Tooltip
+                                    asChild
+                                    content={
+                                      "Update the mandate citation to this newer version"
+                                    }
+                                  >
+                                    <button
+                                      onClick={() => {
+                                        onUpdateClick(version.symbol);
+                                      }}
+                                      className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
+                                    >
+                                      <ArrowRight className="h-3 w-3" />
+                                      Update
+                                    </button>
+                                  </Tooltip>
+                                ) : (
+                                  <span className="text-xs text-gray-600">
+                                    —
+                                  </span>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   );
@@ -1403,29 +1636,30 @@ export function DocumentSymbol({
 
                 return null;
               })()}
-          </div>
+            <section className="space-y-4">
+              <h3 className={typography.eyebrow}>Document text</h3>
 
-          {/* Paragraphs Tab */}
-          {activeTab === "paragraphs" && (
-            <div className="space-y-4">
               {/* Search Box */}
               <div className="rounded-xl bg-white p-4 shadow-sm">
                 <div className={cn(typography.eyebrow, "mb-2")}>
                   Search in document
                 </div>
                 <div className="relative">
-                  <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-600" />
                   <input
                     type="text"
+                    aria-label="Search document text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search for keywords in paragraphs..."
-                    className="w-full rounded-lg border border-gray-200 bg-white py-2 pr-4 pl-10 text-sm placeholder:text-gray-400 focus:border-un-blue focus:ring-2 focus:ring-un-blue/20 focus:outline-none"
+                    className="w-full rounded-lg border border-gray-200 bg-white py-2 pr-4 pl-10 text-sm placeholder:text-gray-600 focus:border-un-blue focus:ring-2 focus:ring-un-blue/20 focus:outline-none"
                   />
                   {searchQuery && (
                     <button
+                      type="button"
+                      aria-label="Clear document search"
                       onClick={() => setSearchQuery("")}
-                      className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-600 hover:text-gray-600"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -1444,7 +1678,7 @@ export function DocumentSymbol({
                       className={`rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${
                         !selectedEntity
                           ? "bg-gray-700 text-white"
-                          : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                       }`}
                     >
                       All
@@ -1457,16 +1691,16 @@ export function DocumentSymbol({
                           onClick={() => setSelectedEntity(e)}
                           className={`rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${
                             selectedEntity === e
-                              ? "bg-un-blue text-white"
-                              : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                              ? "bg-un-blue-text text-white"
+                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                           }`}
                         >
                           {e}{" "}
                           <span
                             className={
                               selectedEntity === e
-                                ? "text-white/60"
-                                : "text-gray-400"
+                                ? "text-white"
+                                : "text-gray-600"
                             }
                           >
                             ({count})
@@ -1485,7 +1719,7 @@ export function DocumentSymbol({
                   </p>
                 )}
                 {paragraphs?.some((p) => p.part_letter) && (
-                  <p className="mb-3 text-xs text-gray-500">
+                  <p className="mb-3 text-xs text-gray-600">
                     Showing printed part{" "}
                     {paragraphs.find((p) => p.part_letter)?.part_letter} only.
                   </p>
@@ -1513,14 +1747,14 @@ export function DocumentSymbol({
                 ) : (
                   <div className="py-12 text-center">
                     <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
-                      <AlertTriangle className="h-6 w-6 text-gray-400" />
+                      <AlertTriangle className="h-6 w-6 text-gray-600" />
                     </div>
                     <p className="text-sm font-medium text-gray-600">
                       {fulltextError
                         ? "Fulltext could not be loaded"
                         : "No readable fulltext available"}
                     </p>
-                    <p className="mt-1 text-xs text-gray-400">
+                    <p className="mt-1 text-xs text-gray-600">
                       The parsed document text is not available in our database
                     </p>
                     {link && (
@@ -1536,9 +1770,67 @@ export function DocumentSymbol({
                   </div>
                 )}
               </div>
-            </div>
-          )}
+            </section>
+          </div>
         </div>
+        <Dialog
+          open={open && replacementSearch !== null}
+          onOpenChange={(next) => {
+            if (!next) setReplacementSearch(null);
+          }}
+        >
+          <DialogContent
+            className="sm:max-w-2xl"
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              requestAnimationFrame(() => {
+                const tab = (
+                  activeTab === "review" ? reviewTabRef : documentTabRef
+                ).current;
+                if (tab?.getClientRects().length)
+                  tab.focus({ preventScroll: true });
+              });
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Replace {citationSymbol}</DialogTitle>
+              <DialogDescription>
+                Choose a replacement for this citation in {entity}
+                {entity ? " · " : ""}
+                {citationSection(subprogramme).label}.
+              </DialogDescription>
+            </DialogHeader>
+            <fieldset
+              disabled={replacementSaving}
+              className="min-w-0"
+              aria-busy={replacementSaving}
+            >
+              <DocumentSearchInput
+                onSelect={(newSymbol) => void saveReplacement(newSymbol)}
+                onManualSubmit={(data) =>
+                  void saveReplacement(data.symbol, data)
+                }
+                onCancel={() => setReplacementSearch(null)}
+                initialQuery={replacementSearch?.prefill}
+                originalSymbol={citationSymbol}
+                originalTitle={sourceSymbol ? undefined : title}
+                placeholder="Search for replacement document..."
+                submitLabel="Update"
+                formTitle="Enter replacement document manually"
+              />
+            </fieldset>
+            {replacementSaving && (
+              <p role="status" className="text-sm text-foreground">
+                Saving replacement…
+              </p>
+            )}
+            {replacementError && (
+              <p role="alert" className="text-sm text-red-700">
+                {replacementError}
+              </p>
+            )}
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );

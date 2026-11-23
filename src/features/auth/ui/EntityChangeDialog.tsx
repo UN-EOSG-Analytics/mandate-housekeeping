@@ -95,13 +95,18 @@ export function EntityChangeDialog({
           <button
             onClick={onClose}
             aria-label="Close entity selection"
-            className="rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+            className="rounded-lg p-1 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-600"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Choose the entity whose budget submission you work on. You can edit
+            its primary submission and browse other entities. Reviewer access is
+            assigned separately.
+          </p>
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">
               Select your organisational entity
@@ -120,7 +125,7 @@ export function EntityChangeDialog({
               placeholder="Enter your organisational entity"
               value={otherEntity}
               onChange={(e) => setOtherEntity(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-un-blue focus:ring-1 focus:ring-un-blue focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-foreground placeholder:text-gray-600 focus:border-un-blue focus:ring-1 focus:ring-un-blue focus:outline-none"
             />
           )}
 
@@ -141,7 +146,7 @@ export function EntityChangeDialog({
                 (selectedEntity === "Other – Please Specify" &&
                   !otherEntity.trim())
               }
-              className="flex-1 rounded-lg bg-un-blue px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex-1 rounded-lg bg-un-blue-text-aaa px-4 py-2.5 text-sm font-medium text-white transition-colors hover:inset-ring-2 hover:inset-ring-white/70 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-700 disabled:opacity-100"
             >
               {loading ? "Updating..." : "Update"}
             </button>

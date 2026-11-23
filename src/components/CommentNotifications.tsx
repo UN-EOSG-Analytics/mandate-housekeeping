@@ -13,6 +13,7 @@ import { openCommentNotificationAction } from "@/features/mandates/actions/comme
 import { useCommentNotifications } from "@/hooks/useCommentNotifications";
 import { SUBMISSION_CYCLES, type BudgetVersion } from "@/lib/db/budget-version";
 import { cn } from "@/lib/utils";
+import { Tooltip } from "@/components/Tooltip";
 
 export function CommentNotifications({
   budgetVersion,
@@ -48,24 +49,25 @@ export function CommentNotifications({
       }}
     >
       <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative text-foreground"
-          aria-label={
-            unread
-              ? `Comment notifications, ${unread} unread messages`
-              : "Comment notifications"
-          }
-          title="Comment notifications"
-        >
-          <Bell aria-hidden="true" />
-          {unread > 0 && (
-            <span className="absolute -end-1 -top-1 min-w-4 rounded-full bg-un-blue-text px-1 text-[10px] leading-4 font-semibold text-white">
-              {unread > 99 ? "99+" : unread}
-            </span>
-          )}
-        </Button>
+        <Tooltip asChild content={"Comment notifications"}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative text-foreground"
+            aria-label={
+              unread
+                ? `Comment notifications, ${unread} unread messages`
+                : "Comment notifications"
+            }
+          >
+            <Bell aria-hidden="true" />
+            {unread > 0 && (
+              <span className="absolute -end-1 -top-1 min-w-4 rounded-full bg-un-blue-text px-1 text-[10px] leading-4 font-semibold text-white">
+                {unread > 99 ? "99+" : unread}
+              </span>
+            )}
+          </Button>
+        </Tooltip>
       </PopoverTrigger>
       <PopoverContent
         align="end"
@@ -79,7 +81,7 @@ export function CommentNotifications({
               {SUBMISSION_CYCLES[budgetVersion].label}
               {unread > 0 && ` · ${unread} unread`}
             </p>
-            <p className="mt-1 text-xs text-foreground/80">
+            <p className="mt-1 text-xs text-gray-700">
               Your entity and conversations you have participated in.
             </p>
           </div>

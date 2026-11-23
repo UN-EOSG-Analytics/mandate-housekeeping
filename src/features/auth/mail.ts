@@ -48,12 +48,12 @@ export async function sendMagicLink(email: string, token: string) {
         <!-- Content -->
         <tr><td>
           <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#374151;">Click the button below to sign in to your account.<br><br>This link will expire in 15 minutes.</p>
-          <a href="${link}" style="display:inline-block;background:#009edb;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:6px;font-size:14px;font-weight:500;">Sign in</a>
-          <p style="margin:24px 0 0;font-size:13px;line-height:1.5;color:#9ca3af;">If the button doesn't work, copy and paste this link into your browser:<br><a href="${link}" style="color:#009edb;word-break:break-all;">${link}</a></p>
+          <a href="${link}" style="display:inline-block;background:#005a80;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:6px;font-size:14px;font-weight:500;">Sign in</a>
+          <p style="margin:24px 0 0;font-size:13px;line-height:1.5;color:#374151;">If the button doesn't work, copy and paste this link into your browser:<br><a href="${link}" style="color:#005a80;word-break:break-all;">${link}</a></p>
         </td></tr>
         <!-- Footer -->
         <tr><td style="padding:32px 0 0;">
-          <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.5;">If you did not request this email, you can safely ignore it.</p>
+          <p style="margin:0;font-size:12px;color:#374151;line-height:1.5;">If you did not request this email, you can safely ignore it.</p>
         </td></tr>
       </table>
     </td></tr>

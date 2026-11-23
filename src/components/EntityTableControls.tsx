@@ -10,9 +10,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ChevronDown, ChevronUp, Filter, Search, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Filter, Search, Users, X } from "lucide-react";
 import { Chip, ChipCount } from "@un-eosg/ui/components/chip";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Button } from "@un-eosg/ui/components/button";
 import { POPUP_STYLES } from "@/lib/theme";
 import type {
   FacetOption,
@@ -21,8 +22,14 @@ import type {
   TableSort,
   TableSortColumn,
 } from "@/features/mandates/services/table-view";
+import { Tooltip } from "@/components/Tooltip";
+
+export const ENTITY_TOOLBAR_CONTROL =
+  "h-9 rounded-md border-input bg-white px-3 text-sm font-medium text-foreground shadow-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-un-blue";
 
 export interface EntityTableViewControls {
+  showReviewerColumn: boolean;
+  submissionLabel: string;
   filters: TableFilters;
   setFilters: (next: TableFilters) => void;
   sort: TableSort;
@@ -34,6 +41,8 @@ export const EntityTableFilterContext =
 
 const COLUMN_FACETS: Record<string, TableFacet[]> = {
   body: ["bodies", "types"],
+  bodyFilter: ["bodies", "types"],
+  year: ["ages"],
   age: ["ages"],
   others: ["others"],
   notes: ["notes"],
@@ -81,7 +90,7 @@ function PillFilter({
             placeholder={`Search ${FACET_LABELS[facet].toLowerCase()}…`}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="h-8 w-full rounded border border-input bg-white pr-2 pl-7 text-sm focus-visible:ring-1 focus-visible:ring-un-blue"
+            className="h-8 w-full rounded border border-input bg-white pr-2 pl-7 text-sm text-foreground placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-un-blue"
           />
         </div>
       )}
@@ -99,24 +108,24 @@ function PillFilter({
       )}
       <div className="flex max-h-64 flex-wrap gap-1.5 overflow-y-auto">
         {displayed.map((option) => (
-          <Chip
-            key={option.value}
-            density="dense"
-            tone={selected.includes(option.value) ? "selected" : "neutral"}
-            onClick={() =>
-              controls.setFilters({
-                ...controls.filters,
-                [facet]: selected.includes(option.value)
-                  ? selected.filter((value) => value !== option.value)
-                  : [...selected, option.value],
-              })
-            }
-            title={option.label}
-            className="whitespace-nowrap"
-          >
-            {option.label}
-            <ChipCount>{option.count}</ChipCount>
-          </Chip>
+          <Tooltip asChild content={option.label} key={option.value}>
+            <Chip
+              density="dense"
+              tone={selected.includes(option.value) ? "selected" : "neutral"}
+              onClick={() =>
+                controls.setFilters({
+                  ...controls.filters,
+                  [facet]: selected.includes(option.value)
+                    ? selected.filter((value) => value !== option.value)
+                    : [...selected, option.value],
+                })
+              }
+              className="whitespace-nowrap"
+            >
+              {option.label}
+              <ChipCount>{option.count}</ChipCount>
+            </Chip>
+          </Tooltip>
         ))}
         {!displayed.length && <p className="py-2 text-sm">No options found</p>}
       </div>
@@ -167,7 +176,7 @@ function YearRangeFilter({
               onKeyDown={(event) => {
                 if (event.key === "Enter") apply();
               }}
-              className="mt-1 block h-7 w-20 rounded border border-input bg-white px-2 text-sm"
+              className="mt-1 block h-7 w-20 rounded border border-input bg-white px-2 text-sm placeholder:text-gray-600"
             />
           </label>
         ))}
@@ -210,6 +219,7 @@ export function EntityTableColumnHeader({
   controls: EntityTableViewControls;
 }) {
   const [open, setOpen] = useState(false);
+  const compact = column === "others";
   const sortable = ["symbol", "title", "body", "year", "others"].includes(
     column,
   );
@@ -224,38 +234,55 @@ export function EntityTableColumnHeader({
     controls.sort.column === column ? controls.sort.direction : null;
   const nextDirection = direction === "desc" ? "asc" : "desc";
   return (
-    <div className="flex items-center gap-0.5 text-xs font-medium whitespace-nowrap text-foreground">
+    <div className="flex min-w-0 items-center gap-0.5 text-xs font-semibold whitespace-nowrap text-foreground">
       {sortable ? (
-        <button
-          type="button"
-          onClick={() =>
-            controls.onSort(column as TableSortColumn, nextDirection)
+        <Tooltip
+          asChild
+          content={
+            compact
+              ? `Also cited by — sort ${nextDirection === "asc" ? "ascending" : "descending"}`
+              : undefined
           }
-          aria-label={`Sort ${label} ${nextDirection === "asc" ? "ascending" : "descending"}`}
-          className="flex items-center gap-0.5 rounded focus-visible:ring-2 focus-visible:ring-un-blue"
         >
-          {label}
-          {direction === "asc" ? (
-            <ChevronUp className="h-3.5 w-3.5 text-un-blue-text" />
-          ) : (
-            <ChevronDown
-              className={`h-3.5 w-3.5 ${direction ? "text-un-blue-text" : "opacity-40"}`}
-            />
-          )}
-        </button>
+          <button
+            type="button"
+            onClick={() =>
+              controls.onSort(column as TableSortColumn, nextDirection)
+            }
+            aria-label={`Sort ${label} ${nextDirection === "asc" ? "ascending" : "descending"}`}
+            className="flex items-center gap-0.5 rounded focus-visible:ring-2 focus-visible:ring-un-blue"
+          >
+            {compact ? (
+              <>
+                <Users className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">{label}</span>
+              </>
+            ) : (
+              label
+            )}
+            {direction === "asc" ? (
+              <ChevronUp className="h-3.5 w-3.5 text-un-blue-text" />
+            ) : (
+              <ChevronDown
+                className={`h-3.5 w-3.5 ${direction ? "text-un-blue-text" : "text-foreground/70"}`}
+              />
+            )}
+          </button>
+        </Tooltip>
       ) : (
         !icon && <span>{label}</span>
       )}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label={`Filter by ${label}`}
-            title={label}
-            className={`flex h-5 w-5 items-center justify-center rounded transition-colors focus-visible:ring-2 focus-visible:ring-un-blue ${active ? "bg-un-blue-text text-white" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
-          >
-            {icon ?? <Filter className="h-3 w-3" />}
-          </button>
+          <Tooltip asChild content={`Filter by ${label}`}>
+            <button
+              type="button"
+              aria-label={`Filter by ${label}`}
+              className={`flex h-5 w-5 items-center justify-center rounded transition-colors focus-visible:ring-2 focus-visible:ring-un-blue ${active ? "bg-un-blue-text text-white" : "text-foreground/75 hover:bg-muted hover:text-foreground"}`}
+            >
+              {icon ?? <Filter className="h-3 w-3" />}
+            </button>
+          </Tooltip>
         </PopoverTrigger>
         <PopoverContent
           align="start"
@@ -275,7 +302,7 @@ export function EntityTableColumnHeader({
                   })
                 }
                 placeholder={`Search ${label.toLowerCase()}…`}
-                className="mt-2 h-8 w-full rounded border border-input bg-white px-2 text-sm"
+                className="mt-2 h-8 w-full rounded border border-input bg-white px-2 text-sm placeholder:text-gray-600"
               />
             </label>
           )}
@@ -291,6 +318,39 @@ export function EntityTableColumnHeader({
         </PopoverContent>
       </Popover>
     </div>
+  );
+}
+
+/** Body and type remain available when the table uses body group headings. */
+export function BodyTypeFilter({
+  controls,
+}: {
+  controls: EntityTableViewControls;
+}) {
+  const active =
+    controls.filters.bodies.length > 0 || controls.filters.types.length > 0;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          aria-label="Filter by body or document type"
+          className={`${ENTITY_TOOLBAR_CONTROL} ${active ? "border-un-blue-text bg-un-blue-surface text-un-blue-text" : ""}`}
+        >
+          Body / document type
+          <Filter className="h-3.5 w-3.5" aria-hidden="true" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={4}
+        className="max-h-[70vh] w-auto space-y-4 overflow-y-auto p-3 text-foreground"
+      >
+        <PillFilter facet="bodies" controls={controls} />
+        <PillFilter facet="types" controls={controls} />
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -322,7 +382,11 @@ export function OtherEntitiesCell({
     [],
   );
   if (!entities.length)
-    return <span className="text-xs text-foreground">—</span>;
+    return (
+      <Tooltip asChild content={"No other entities cite this document"}>
+        <span className="text-xs text-foreground">0</span>
+      </Tooltip>
+    );
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -371,31 +435,35 @@ export function OtherEntitiesCell({
         </p>
         <div className="flex max-h-64 flex-wrap gap-1.5 overflow-y-auto">
           {entities.map((entity) => (
-            <Chip
+            <Tooltip
+              asChild
+              content={entityLongMap[entity] || entity}
               key={entity}
-              density="dense"
-              tone={
-                controls?.filters.others.includes(entity)
-                  ? "selected"
-                  : "neutral"
-              }
-              title={entityLongMap[entity] || entity}
-              onClick={
-                controls
-                  ? () =>
-                      controls.setFilters({
-                        ...controls.filters,
-                        others: controls.filters.others.includes(entity)
-                          ? controls.filters.others.filter(
-                              (value) => value !== entity,
-                            )
-                          : [...controls.filters.others, entity],
-                      })
-                  : undefined
-              }
             >
-              {entity}
-            </Chip>
+              <Chip
+                density="dense"
+                tone={
+                  controls?.filters.others.includes(entity)
+                    ? "selected"
+                    : "neutral"
+                }
+                onClick={
+                  controls
+                    ? () =>
+                        controls.setFilters({
+                          ...controls.filters,
+                          others: controls.filters.others.includes(entity)
+                            ? controls.filters.others.filter(
+                                (value) => value !== entity,
+                              )
+                            : [...controls.filters.others, entity],
+                        })
+                    : undefined
+                }
+              >
+                {entity}
+              </Chip>
+            </Tooltip>
           ))}
         </div>
       </PopoverContent>
@@ -473,11 +541,15 @@ export function SubprogrammeContents({
   sections: { id: string; title: string; count: number; total: number }[];
 }) {
   const [active, setActive] = useState<string | null>(null);
+  const handledHash = useRef<string | null>(null);
   useEffect(() => {
     let frame = 0;
     const update = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
+        const stickyOffset = window.matchMedia("(min-width: 1024px)").matches
+          ? 40
+          : 8;
         const candidates = sections
           .filter((section) => section.count > 0)
           .map((section) => ({
@@ -486,41 +558,94 @@ export function SubprogrammeContents({
               document.getElementById(section.id)?.getBoundingClientRect()
                 .top ?? Infinity,
           }));
+        const atPageEnd =
+          window.scrollY + window.innerHeight >=
+          document.documentElement.scrollHeight - 2;
         setActive(
-          candidates.filter((candidate) => candidate.top <= 100).at(-1)?.id ??
-            candidates[0]?.id ??
-            null,
+          atPageEnd
+            ? (candidates.at(-1)?.id ?? null)
+            : (candidates
+                .filter((candidate) => candidate.top <= stickyOffset + 4)
+                .at(-1)?.id ??
+                candidates[0]?.id ??
+                null),
         );
       });
     };
+    const restoreHash = () => {
+      const hash = window.location.hash;
+      if (!hash || hash === handledHash.current) return;
+      let id: string;
+      try {
+        id = decodeURIComponent(hash.slice(1));
+      } catch {
+        return;
+      }
+      const section = sections.find(
+        (section) => section.id === id && section.count > 0,
+      );
+      const node = section ? document.getElementById(section.id) : null;
+      if (!node) return;
+      handledHash.current = hash;
+      node.scrollIntoView({ block: "start" });
+      setActive(id);
+    };
+    restoreHash();
     update();
-    window.addEventListener("scroll", update, { passive: true, capture: true });
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update, { passive: true });
+    window.addEventListener("hashchange", restoreHash);
     return () => {
       cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+      window.removeEventListener("hashchange", restoreHash);
     };
   }, [sections]);
+
   return (
-    <nav aria-label="Subprogramme contents" className="mt-3">
-      <ul className="list-disc space-y-1.5 ps-4">
+    <nav aria-label="Programme sections">
+      <h2 className="mb-2 text-base font-semibold text-foreground">Sections</h2>
+      <ul className="list-disc space-y-0.5 ps-5 text-sm leading-5 text-foreground">
         {sections.map((section) => (
-          <li key={section.id} className="text-xs">
+          <li key={section.id}>
             {section.count > 0 ? (
               <a
                 href={`#${encodeURIComponent(section.id)}`}
+                onClick={(event) => {
+                  if (
+                    event.button !== 0 ||
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  )
+                    return;
+                  const node = document.getElementById(section.id);
+                  if (!node) return;
+                  event.preventDefault();
+                  const hash = `#${encodeURIComponent(section.id)}`;
+                  if (window.location.hash !== hash)
+                    window.history.pushState(null, "", hash);
+                  handledHash.current = hash;
+                  node.scrollIntoView({ block: "start" });
+                  node.focus({ preventScroll: true });
+                  setActive(section.id);
+                }}
                 aria-current={active === section.id ? "location" : undefined}
-                className="inline-flex max-w-full items-baseline gap-1.5 rounded text-foreground underline-offset-4 hover:text-un-blue-text hover:underline focus-visible:ring-2 focus-visible:ring-un-blue"
+                className="rounded text-foreground underline-offset-4 hover:text-un-blue-text hover:underline focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 aria-[current=location]:font-medium"
               >
-                <span>{section.title}</span>
-                <span className="shrink-0 whitespace-nowrap text-muted-foreground tabular-nums">
-                  {section.count}
-                  {section.count !== section.total ? `/${section.total}` : ""}
+                {section.title}{" "}
+                <span className="tabular-nums">
+                  ({section.count}
+                  {section.count !== section.total ? ` / ${section.total}` : ""}
+                  )
                 </span>
               </a>
             ) : (
-              <span className="text-muted-foreground">
+              <span className="text-foreground">
                 {section.title}{" "}
-                <span className="tabular-nums">0/{section.total}</span>
+                <span className="tabular-nums">(0 / {section.total})</span>
               </span>
             )}
           </li>

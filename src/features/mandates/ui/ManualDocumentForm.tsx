@@ -122,7 +122,7 @@ export function ManualDocumentForm({
               )}
               {!hideDescription && (
                 <p
-                  className={`text-sm text-gray-500 ${formTitle ? "mt-1.5" : ""}`}
+                  className={`text-sm text-gray-600 ${formTitle ? "mt-1.5" : ""}`}
                 >
                   Use this form to add a mandate document that is not in our
                   database yet or that has missing or incorrect metadata.
@@ -132,7 +132,7 @@ export function ManualDocumentForm({
             <button
               type="button"
               onClick={onCancel}
-              className="shrink-0 text-gray-400 hover:text-gray-600"
+              className="shrink-0 text-gray-600 hover:text-gray-600"
             >
               <X className="h-4 w-4" />
             </button>
@@ -142,9 +142,9 @@ export function ManualDocumentForm({
       <div className="space-y-4">
         <div>
           <label className="mb-1.5 block text-xs font-medium text-gray-700">
-            Official Document Symbol <span className="text-red-500">*</span>
+            Official Document Symbol <span className="text-red-700">*</span>
             <Tooltip content="Official UN document symbol of the document. Please make sure this is 100% accurate and unique.">
-              <Info className="ml-1 inline h-3.5 w-3.5 cursor-help text-gray-400" />
+              <Info className="ml-1 inline h-3.5 w-3.5 cursor-help text-gray-600" />
             </Tooltip>
           </label>
           <div className="relative">
@@ -154,37 +154,41 @@ export function ManualDocumentForm({
               onChange={(e) => {
                 setManualData((d) => ({ ...d, symbol: e.target.value }));
               }}
-              className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:ring-2 focus:ring-un-blue/20 focus:outline-none ${
+              className={`w-full rounded-lg border px-3 py-2 text-sm text-foreground transition-colors placeholder:text-gray-600 focus:ring-2 focus:ring-un-blue/20 focus:outline-none ${
                 symbolExists
                   ? "border-un-blue bg-un-blue/5"
                   : "border-gray-200 bg-white hover:border-gray-300"
               } ${originalSymbol ? "pr-40" : ""}`}
             />
             {originalSymbol && (
-              <button
-                type="button"
-                onClick={() =>
-                  setManualData((d) => ({ ...d, symbol: originalSymbol }))
-                }
-                className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1 rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-900"
-                title="Use symbol from document being replaced"
+              <Tooltip
+                asChild
+                content={"Use symbol from document being replaced"}
               >
-                <ArrowLeftFromLine className="h-3 w-3" />
-                Copy symbol from above
-              </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setManualData((d) => ({ ...d, symbol: originalSymbol }))
+                  }
+                  className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1 rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-900"
+                >
+                  <ArrowLeftFromLine className="h-3 w-3" />
+                  Copy symbol from above
+                </button>
+              </Tooltip>
             )}
           </div>
           {checkingSymbol && (
-            <p className="mt-1 text-xs text-gray-400">Checking symbol...</p>
+            <p className="mt-1 text-xs text-gray-600">Checking symbol...</p>
           )}
           {symbolExists && existingDoc && onSelect && (
             <div className="mt-2 rounded-lg border border-un-blue/30 bg-un-blue/5 p-3">
               <div className="mb-2">
-                <div className="mb-1 text-xs font-medium text-un-blue">
+                <div className="mb-1 text-xs font-medium text-un-blue-text">
                   {existingDoc.symbol}
                 </div>
                 <div className="text-sm text-gray-700">{existingDoc.title}</div>
-                <div className="mt-1 text-xs text-gray-500">
+                <div className="mt-1 text-xs text-gray-600">
                   {[existingDoc.body, existingDoc.year]
                     .filter(Boolean)
                     .join(" · ")}
@@ -193,7 +197,7 @@ export function ManualDocumentForm({
               <button
                 type="button"
                 onClick={() => onSelect(existingDoc.symbol)}
-                className="rounded bg-un-blue px-3 py-1.5 text-sm text-white hover:bg-un-blue/90"
+                className="rounded bg-un-blue-text px-3 py-1.5 text-sm text-white hover:bg-un-blue-shade"
               >
                 Use existing document
               </button>
@@ -206,9 +210,9 @@ export function ManualDocumentForm({
         </div>
         <div>
           <label className="mb-1.5 block text-xs font-medium text-gray-700">
-            Title <span className="text-red-500">*</span>
+            Title <span className="text-red-700">*</span>
             <Tooltip content="Full official title of the document">
-              <Info className="ml-1 inline h-3.5 w-3.5 cursor-help text-gray-400" />
+              <Info className="ml-1 inline h-3.5 w-3.5 cursor-help text-gray-600" />
             </Tooltip>
           </label>
           <div className="relative">
@@ -218,30 +222,34 @@ export function ManualDocumentForm({
               onChange={(e) =>
                 setManualData((d) => ({ ...d, title: e.target.value }))
               }
-              className={`w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm transition-colors hover:border-gray-300 focus:ring-2 focus:ring-un-blue/20 focus:outline-none ${
+              className={`w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-foreground transition-colors placeholder:text-gray-600 hover:border-gray-300 focus:ring-2 focus:ring-un-blue/20 focus:outline-none ${
                 originalTitle ? "pr-40" : ""
               }`}
             />
             {originalTitle && (
-              <button
-                type="button"
-                onClick={() =>
-                  setManualData((d) => ({ ...d, title: originalTitle }))
-                }
-                className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1 rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-900"
-                title="Use title from document being replaced"
+              <Tooltip
+                asChild
+                content={"Use title from document being replaced"}
               >
-                <ArrowLeftFromLine className="h-3 w-3" />
-                Copy title from above
-              </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setManualData((d) => ({ ...d, title: originalTitle }))
+                  }
+                  className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1 rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-900"
+                >
+                  <ArrowLeftFromLine className="h-3 w-3" />
+                  Copy title from above
+                </button>
+              </Tooltip>
             )}
           </div>
         </div>
         <div className="relative">
           <label className="mb-1.5 block text-xs font-medium text-gray-700">
-            Issuing Body <span className="text-red-500">*</span>
+            Issuing Body <span className="text-red-700">*</span>
             <Tooltip content="The UN body that issued this document (e.g., General Assembly, Security Council, Economic and Social Council)">
-              <Info className="ml-1 inline h-3.5 w-3.5 cursor-help text-gray-400" />
+              <Info className="ml-1 inline h-3.5 w-3.5 cursor-help text-gray-600" />
             </Tooltip>
           </label>
           <input
@@ -257,7 +265,7 @@ export function ManualDocumentForm({
             }}
             onFocus={() => setShowBodySuggestions(true)}
             onBlur={() => setTimeout(() => setShowBodySuggestions(false), 150)}
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm transition-colors hover:border-gray-300 focus:ring-2 focus:ring-un-blue/20 focus:outline-none"
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-foreground transition-colors placeholder:text-gray-600 hover:border-gray-300 focus:ring-2 focus:ring-un-blue/20 focus:outline-none"
           />
           {showBodySuggestions && allBodyOptions.length > 0 && (
             <div className="absolute top-full right-0 left-0 z-10 mt-1 max-h-40 overflow-y-auto rounded border border-gray-200 bg-white shadow-lg">
@@ -284,24 +292,24 @@ export function ManualDocumentForm({
         {manualData.body === "Other" && (
           <div>
             <label className="mb-1.5 block text-xs font-medium text-gray-700">
-              Specify Issuing Body <span className="text-red-500">*</span>
+              Specify Issuing Body <span className="text-red-700">*</span>
             </label>
             <input
               type="text"
               value={otherBody}
               onChange={(e) => setOtherBody(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm transition-colors hover:border-gray-300 focus:ring-2 focus:ring-un-blue/20 focus:outline-none"
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-foreground transition-colors placeholder:text-gray-600 hover:border-gray-300 focus:ring-2 focus:ring-un-blue/20 focus:outline-none"
               placeholder="Enter the name of the issuing body"
             />
           </div>
         )}
         <div>
           <label className="mb-1.5 block text-xs font-medium text-gray-700">
-            Year <span className="text-red-500">*</span>
+            Year <span className="text-red-700">*</span>
             <Tooltip
               content={`Year the document was published (${MIN_YEAR}-${MAX_YEAR})`}
             >
-              <Info className="ml-1 inline h-3.5 w-3.5 cursor-help text-gray-400" />
+              <Info className="ml-1 inline h-3.5 w-3.5 cursor-help text-gray-600" />
             </Tooltip>
           </label>
           <input
@@ -313,7 +321,7 @@ export function ManualDocumentForm({
             }
             onFocus={() => setYearTouched(false)}
             onBlur={() => setYearTouched(true)}
-            className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:ring-2 focus:outline-none ${
+            className={`w-full rounded-lg border px-3 py-2 text-sm text-foreground transition-colors placeholder:text-gray-600 focus:ring-2 focus:outline-none ${
               yearTouched &&
               manualData.year &&
               (!/^\d{4}$/.test(manualData.year) ||
@@ -328,16 +336,16 @@ export function ManualDocumentForm({
             (!/^\d{4}$/.test(manualData.year) ||
               parseInt(manualData.year) < MIN_YEAR ||
               parseInt(manualData.year) > MAX_YEAR) && (
-              <p className="mt-1 text-xs text-red-500">
+              <p className="mt-1 text-xs text-red-700">
                 Year must be between {MIN_YEAR}-{MAX_YEAR}
               </p>
             )}
         </div>
         <div>
           <label className="mb-1.5 block text-xs font-medium text-gray-700">
-            Fulltext Link <span className="text-red-500">*</span>
+            Fulltext Link <span className="text-red-700">*</span>
             <Tooltip content="URL to the official document on ODS, UN Digital Library, or other official repository. Can be a direct PDF link or a document viewer page.">
-              <Info className="ml-1 inline h-3.5 w-3.5 cursor-help text-gray-400" />
+              <Info className="ml-1 inline h-3.5 w-3.5 cursor-help text-gray-600" />
             </Tooltip>
           </label>
           <input
@@ -346,7 +354,7 @@ export function ManualDocumentForm({
             onChange={(e) => {
               setManualData((d) => ({ ...d, link: e.target.value }));
             }}
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm transition-colors hover:border-gray-300 focus:ring-2 focus:ring-un-blue/20 focus:outline-none"
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-foreground transition-colors placeholder:text-gray-600 hover:border-gray-300 focus:ring-2 focus:ring-un-blue/20 focus:outline-none"
             placeholder="https://..."
           />
           {manualData.link.trim() && /^https?:\/\/.+/.test(manualData.link) && (
@@ -359,7 +367,7 @@ export function ManualDocumentForm({
                 href={manualData.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded bg-un-blue px-2.5 py-1 font-medium text-white hover:bg-un-blue/90"
+                className="rounded bg-un-blue-text px-2.5 py-1 font-medium text-white hover:bg-un-blue-shade"
               >
                 Open link
               </a>
@@ -378,7 +386,7 @@ export function ManualDocumentForm({
             type="button"
             onClick={handleSubmit}
             disabled={!isFormValid}
-            className="rounded-lg bg-un-blue px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-un-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg bg-un-blue-text px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-un-blue-shade disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-700"
           >
             {submitLabel}
           </button>

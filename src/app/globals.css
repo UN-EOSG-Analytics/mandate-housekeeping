@@ -105,7 +105,7 @@
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  --muted-foreground: var(--color-neutral-text);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
@@ -134,6 +134,24 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--muted-foreground);
+    opacity: 1;
+  }
+}
+
+/* Keep unavailable controls distinguishable without fading their labels. */
+:is(button, input, select, textarea):disabled,
+:is([role="option"], [role^="menuitem"]):is(
+  [aria-disabled="true"],
+  [data-disabled]:not([data-disabled="false"])
+) {
+  color: var(--muted-foreground);
+  background-color: var(--muted);
+  opacity: 1;
+  cursor: not-allowed;
 }
 
 /* Reserve scrollbar space without creating a second scroll container on body.

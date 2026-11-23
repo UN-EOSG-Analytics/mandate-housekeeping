@@ -6,6 +6,7 @@ import { EntityDetail } from "@/components/EntityDetail";
 import { FooterFootnote } from "@/components/core/FooterFootnote";
 import { PageHeader } from "@/components/core/PageHeader";
 import { fetchEntityPageData } from "@/features/mandates/services/data-service";
+import { fetchBodyFullNames } from "@/features/mandates/services/reference-data";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -106,7 +107,10 @@ async function EntityData({
   entityCode: string;
   budgetVersion: BudgetVersion;
 }) {
-  const match = await fetchEntityPageData(entityCode);
+  const [match, bodyFullNames] = await Promise.all([
+    fetchEntityPageData(entityCode),
+    fetchBodyFullNames(),
+  ]);
   if (!match) notFound();
   const { data: entityData, partName } = match;
   return (
@@ -117,6 +121,7 @@ async function EntityData({
       entity={entityData.entity}
       entityLong={entityData.entityLong}
       partName={partName}
+      bodyFullNames={bodyFullNames}
       backgroundMandates={entityData.backgroundMandates}
       legislativeMandates={entityData.legislativeMandates}
     />

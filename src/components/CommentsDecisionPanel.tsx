@@ -6,7 +6,7 @@ import {
   Check,
   ChevronDown,
   History,
-  MessageSquare,
+  LockKeyhole,
   Plus,
   X,
 } from "lucide-react";
@@ -31,6 +31,8 @@ import { dispatchCommentNotificationsRefresh } from "@/hooks/useCommentNotificat
 import { getDecisionTracks } from "@/features/mandates/services/decision-tracks";
 import { getVisibleDecisions } from "@/features/mandates/services/decision-visibility";
 import { getEntityPermissions } from "@/features/auth/permissions";
+import { Button } from "@un-eosg/ui/components/button";
+import { citationSection } from "@/features/mandates/services/citation-locations";
 import { DecisionDropdown } from "./DecisionDropdown";
 import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
 import {
@@ -42,12 +44,18 @@ import {
   DecisionTracksContext,
   ReviewDecisionControl,
 } from "./ReviewDecisionControl";
+import { Tooltip } from "@/components/Tooltip";
 
-const GROUP_GRID =
-  "grid grid-cols-[minmax(120px,1fr)_110px_140px_28px] items-center gap-x-2 px-3";
+const COMMENT_CARD = "rounded-lg border border-border bg-white p-3";
+type ConversationGroup = ReturnType<typeof conversationGroups>[number];
 
-const COMMENT_BUBBLE =
-  "relative ml-2 rounded-xl rounded-tl-sm border border-border bg-white p-3 shadow-sm before:absolute before:top-4 before:-left-1 before:h-2 before:w-2 before:rotate-45 before:border-b before:border-l before:border-border before:bg-white";
+function decisionSummary(
+  decision: MandateDecision | null | undefined,
+  empty: string,
+) {
+  if (!decision || decision.decision === "cancel") return empty;
+  return `${decision.decision[0].toUpperCase()}${decision.decision.slice(1)}${decision.newSymbol ? ` → ${decision.newSymbol}` : ""}`;
+}
 
 const dateLabel = (date: string) => new Date(date).toLocaleString();
 
@@ -95,22 +103,23 @@ function DecisionLine({ decision }: { decision: MandateDecision }) {
         {reasonLabel && (
           <Popover>
             <PopoverTrigger asChild>
-              <button
-                type="button"
-                aria-label={`Reason: ${reasonLabel.replace(/\*\*/g, "")}`}
-                title={reasonLabel.replace(/\*\*/g, "")}
-                className={`flex h-6 w-6 items-center justify-center rounded border ${style} ${colors.hover}`}
-                onClick={(event) => event.stopPropagation()}
-              >
-                {renderReasonIcon(decision.decisionReason, "h-3.5 w-3.5")}
-              </button>
+              <Tooltip asChild content={reasonLabel.replace(/\*\*/g, "")}>
+                <button
+                  type="button"
+                  aria-label={`Reason: ${reasonLabel.replace(/\*\*/g, "")}`}
+                  className={`flex h-6 w-6 items-center justify-center rounded border ${style} ${colors.hover}`}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {renderReasonIcon(decision.decisionReason, "h-3.5 w-3.5")}
+                </button>
+              </Tooltip>
             </PopoverTrigger>
             <PopoverContent side="top" className="w-80 text-sm">
               {renderLabelWithBold(reasonLabel)}
             </PopoverContent>
           </Popover>
         )}
-        <span className="ml-1 text-muted-foreground">{trackLabel}</span>
+        <span className="ml-1 text-gray-600">{trackLabel}</span>
       </span>
     </div>
   );
@@ -118,6 +127,9 @@ function DecisionLine({ decision }: { decision: MandateDecision }) {
 
 export function CommentsDecisionPanel({
   symbol,
+  entityLongMap,
+  focusComposer = false,
+  active = true,
   entity,
   subprogramme,
   entitySubprogrammes,
@@ -131,6 +143,7 @@ export function CommentsDecisionPanel({
   budgetVersion,
   readOnly,
   loading = false,
+  activityError = false,
   state,
   onDecision,
   onReasonChange,
@@ -141,6 +154,9 @@ export function CommentsDecisionPanel({
   targetCommentId,
 }: {
   symbol: string;
+  entityLongMap?: Record<string, string>;
+  focusComposer?: boolean;
+  active?: boolean;
   entity?: string;
   subprogramme: string | null;
   entitySubprogrammes?: Record<string, string[]>;
@@ -154,6 +170,7 @@ export function CommentsDecisionPanel({
   budgetVersion: BudgetVersion;
   readOnly: boolean;
   loading?: boolean;
+  activityError?: boolean;
   state?: MandateState;
   onDecision?: DecisionChangeHandler;
   onReasonChange?: DecisionReasonChangeHandler;
@@ -172,6 +189,7 @@ export function CommentsDecisionPanel({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [commentSaved, setCommentSaved] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const queuedRef = useRef(new Set<string>());
   const acknowledgedRef = useRef(new Set<string>());
@@ -210,6 +228,7 @@ export function CommentsDecisionPanel({
     : null;
   const scrolledRef = useRef<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const composerFocusedRef = useRef<string | null>(null);
   useEffect(() => {
     if (!targetKey) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Open the exact group addressed by a notification.
@@ -218,7 +237,8 @@ export function CommentsDecisionPanel({
     );
   }, [targetKey]);
   useEffect(() => {
-    if (!targetCommentId || scrolledRef.current === targetCommentId) return;
+    if (!active || !targetCommentId || scrolledRef.current === targetCommentId)
+      return;
     const element = rootRef.current?.querySelector<HTMLElement>(
       `[data-comment-id="${CSS.escape(targetCommentId)}"]`,
     );
@@ -227,11 +247,12 @@ export function CommentsDecisionPanel({
       element.focus({ preventScroll: true });
       scrolledRef.current = targetCommentId;
     }
-  }, [targetCommentId, expanded, comments]);
+  }, [active, targetCommentId, expanded, comments]);
 
   // Exact IDs, visible viewport only. A closed group never mounts its messages.
   useEffect(() => {
-    if (!userEmail || readCommentIds === null || !rootRef.current) return;
+    if (!active || !userEmail || readCommentIds === null || !rootRef.current)
+      return;
     let disposed = false;
     const queued = queuedRef.current;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -300,7 +321,7 @@ export function CommentsDecisionPanel({
     };
     // IDs and group mounts determine visibility; onRead is provided as a stable callback.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [comments, expanded, readCommentIds, userEmail, budgetVersion]);
+  }, [active, comments, expanded, readCommentIds, userEmail, budgetVersion]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -324,10 +345,36 @@ export function CommentsDecisionPanel({
     return () => observer.disconnect();
   }, [draft, expanded]);
 
+  useEffect(() => {
+    if (
+      !active ||
+      !focusComposer ||
+      targetCommentId ||
+      !onComment ||
+      readOnly ||
+      composerFocusedRef.current === originKey
+    )
+      return;
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.focus({ preventScroll: true });
+    textarea.scrollIntoView({ block: "nearest" });
+    composerFocusedRef.current = originKey;
+  }, [
+    active,
+    focusComposer,
+    targetCommentId,
+    onComment,
+    readOnly,
+    originKey,
+    expanded,
+  ]);
+
   const send = async () => {
     if (!onComment || sending || !draft.trim()) return;
     setSending(true);
     setError(null);
+    setCommentSaved(false);
     try {
       const saved = await onComment(draft.trim());
       if (!saved) {
@@ -337,6 +384,7 @@ export function CommentsDecisionPanel({
         return;
       }
       setDraft("");
+      setCommentSaved(true);
       setExpanded((previous) => new Set([...previous, originKey]));
       dispatchCommentNotificationsRefresh();
     } catch {
@@ -348,104 +396,161 @@ export function CommentsDecisionPanel({
     }
   };
 
-  return (
-    <div
-      ref={rootRef}
-      className="overflow-x-auto rounded-xl border border-border bg-white shadow-sm"
-    >
-      <div className="min-w-[446px]">
-        <h3 className={`${typography.eyebrow} px-3 py-3`}>
-          Decisions &amp; Comments
-        </h3>
-        {loading && (
-          <p
-            role="status"
-            className="border-t border-border px-3 py-2 text-xs text-foreground"
-          >
-            Loading comments and decision history…
-          </p>
+  const statusMessage = sending
+    ? "Sending comment…"
+    : commentSaved
+      ? "Comment saved"
+      : loading && !activityError
+        ? "Loading comments and decision history…"
+        : "";
+
+  function renderGroup(group: ConversationGroup) {
+    const isCurrent = group.key === originKey;
+    const canViewConversation = getEntityPermissions(
+      viewer,
+      group.entity,
+    ).canViewConversation;
+    const tracks = getDecisionTracks(group.decisions);
+    const submission = isCurrent
+      ? (state?.decision ?? tracks.submission)
+      : tracks.submission;
+    const review = isCurrent
+      ? (state?.reviewDecision ?? tracks.review)
+      : tracks.review;
+    const unread =
+      readCommentIds === null
+        ? 0
+        : group.comments.filter(
+            (comment) =>
+              comment.userEmail !== userEmail && !readIds.has(comment.id),
+          ).length;
+    const isExpanded = canViewConversation && expanded.has(group.key);
+    const canEdit =
+      isCurrent && !readOnly && !!context?.canEditSubmission && !!onDecision;
+    const canCompose =
+      isCurrent && canViewConversation && !!onComment && !readOnly;
+    const focalCurrent = isCurrent && !isReviewer;
+    const showBody = focalCurrent || isExpanded;
+    const groupId = `conversation-${encodeURIComponent(symbol)}-${encodeURIComponent(group.key)}`;
+    const draftId = `comment-draft-${encodeURIComponent(symbol)}-${encodeURIComponent(originKey)}`;
+    const visibilityId = `${draftId}-visibility`;
+    const locationLabel = citationSection(group.subprogramme).label;
+    const toggleGroup = () =>
+      setExpanded((previous) => {
+        const next = new Set(previous);
+        if (next.has(group.key)) next.delete(group.key);
+        else next.add(group.key);
+        return next;
+      });
+    return (
+      <section
+        key={group.key}
+        data-conversation-key={group.key}
+        aria-label={`${group.entity} · ${locationLabel}${isCurrent ? " · Current citation" : ""}`}
+        className={cn(
+          "overflow-hidden rounded-lg border border-border bg-white",
+          isCurrent && "border-un-blue-text/30",
         )}
-        <div
-          className={`${GROUP_GRID} border-y border-border bg-muted py-2 text-xs font-medium text-foreground`}
-        >
-          <span>Entity / Programme</span>
-          <span>Focal point submission</span>
-          <span>Reviewer</span>
-          <span title="Comments">
-            <MessageSquare className="h-3.5 w-3.5" aria-label="Comments" />
-          </span>
-        </div>
-        {groups.map((group) => {
-          const isCurrent = group.key === originKey;
-          const canViewConversation = getEntityPermissions(
-            viewer,
-            group.entity,
-          ).canViewConversation;
-          const tracks = getDecisionTracks(group.decisions);
-          const submission = isCurrent
-            ? (state?.decision ?? tracks.submission)
-            : tracks.submission;
-          const review = isCurrent
-            ? (state?.reviewDecision ?? tracks.review)
-            : tracks.review;
-          const unread =
-            readCommentIds === null
-              ? 0
-              : group.comments.filter(
-                  (c) => c.userEmail !== userEmail && !readIds.has(c.id),
-                ).length;
-          const isExpanded = canViewConversation && expanded.has(group.key);
-          const canEdit =
-            isCurrent &&
-            !readOnly &&
-            !!context?.canEditSubmission &&
-            !!onDecision;
-          const groupId = `conversation-${encodeURIComponent(symbol)}-${encodeURIComponent(group.key)}`;
-          return (
-            <section
-              key={group.key}
-              data-conversation-key={group.key}
-              className="border-b border-border last:border-b-0"
+      >
+        <div className="border-b border-border bg-muted/50 p-3">
+          {focalCurrent ? (
+            <div>
+              <h4 className="text-sm font-semibold text-foreground">
+                {group.entity} · {locationLabel}
+              </h4>
+              {entityLongMap?.[group.entity] && (
+                <p className="mt-1 text-xs text-foreground">
+                  {entityLongMap[group.entity]}
+                </p>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={!canViewConversation}
+              aria-expanded={canViewConversation ? isExpanded : undefined}
+              aria-controls={canViewConversation ? groupId : undefined}
+              onClick={toggleGroup}
+              className="flex w-full min-w-0 items-start gap-2 rounded text-left text-foreground focus-visible:ring-2 focus-visible:ring-un-blue disabled:cursor-default"
             >
-              <div className={`${GROUP_GRID} min-h-12 py-2`}>
-                <button
-                  type="button"
-                  disabled={!canViewConversation}
-                  aria-expanded={canViewConversation ? isExpanded : undefined}
-                  aria-controls={canViewConversation ? groupId : undefined}
-                  onClick={() =>
-                    setExpanded((previous) => {
-                      const next = new Set(previous);
-                      if (next.has(group.key)) next.delete(group.key);
-                      else next.add(group.key);
-                      return next;
-                    })
-                  }
-                  className="flex min-w-0 items-center gap-2 rounded text-left focus-visible:ring-2 focus-visible:ring-un-blue disabled:cursor-default"
-                >
-                  {canViewConversation ? (
-                    <ChevronDown
-                      className={`h-3.5 w-3.5 shrink-0 transition-transform ${isExpanded ? "" : "-rotate-90"}`}
-                    />
-                  ) : (
-                    <span className="w-3.5 shrink-0" aria-hidden="true" />
+              {canViewConversation ? (
+                <ChevronDown
+                  className={cn(
+                    "mt-0.5 h-4 w-4 shrink-0 transition-transform",
+                    !isExpanded && "-rotate-90",
                   )}
-                  <span className="min-w-0 text-foreground">
-                    <span
-                      className="block truncate text-sm font-semibold"
-                      title={group.entity}
-                    >
-                      {group.entity}
+                  aria-hidden="true"
+                />
+              ) : (
+                <LockKeyhole
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  aria-hidden="true"
+                />
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">
+                  {group.entity}
+                  {isCurrent && (
+                    <span className="ml-2 text-xs font-medium">
+                      Current citation
                     </span>
-                    <span className="block text-xs">
-                      {group.subprogramme || "Programme level"}
-                    </span>
+                  )}
+                </span>
+                <span className="mt-0.5 block text-xs">{locationLabel}</span>
+                {entityLongMap?.[group.entity] && (
+                  <span className="mt-0.5 block text-xs">
+                    {entityLongMap[group.entity]}
                   </span>
-                </button>
+                )}
+              </span>
+              {canViewConversation && (
+                <span className="shrink-0 text-xs tabular-nums">
+                  {group.comments.length}{" "}
+                  {group.comments.length === 1 ? "comment" : "comments"}
+                  {unread > 0 && (
+                    <span className="mt-1 block font-semibold text-un-blue-text">
+                      {unread} unread
+                    </span>
+                  )}
+                </span>
+              )}
+            </button>
+          )}
+          {!showBody && (
+            <dl className="mt-3 grid grid-cols-2 gap-3 text-xs text-foreground">
+              <div>
+                <dt>Submission</dt>
+                <dd className="mt-0.5 font-medium break-words">
+                  {decisionSummary(submission, "No submission")}
+                </dd>
+              </div>
+              <div>
+                <dt>Reviewer</dt>
+                <dd className="mt-0.5 font-medium break-words">
+                  {decisionSummary(review, "Not reviewed")}
+                </dd>
+              </div>
+            </dl>
+          )}
+        </div>
+        {showBody && (
+          <div id={groupId} className="space-y-4 p-3">
+            <div
+              className={cn(
+                "grid gap-3",
+                (isReviewer || !!review) && "sm:grid-cols-2",
+              )}
+            >
+              <div className="space-y-1.5">
+                <h5 className="text-xs font-semibold text-foreground">
+                  {canEdit
+                    ? "Your submission decision"
+                    : "Focal point submission"}
+                </h5>
                 <DecisionDropdown
                   decision={submission?.decision || null}
                   onChange={onDecision || (async () => null)}
-                  disabled={!canEdit}
+                  disabled={!canEdit || (!!submission && !submission.id)}
                   onUpdateClick={canEdit ? onUpdateClick : undefined}
                   onReasonChange={canEdit ? onReasonChange : undefined}
                   reason={submission?.decisionReason}
@@ -456,171 +561,273 @@ export function CommentsDecisionPanel({
                   createdAt={submission?.createdAt}
                   size="sm"
                 />
-                <ReviewDecisionControl
-                  compact
-                  entity={group.entity}
-                  symbol={symbol}
-                  subprogramme={group.subprogramme}
-                  submission={submission ?? null}
-                  review={review ?? null}
-                  editable={isCurrent && !readOnly && !!context?.canReview}
-                  onSaved={onDecisionSaved}
-                />
-                <span
-                  className="inline-flex items-center gap-1 text-xs"
-                  title={
-                    canViewConversation
-                      ? `${group.comments.length} comments${unread ? `, ${unread} unread` : ""}`
-                      : "Comments are private to this entity and reviewers"
-                  }
-                >
-                  {!canViewConversation
-                    ? "—"
-                    : loading && !group.comments.length
-                      ? "…"
-                      : group.comments.length}
-                  {unread > 0 && (
-                    <span
-                      className="h-2 w-2 shrink-0 rounded-full bg-un-blue-text"
-                      aria-label={`${unread} unread comments`}
-                    />
-                  )}
-                </span>
+                {submission?.newSymbol && submission.decision === "update" && (
+                  <p className="text-xs break-words text-foreground">
+                    Replacement: {submission.newSymbol}
+                  </p>
+                )}
               </div>
-              {isExpanded && (
-                <div
-                  id={groupId}
-                  className="space-y-3 border-t border-border bg-muted/60 px-3 py-3"
-                >
-                  {conversationTimeline(group.comments, group.decisions).map(
-                    (entry) => {
-                      if (entry.type === "comment")
-                        return (
-                          <article
-                            key={entry.comment.id}
-                            id={`comment-${entry.comment.id}`}
-                            data-comment-id={entry.comment.id}
-                            data-author={entry.comment.userEmail}
-                            tabIndex={-1}
-                            className={cn(
-                              COMMENT_BUBBLE,
-                              "focus-visible:border-un-blue focus-visible:outline-none focus-visible:before:border-un-blue",
-                              entry.comment.id === targetCommentId &&
-                                "border-un-blue before:border-un-blue",
-                            )}
-                          >
-                            <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-foreground">
-                              <strong>{entry.comment.userEmail}</strong>
-                              <time dateTime={entry.comment.createdAt}>
-                                {dateLabel(entry.comment.createdAt)}
-                              </time>
-                              {readCommentIds !== null &&
-                                entry.comment.userEmail !== userEmail &&
-                                !readIds.has(entry.comment.id) && (
-                                  <span className="font-semibold text-un-blue-text">
-                                    Unread
-                                  </span>
-                                )}
-                            </div>
-                            <p className="text-sm leading-relaxed break-words whitespace-pre-wrap text-foreground">
-                              {entry.comment.comment}
-                            </p>
-                          </article>
-                        );
-                      // Both current tracks are shown in the group header. Keep
-                      // just the last event visible in each uninterrupted run.
-                      const latest = entry.decisions.at(-1);
-                      if (!latest) return null;
-                      const earlier = entry.decisions.slice(0, -1);
-                      return (
-                        <div
-                          key={`decisions-${entry.decisions[0].id}`}
-                          className="ml-2 border-l-2 border-border pl-3"
-                        >
-                          {earlier.length > 0 && (
-                            <details className="mb-1">
-                              <summary className="flex cursor-pointer items-center gap-1 py-0.5 text-xs text-un-blue-text">
-                                <History className="h-3 w-3" />
-                                Show history ({earlier.length} earlier{" "}
-                                {earlier.length === 1 ? "change" : "changes"})
-                              </summary>
-                              <div className="mt-1">
-                                {earlier.map((decision) => (
-                                  <DecisionLine
-                                    key={decision.id}
-                                    decision={decision}
-                                  />
-                                ))}
-                              </div>
-                            </details>
-                          )}
-                          <DecisionLine decision={latest} />
-                        </div>
-                      );
-                    },
-                  )}
-
-                  {!loading &&
-                    !group.comments.length &&
-                    !group.decisions.length && (
-                      <p className="text-sm text-foreground">
-                        No comments yet.
-                      </p>
-                    )}
-                  {isCurrent && onComment && !readOnly && (
-                    <form
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void send();
-                      }}
-                      className="space-y-2"
-                      aria-label={`Comment on ${group.entity} · ${group.subprogramme || "Programme level"}`}
-                    >
-                      <div className={COMMENT_BUBBLE}>
-                        <label
-                          htmlFor={`comment-draft-${symbol}`}
-                          className="sr-only"
-                        >
-                          Add comment
-                        </label>
-                        <textarea
-                          ref={textareaRef}
-                          id={`comment-draft-${symbol}`}
-                          value={draft}
-                          onChange={(event) => setDraft(event.target.value)}
-                          disabled={sending}
-                          rows={2}
-                          maxLength={20000}
-                          placeholder="Add to the conversation…"
-                          className="block min-h-10 w-full resize-none overflow-hidden rounded bg-transparent text-sm text-foreground focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:outline-none"
-                        />
-                      </div>
-                      {error && (
-                        <p role="alert" className="text-sm text-red-700">
-                          {error}
-                        </p>
-                      )}
-                      <div className="flex justify-end">
-                        <button
-                          type="submit"
-                          disabled={sending || !draft.trim()}
-                          className="rounded bg-un-blue-text px-2.5 py-1 text-xs font-medium text-white disabled:opacity-60"
-                        >
-                          {sending
-                            ? "Sending…"
-                            : error
-                              ? "Retry comment"
-                              : "Send comment"}
-                        </button>
-                      </div>
-                    </form>
-                  )}
+              {(isReviewer || !!review) && (
+                <div className="space-y-1.5">
+                  <h5 className="text-xs font-semibold text-foreground">
+                    Reviewer decision
+                  </h5>
+                  <ReviewDecisionControl
+                    entity={group.entity}
+                    symbol={symbol}
+                    subprogramme={group.subprogramme}
+                    submission={submission ?? null}
+                    review={review ?? null}
+                    editable={isCurrent && !readOnly && !!context?.canReview}
+                    onSaved={onDecisionSaved}
+                  />
                 </div>
               )}
-            </section>
-          );
-        })}
-      </div>
+            </div>
+            {isCurrent && !canEdit && (
+              <p className="text-sm text-foreground">
+                {readOnly && canViewConversation
+                  ? "This citation is read-only. Saved decisions and comments remain available."
+                  : "The focal point submission is read-only in this view."}
+              </p>
+            )}
+            {canCompose && (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void send();
+                }}
+                aria-label={`Comment on ${group.entity} · ${locationLabel}`}
+                className="space-y-3 rounded-lg border border-border bg-white p-3"
+              >
+                <label
+                  htmlFor={draftId}
+                  className="block text-sm font-semibold text-foreground"
+                >
+                  Add a comment
+                </label>
+                <p
+                  id={visibilityId}
+                  className="flex items-start gap-1.5 text-xs leading-relaxed text-foreground"
+                >
+                  <LockKeyhole
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                  Only {group.entity} and authorised reviewers can read this
+                  conversation.
+                </p>
+                <textarea
+                  ref={textareaRef}
+                  id={draftId}
+                  aria-describedby={visibilityId}
+                  value={draft}
+                  onChange={(event) => {
+                    setDraft(event.target.value);
+                    setCommentSaved(false);
+                  }}
+                  disabled={sending}
+                  rows={3}
+                  maxLength={20000}
+                  placeholder="Explain your decision or ask a question…"
+                  className="block min-h-24 w-full resize-none overflow-hidden rounded-md border border-input bg-white px-3 py-2 text-sm text-foreground placeholder:text-gray-600 focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:outline-none disabled:bg-muted disabled:text-gray-700"
+                />
+                {error && (
+                  <p role="alert" className="text-sm text-red-800">
+                    {error}
+                  </p>
+                )}
+                <div className="flex items-center justify-between gap-3">
+                  <span
+                    role="status"
+                    className="min-h-4 text-xs text-foreground"
+                  >
+                    {statusMessage}
+                  </span>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={sending || !draft.trim()}
+                    className="bg-un-blue-text-aaa text-white disabled:bg-gray-200 disabled:text-gray-700 disabled:opacity-100"
+                  >
+                    {sending
+                      ? "Sending…"
+                      : error
+                        ? "Retry comment"
+                        : "Send comment"}
+                  </Button>
+                </div>
+              </form>
+            )}
+            {!canViewConversation && (
+              <p className="flex items-start gap-2 text-sm text-foreground">
+                <LockKeyhole
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  aria-hidden="true"
+                />
+                Comments are private to {group.entity} and authorised reviewers.
+              </p>
+            )}
+            {canViewConversation && (
+              <div className="border-t border-border pt-3">
+                {focalCurrent ? (
+                  <button
+                    type="button"
+                    onClick={toggleGroup}
+                    aria-expanded={isExpanded}
+                    aria-controls={`${groupId}-history`}
+                    className="flex w-full items-center gap-2 rounded text-left text-sm font-semibold text-foreground focus-visible:ring-2 focus-visible:ring-un-blue"
+                  >
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 shrink-0",
+                        !isExpanded && "-rotate-90",
+                      )}
+                      aria-hidden="true"
+                    />
+                    Comments and decision history{" "}
+                    <span className="ml-auto text-xs font-normal tabular-nums">
+                      {group.comments.length}{" "}
+                      {group.comments.length === 1 ? "comment" : "comments"}
+                      {unread > 0 ? ` · ${unread} unread` : ""}
+                    </span>
+                  </button>
+                ) : (
+                  <h5 className="text-sm font-semibold text-foreground">
+                    Comments and decision history
+                  </h5>
+                )}
+                {isExpanded && (
+                  <div id={`${groupId}-history`} className="mt-3 space-y-3">
+                    {conversationTimeline(group.comments, group.decisions).map(
+                      (entry) => {
+                        if (entry.type === "comment")
+                          return (
+                            <article
+                              key={entry.comment.id}
+                              id={`comment-${entry.comment.id}`}
+                              data-comment-id={entry.comment.id}
+                              data-author={entry.comment.userEmail}
+                              tabIndex={-1}
+                              className={cn(
+                                COMMENT_CARD,
+                                "focus-visible:border-un-blue focus-visible:outline-none",
+                                entry.comment.id === targetCommentId &&
+                                  "border-un-blue",
+                              )}
+                            >
+                              <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-foreground">
+                                <strong>{entry.comment.userEmail}</strong>
+                                <time dateTime={entry.comment.createdAt}>
+                                  {dateLabel(entry.comment.createdAt)}
+                                </time>
+                                {readCommentIds !== null &&
+                                  entry.comment.userEmail !== userEmail &&
+                                  !readIds.has(entry.comment.id) && (
+                                    <span className="font-semibold text-un-blue-text">
+                                      Unread
+                                    </span>
+                                  )}
+                              </div>
+                              <p className="text-sm leading-relaxed break-words whitespace-pre-wrap text-foreground">
+                                {entry.comment.comment}
+                              </p>
+                            </article>
+                          );
+                        // Both current tracks are shown in the group header. Keep
+                        // just the last event visible in each uninterrupted run.
+                        const latest = entry.decisions.at(-1);
+                        if (!latest) return null;
+                        const earlier = entry.decisions.slice(0, -1);
+                        return (
+                          <div
+                            key={`decisions-${entry.decisions[0].id}`}
+                            className="border-l-2 border-border pl-3"
+                          >
+                            {earlier.length > 0 && (
+                              <details className="mb-1">
+                                <summary className="flex cursor-pointer items-center gap-1 py-0.5 text-xs text-un-blue-text">
+                                  <History className="h-3 w-3" />
+                                  Show history ({earlier.length} earlier{" "}
+                                  {earlier.length === 1 ? "change" : "changes"})
+                                </summary>
+                                <div className="mt-1">
+                                  {earlier.map((decision) => (
+                                    <DecisionLine
+                                      key={decision.id}
+                                      decision={decision}
+                                    />
+                                  ))}
+                                </div>
+                              </details>
+                            )}
+                            <DecisionLine decision={latest} />
+                          </div>
+                        );
+                      },
+                    )}
+
+                    {!loading &&
+                      !activityError &&
+                      !group.comments.length &&
+                      !group.decisions.length && (
+                        <p className="text-sm text-foreground">
+                          No decisions or comments yet.
+                        </p>
+                      )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        {!showBody && !canViewConversation && (
+          <p className="flex items-start gap-1.5 px-3 py-2 text-xs text-foreground">
+            <LockKeyhole
+              className="mt-0.5 h-3.5 w-3.5 shrink-0"
+              aria-hidden="true"
+            />
+            Discussion is private to {group.entity} and authorised reviewers.
+          </p>
+        )}
+      </section>
+    );
+  }
+
+  const visibleComposer =
+    !!onComment &&
+    !readOnly &&
+    !!entity &&
+    getEntityPermissions(viewer, entity).canViewConversation &&
+    (!isReviewer || expanded.has(originKey));
+
+  return (
+    <div ref={rootRef} className="space-y-4 text-foreground">
+      {isReviewer && <h3 className={typography.subTitle}>Citation overview</h3>}
+      {!visibleComposer && statusMessage && (
+        <p role="status" className="text-xs text-foreground">
+          {statusMessage}
+        </p>
+      )}
+      {isReviewer ? (
+        <div className="space-y-3" aria-label="Citation locations">
+          {groups.map(renderGroup)}
+        </div>
+      ) : (
+        <>
+          {groups.filter((group) => group.key === originKey).map(renderGroup)}
+          {groups.some((group) => group.key !== originKey) && (
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold">
+                Other citation locations
+              </h4>
+              {groups
+                .filter((group) => group.key !== originKey)
+                .map(renderGroup)}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

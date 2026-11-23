@@ -32,7 +32,7 @@ export const DECISION_THEME = {
     hover: "hover:border-red-300",
     hoverBg: "hover:bg-red-100",
     iconBg: "bg-red-100",
-    iconText: "text-red-600",
+    iconText: "text-red-800",
   },
   update: {
     bg: "bg-amber-50",
@@ -44,7 +44,7 @@ export const DECISION_THEME = {
     hover: "hover:border-amber-300",
     hoverBg: "hover:bg-amber-100",
     iconBg: "bg-amber-100",
-    iconText: "text-amber-600",
+    iconText: "text-amber-800",
   },
   add: {
     bg: "bg-emerald-50",
@@ -132,14 +132,14 @@ export const WARNING_THEME = {
     bgStrong: "bg-amber-100",
     border: "border-amber-200",
     text: "text-amber-800",
-    icon: "bg-amber-100 text-amber-600",
+    icon: "bg-amber-100 text-amber-800",
   },
   info: {
     bg: "bg-blue-50",
     bgStrong: "bg-blue-100",
     border: "border-blue-200",
     text: "text-blue-800",
-    icon: "bg-blue-100 text-un-blue",
+    icon: "bg-blue-100 text-un-blue-text-aaa",
   },
 } as const;
 
@@ -165,10 +165,11 @@ export const UN_BLUE = {
   button: "bg-un-blue-text text-white hover:bg-un-blue-shade",
 
   // Secondary button/badge (light background)
-  badge: "bg-un-blue-surface text-un-blue-text hover:bg-un-blue-tint-50",
+  badge: "bg-un-blue-surface text-un-blue-text-aaa hover:bg-un-blue-tint-50",
 
   // Info badge (subtle)
-  badgeSubtle: "bg-un-blue-surface text-un-blue-text hover:bg-un-blue-tint-50",
+  badgeSubtle:
+    "bg-un-blue-surface text-un-blue-text-aaa hover:bg-un-blue-tint-50",
 
   // Text link
   link: "text-un-blue-text hover:underline",

@@ -35,3 +35,16 @@ export const getIssuingBodies = unstable_cache(
     tags: ["issuing-bodies"],
   },
 );
+
+export const fetchBodyFullNames = unstable_cache(
+  async (): Promise<Record<string, string>> => {
+    const rows = await query<{ entity: string; entity_long: string }>(
+      "SELECT entity, entity_long FROM systemchart.entities WHERE entity_long IS NOT NULL",
+      [],
+      "ppb2026",
+    );
+    return Object.fromEntries(rows.map((row) => [row.entity, row.entity_long]));
+  },
+  ["systemchart-body-full-names"],
+  { revalidate: 3600 },
+);

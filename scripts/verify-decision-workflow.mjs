@@ -125,7 +125,7 @@ function dropdown(props) {
   };
   const select = () => (value) => {
     const label = {
-      "": "—",
+      "": "Clear decision",
       retain: "Retain",
       remove: "Remove",
       update: "Update",
@@ -134,7 +134,9 @@ function dropdown(props) {
     menu.props.onOpenChange(true);
     return find(
       render(),
-      (node) => node.type === DropdownMenuItem && node.props.children === label,
+      (node) =>
+        node.type === DropdownMenuItem &&
+        find(node.props.children, (child) => child.props.children === label),
     ).props.onSelect();
   };
   return {
@@ -165,6 +167,11 @@ test("reason popup opens immediately and a fast choice waits for the exact saved
   const tree = ui.render({ decision: "remove", disabled: true });
   assert.equal(saves, 1);
   assert.equal(ui.popup(tree).props.isOpen, true);
+  assert.equal(
+    ui.popup(tree).props.saving,
+    false,
+    "Initial saving must not block a quick reason choice",
+  );
   const pencil = find(
     tree,
     (node) =>
@@ -173,6 +180,7 @@ test("reason popup opens immediately and a fast choice waits for the exact saved
   );
   assert.equal(pencil.props.disabled, true);
   const queuedReason = ui.popup(tree).props.onChange("delivered", null);
+  assert.equal(ui.popup(ui.render()).props.saving, true);
   ui.popup(tree).props.onClose();
   assert.equal(reasons.length, 0);
   const saved = { id: "new-event", decision: "remove", decisionReason: null };
@@ -285,6 +293,12 @@ test("cancel never opens a reason popup and update waits for replacement selecti
 });
 
 const permissions = loadSource("src/features/auth/permissions.ts", {});
+const visibility = loadSource(
+  "src/features/mandates/services/decision-visibility.ts",
+  {
+    "@/features/auth/permissions": permissions,
+  },
+);
 
 const tracks = loadSource(
   "src/features/mandates/services/decision-tracks.ts",
@@ -333,7 +347,7 @@ function actions({
             },
           ];
     if (sql.includes("SELECT id FROM mandates_housekeeping.mandate_decisions"))
-      return [{ id: latestId }];
+      return latestId ? [{ id: latestId }] : [];
     if (/SELECT id FROM mandates_housekeeping.entity_review_mode/.test(sql))
       return activeReview ? [{ id: "session-1" }] : [];
     if (sql.includes("WITH inserted") && sql.includes("VALUES")) {
@@ -372,6 +386,7 @@ function actions({
       },
     },
     "../services/decision-tracks": tracks,
+    "../services/decision-visibility": visibility,
     "../services/comment-notifications": {},
     "@/lib/db/review-cycle": {
       getBudgetVersion: async () => "ppb2027",
@@ -418,6 +433,76 @@ function actions({
     },
   };
 }
+
+test("guarded duplicate drops reject changed submission or review events under the entity lock", async () => {
+  const scenarios = [
+    {
+      expectedDecisionId: "submission",
+      expectedReviewId: "old",
+      allowed: true,
+    },
+    { expectedDecisionId: "older", expectedReviewId: "old", allowed: false },
+    {
+      expectedDecisionId: "submission",
+      expectedReviewId: "older",
+      allowed: false,
+    },
+    {
+      expectedDecisionId: "submission",
+      expectedReviewId: null,
+      allowed: false,
+    },
+    { expectedDecisionId: null, expectedReviewId: "old", allowed: false },
+    {
+      expectedDecisionId: null,
+      expectedReviewId: null,
+      noSubmission: true,
+      latestId: null,
+      allowed: true,
+    },
+    {
+      decisionTrack: "review",
+      expectedDecisionId: "old",
+      expectedReviewId: "old",
+      allowed: true,
+    },
+    { decisionTrack: "review", expectedDecisionId: "older", allowed: false },
+    { decisionTrack: "review", expectedDecisionId: null, allowed: false },
+  ];
+  for (const {
+    allowed,
+    latestId = "old",
+    noSubmission = false,
+    ...guards
+  } of scenarios) {
+    const fixture = actions({ activeReview: false, latestId, noSubmission });
+    const result = await fixture.api.createDecisionAction(
+      {
+        documentSymbol: "A/RES/80/1",
+        entity: "UNOMS",
+        subprogramme: "Programme 1",
+        decision: "remove",
+        decisionTrack: "entity",
+        reviewedSubmissionId: "submission",
+        ...guards,
+      },
+      "ppb2027",
+    );
+    assert.equal(result.success, allowed, JSON.stringify(guards));
+    assert.equal(
+      fixture.statements.some(({ sql }) => sql.includes("INSERT INTO")),
+      allowed,
+    );
+    if (!allowed) assert.match(result.error, /Decision changed/);
+    const lock = fixture.statements.findIndex(({ sql }) =>
+      sql.startsWith("LOCK"),
+    );
+    const reviewLookup = fixture.statements.findIndex(({ sql }) =>
+      sql.includes("SELECT id FROM mandates_housekeeping.mandate_decisions"),
+    );
+    if (reviewLookup !== -1) assert.ok(lock !== -1 && lock < reviewLookup);
+  }
+});
 
 test("manual metadata edits can preserve the existing reason on the new event", async () => {
   const { api, statements } = actions();
@@ -734,6 +819,7 @@ function reviewControl(props, context = null) {
       PopoverTrigger: "PopoverTrigger",
     },
     "./DecisionDropdown": { DecisionDropdown: "DecisionDropdown" },
+    "@/components/Tooltip": { Tooltip: "Tooltip" },
     "./ui/dialog": Object.fromEntries(
       ["Dialog", "DialogContent", "DialogHeader", "DialogTitle"].map((name) => [
         name,
@@ -902,7 +988,13 @@ test("reviewed rows omit copy while keeping stale confirmation in the actions me
       node.type === "button" &&
       node.props["aria-label"] === "More review actions",
   );
-  assert.equal(more.props.title, "Submission changed — review needed");
+  assert.equal(
+    find(
+      ui.tree,
+      (node) => node.type === "Tooltip" && node.props.children === more,
+    ).props.content,
+    "Submission changed — review needed",
+  );
   const confirmation = find(
     ui.tree,
     (node) =>

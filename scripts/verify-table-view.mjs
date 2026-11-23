@@ -20,9 +20,17 @@ function load(file, dependencies = {}) {
 }
 const tracks = load("src/features/mandates/services/decision-tracks.ts");
 const age = load("src/features/mandates/services/age-indicator.ts");
+const locations = load("src/features/mandates/services/citation-locations.ts", {
+  "./decision-tracks": tracks,
+});
+const warnings = load("src/features/mandates/services/mandate-warnings.ts", {
+  "./citation-locations": locations,
+});
 const view = load("src/features/mandates/services/table-view.ts", {
   "./decision-tracks": tracks,
   "./age-indicator": age,
+  "./citation-locations": locations,
+  "./mandate-warnings": warnings,
 });
 const filters = (changes) => ({ ...view.EMPTY_TABLE_FILTERS, ...changes });
 function mandate(symbol, changes = {}) {
@@ -339,6 +347,41 @@ test("added and reviewer-rejected citations participate in search, decisions, se
   );
 });
 
+test("dropping an addition hides it when the earlier review becomes stale", () => {
+  const symbol = "A/RES/80/300";
+  const addition = event("1", "add", { documentSymbol: symbol });
+  const retained = event("2", "retain", {
+    documentSymbol: symbol,
+    decisionTrack: "review",
+    reviewedSubmissionId: addition.id,
+  });
+  const cancelled = event("3", "cancel", { documentSymbol: symbol });
+  const history = [addition, retained, cancelled];
+  const result = build({
+    states: { [`${symbol}:Subprogramme 2`]: state(history) },
+  });
+  assert.equal(tracks.getDecisionTracks(history).reviewStale, true);
+  assert.equal(
+    result.tableItems.some((item) => item.mandate.symbol === symbol),
+    false,
+  );
+  assert.equal(result.citationIndex.has(symbol), false);
+
+  const reaffirmed = event("4", "add", {
+    documentSymbol: symbol,
+    decisionTrack: "review",
+    reviewedSubmissionId: cancelled.id,
+  });
+  const restored = build({
+    states: { [`${symbol}:Subprogramme 2`]: state([...history, reaffirmed]) },
+  });
+  assert.equal(
+    restored.tableItems.some((item) => item.mandate.symbol === symbol),
+    true,
+  );
+  assert.equal(restored.citationIndex.has(symbol), true);
+});
+
 test("facet counts omit their own filter while respecting other active filters", () => {
   const result = build({
     filters: filters({ bodies: ["GA"], yearFrom: "2009" }),
@@ -388,5 +431,104 @@ test("Others exposes actual other entities, excludes the current entity, and sup
     build({ filters: filters({ others: ["DESA"], bodies: ["SC"] }) })
       .visibleItems.length,
     1,
+  );
+});
+
+test("remaining work excludes references and reviewer-only additions and keeps totals stable", () => {
+  const primary = event("1", "retain");
+  const addition = event("2", "add", {
+    documentSymbol: "A/RES/80/20",
+    decisionTrack: "review",
+  });
+  const decisions = {
+    "A/RES/75/1:Subprogramme 2": state([primary]),
+    "A/RES/80/20:Subprogramme 2": state([addition]),
+  };
+  const result = build({ states: decisions, showRemaining: true });
+  assert.equal(result.tableItems.length, 6);
+  assert.equal(result.tableItems.filter(view.isRequiredSubmission).length, 4);
+  assert.equal(
+    result.tableItems
+      .filter(view.isRequiredSubmission)
+      .filter(view.hasSubmissionDecision).length,
+    1,
+  );
+  assert.equal(result.visibleItems.length, 3);
+  assert.ok(
+    result.visibleItems.every(
+      (item) => item.subprogramme !== null && !item.mandate.isAdded,
+    ),
+  );
+  assert.equal(
+    result.sectionViews.find(
+      (section) => section.subprogramme === "Subprogramme 2",
+    ).mandates.length,
+    3,
+  );
+});
+
+const grouping = load("src/features/mandates/services/citation-groups.ts");
+test("table and fascicle share principal body order, normalized names, document types and labels", () => {
+  const rows = [
+    mandate("S/PRST/2025/1", {
+      body: "Security Council",
+      docType: "Statement",
+    }),
+    mandate("E/RES/2025/1", { body: "ECOSOC" }),
+    mandate("A/HRC/DEC/50/1", {
+      body: "Human Rights Council",
+      docType: "Decision",
+    }),
+    mandate("A/RES/80/1", { body: "General Assembly" }),
+    mandate("S/RES/2750", { body: "SC" }),
+    mandate("A/DEC/80/1", { body: "GA", docType: "Decision" }),
+    mandate("Charter", { body: "Charter" }),
+    mandate("CAC/COSP/RES/10/1", { body: "Other" }),
+  ];
+  assert.deepEqual(
+    grouping.groupCitations(rows).map((group) => group.label),
+    [
+      "Charter of the United Nations",
+      "General Assembly resolutions",
+      "General Assembly decisions",
+      "Economic and Social Council resolutions",
+      "Security Council resolutions",
+      "Statements by the President of the Security Council",
+      "Human Rights Council decisions",
+      "Conference of the States Parties to the United Nations Convention against Corruption resolutions",
+    ],
+  );
+});
+
+test("With notes uses actual warning rules, including duplicates hidden by filters", () => {
+  const clean = (symbol) =>
+    mandate(symbol, {
+      link: `https://docs.un.org/en/${symbol}`,
+      metadataFromDb: true,
+    });
+  const result = build({
+    legislativeMandates: {
+      "Subprogramme 1": [clean("A/RES/80/1"), clean("A/RES/80/2")],
+      "Subprogramme 2": [
+        clean("A/RES/80/1"),
+        mandate("A/RES/80/3", { metadataFromDb: true }),
+      ],
+    },
+    backgroundMandates: [],
+    filters: filters({ notes: ["with-notes"] }),
+  });
+  assert.equal(result.visibleItems.length, 3);
+  assert.ok(
+    result.visibleItems
+      .filter((item) => item.mandate.symbol === "A/RES/80/1")
+      .every((item) => item.warningIds.includes("duplicate-citation")),
+  );
+  assert.ok(
+    !result.visibleItems.some((item) => item.mandate.symbol === "A/RES/80/2"),
+  );
+  assert.ok(
+    result.visibleItems
+      .find((item) => item.mandate.symbol === "A/RES/80/3")
+      .warningIds.includes("missing-link"),
   );
 });

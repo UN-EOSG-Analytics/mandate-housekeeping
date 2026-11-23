@@ -140,6 +140,7 @@ function reviewHarness() {
         DocumentSearchInput: Placeholder,
       },
       "./DecisionDropdown": { DecisionDropdown },
+      "@/components/Tooltip": { Tooltip: Placeholder },
     },
   );
   let props = {

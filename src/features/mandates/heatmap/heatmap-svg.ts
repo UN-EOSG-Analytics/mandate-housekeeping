@@ -35,10 +35,7 @@ const TITLE_H = 24;
 const LEGEND_H = 28;
 
 function esc(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 export function buildHeatmapSvg(args: BuildArgs): string {
@@ -81,12 +78,12 @@ export function buildHeatmapSvg(args: BuildArgs): string {
     const lines = label.split(/­/); // soft hyphen → two lines (Humanitarian)
     if (lines.length === 2) {
       parts.push(
-        `<text x="${cx}" y="${bandBottom - 15}" font-size="11" font-weight="600" text-anchor="middle" fill="${color}">${esc(lines[0])}-</text>`,
-        `<text x="${cx}" y="${bandBottom - 4}" font-size="11" font-weight="600" text-anchor="middle" fill="${color}">${esc(lines[1])}</text>`,
+        `<text x="${cx}" y="${bandBottom - 15}" font-size="11" font-weight="600" text-anchor="middle" fill="#374151">${esc(lines[0])}-</text>`,
+        `<text x="${cx}" y="${bandBottom - 4}" font-size="11" font-weight="600" text-anchor="middle" fill="#374151">${esc(lines[1])}</text>`,
       );
     } else {
       parts.push(
-        `<text x="${cx}" y="${bandBottom - 5}" font-size="11" font-weight="600" text-anchor="middle" fill="${color}">${esc(label)}</text>`,
+        `<text x="${cx}" y="${bandBottom - 5}" font-size="11" font-weight="600" text-anchor="middle" fill="#374151">${esc(label)}</text>`,
       );
     }
     col += b.count;
@@ -94,7 +91,7 @@ export function buildHeatmapSvg(args: BuildArgs): string {
 
   // Corner label
   parts.push(
-    `<text x="${PAD}" y="${gridTop - 4}" font-size="9" font-weight="600" fill="#6b7280">Cross-citation</text>`,
+    `<text x="${PAD}" y="${gridTop - 4}" font-size="9" font-weight="600" fill="#374151">Cross-citation</text>`,
   );
 
   // Column headers: tint backgrounds + rotated labels
@@ -122,10 +119,10 @@ export function buildHeatmapSvg(args: BuildArgs): string {
       const isDiagonal = rowE.code === colE.code;
       const value = isDiagonal
         ? 0
-        : matrix.pairs[pairKey(rowE.code, colE.code)] ?? 0;
+        : (matrix.pairs[pairKey(rowE.code, colE.code)] ?? 0);
       const fill = isDiagonal
         ? "#f9fafb"
-        : args.cellColor(rowE, colE, value) ?? "#ffffff";
+        : (args.cellColor(rowE, colE, value) ?? "#ffffff");
       parts.push(
         `<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" fill="${fill}" stroke="rgba(0,0,0,0.04)" stroke-width="0.5"/>`,
       );
@@ -138,7 +135,7 @@ export function buildHeatmapSvg(args: BuildArgs): string {
   for (const item of args.legend) {
     parts.push(
       `<rect x="${lx}" y="${ly}" width="11" height="11" rx="2" fill="${item.color}"/>`,
-      `<text x="${lx + 15}" y="${ly + 9}" font-size="11" fill="#4b5563">${esc(item.label)}</text>`,
+      `<text x="${lx + 15}" y="${ly + 9}" font-size="11" fill="#374151">${esc(item.label)}</text>`,
     );
     lx += 15 + item.label.length * 6.2 + 16;
   }

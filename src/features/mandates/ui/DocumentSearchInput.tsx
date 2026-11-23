@@ -10,6 +10,7 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "@/components/ui/popover";
+import { Tooltip } from "@/components/Tooltip";
 
 type SearchResult = DocumentSearchResult;
 
@@ -174,7 +175,7 @@ export function DocumentSearchInput({
               }`}
             >
               <Plus
-                className={`h-4 w-4 ${focused ? "text-un-blue" : "text-gray-400"}`}
+                className={`h-4 w-4 ${focused ? "text-un-blue-text-aaa" : "text-gray-600"}`}
               />
               <input
                 ref={inputRef}
@@ -203,11 +204,11 @@ export function DocumentSearchInput({
                 }
                 onKeyDown={handleKeyDown}
                 placeholder={placeholder || "Search by symbol or title..."}
-                className="flex-1 bg-transparent text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none"
+                className="flex-1 bg-transparent text-sm text-gray-700 placeholder:text-gray-600 focus:outline-none"
                 autoFocus={compact || !!initialQuery}
               />
               {searching && (
-                <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                <Loader2 className="h-4 w-4 animate-spin text-gray-600" />
               )}
               {onCancel && (
                 <button
@@ -219,28 +220,29 @@ export function DocumentSearchInput({
                     setOpen(false);
                     onCancel();
                   }}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-600 hover:text-gray-600"
                 >
                   <X className="h-4 w-4" />
                 </button>
               )}
             </div>
 
-            <div className="flex items-center gap-2 text-xs font-medium text-gray-400">
+            <div className="flex items-center gap-2 text-xs font-medium text-gray-600">
               <div className="h-px w-4 bg-gray-300" />
               OR
               <div className="h-px w-4 bg-gray-300" />
             </div>
 
-            <button
-              type="button"
-              onClick={handleOpenManualForm}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-600 transition-colors hover:border-un-blue/40 hover:bg-gray-50 hover:text-un-blue"
-              title="Add document manually"
-            >
-              <FileText className="h-3.5 w-3.5" />
-              Add manually
-            </button>
+            <Tooltip asChild content={"Add document manually"}>
+              <button
+                type="button"
+                onClick={handleOpenManualForm}
+                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-600 transition-colors hover:border-un-blue/40 hover:bg-gray-50 hover:text-un-blue-text-aaa"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Add manually
+              </button>
+            </Tooltip>
           </div>
         </div>
       </PopoverAnchor>
@@ -274,7 +276,7 @@ export function DocumentSearchInput({
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={retry}
-                className="text-un-blue hover:underline"
+                className="text-un-blue-text-aaa hover:underline"
               >
                 Try again
               </button>
@@ -296,10 +298,10 @@ export function DocumentSearchInput({
               }`}
             >
               <div className="flex items-baseline gap-2">
-                <span className="text-sm font-medium text-un-blue">
+                <span className="text-sm font-medium text-un-blue-text-aaa">
                   {doc.symbol}
                 </span>
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-gray-600">
                   {[doc.body, doc.year].filter(Boolean).join(" · ")}
                 </span>
               </div>
@@ -311,7 +313,7 @@ export function DocumentSearchInput({
             </button>
           ))}
           {searchDone && results.length === 0 && (
-            <div className="px-3 py-2 text-sm text-gray-500">
+            <div className="px-3 py-2 text-sm text-gray-600">
               No documents found
             </div>
           )}
@@ -331,9 +333,9 @@ export function DocumentSearchInput({
                   : "hover:bg-gray-50"
               }`}
             >
-              <span className="text-un-blue">+ Add manually...</span>
+              <span className="text-un-blue-text-aaa">+ Add manually...</span>
               {query && (
-                <span className="ml-1 text-gray-400">
+                <span className="ml-1 text-gray-600">
                   &ldquo;{query}&rdquo;
                 </span>
               )}

@@ -19,7 +19,7 @@ export default function Error({
       <h2 className="text-2xl font-bold text-foreground">
         Something went wrong
       </h2>
-      <p className="text-muted-foreground">
+      <p className="text-foreground">
         An unexpected error occurred. Please try again.
       </p>
       <button

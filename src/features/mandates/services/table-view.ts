@@ -1,3 +1,8 @@
+import { buildEntityCitationIndex } from "./citation-locations";
+import {
+  getMandateWarnings,
+  newestVersionWarningSymbols,
+} from "./mandate-warnings";
 import type { Mandate, MandateState } from "@/types";
 import { getDecisionTracks } from "./decision-tracks";
 import { getAgeIndicator } from "./age-indicator";
@@ -118,6 +123,7 @@ export const REPLACEMENT_LABELS: Record<TableReplacement["source"], string> = {
 
 export interface TableItem {
   mandate: Mandate;
+  warningIds?: string[];
   subprogramme: string | null;
   entity?: string;
   state?: MandateState;
@@ -199,6 +205,11 @@ function values(item: TableItem, facet: TableFacet): string[] {
       ];
     case "notes": {
       const notes = [
+        ...((
+          item.warningIds ?? getMandateWarnings(m).map((warning) => warning.id)
+        ).length
+          ? ["with-notes"]
+          : []),
         ...(m.newerVersion ? ["newer"] : []),
         ...(item.replacements.length ? ["replacement"] : []),
         ...(m.isAdded ? ["added"] : []),
@@ -282,6 +293,7 @@ const LABELS: Record<string, string> = {
   different: "Decisions differ",
   has: "Has comments",
   unread: "Has unread comments",
+  "with-notes": "With notes",
   newer: "Newer version available",
   replacement: "Proposed replacement",
   added: "Added citation",
@@ -362,11 +374,10 @@ export interface AddedMetadata {
   link: string | null;
 }
 export function isVisibleAddedState(state: MandateState) {
-  const { submission, review } = getDecisionTracks(state.decisions);
+  const { submission, currentReview } = getDecisionTracks(state.decisions);
   return (
     state.decisions.some((e) => e.decision === "add") &&
-    ((!!submission && submission.decision !== "cancel") ||
-      (!!review && review.decision !== "cancel"))
+    ((!!submission && submission.decision !== "cancel") || !!currentReview)
   );
 }
 export function addedTableMandate(
@@ -424,6 +435,28 @@ export function compareSubprogrammes(a: string | null, b: string | null) {
   );
 }
 
+/** Entity submissions required for progress; reviewer-only proposals remain optional. */
+export function isRequiredSubmission(item: TableItem) {
+  const submission = (
+    item.tracks ?? getDecisionTracks(item.state?.decisions || [])
+  ).submission;
+  return (
+    item.subprogramme !== null &&
+    (!item.mandate.isAdded ||
+      (!!submission && submission.decision !== "cancel"))
+  );
+}
+export function hasSubmissionDecision(item: TableItem) {
+  const submission = (
+    item.tracks ?? getDecisionTracks(item.state?.decisions || [])
+  ).submission;
+  return (
+    !!submission &&
+    submission.decision !== "cancel" &&
+    (submission.decision !== "update" || !!submission.newSymbol)
+  );
+}
+
 export function buildEntityTableView({
   entity,
   legislativeMandates,
@@ -436,6 +469,7 @@ export function buildEntityTableView({
   filters,
   sort,
   sharedEntity,
+  showRemaining = false,
 }: {
   entity: string;
   legislativeMandates: Record<string, Mandate[]>;
@@ -448,6 +482,7 @@ export function buildEntityTableView({
   filters: TableFilters;
   sort: TableSort;
   sharedEntity: string | null;
+  showRemaining?: boolean;
 }) {
   const tableStates = Object.fromEntries(
     Object.entries(states).map(([key, state]) => {
@@ -496,16 +531,48 @@ export function buildEntityTableView({
         };
       }),
   );
-  const visibleItems = sortTableItems(
-    tableItems.filter((item) => matchesTableItem(item, filters, sharedEntity)),
-    sort,
+  const citations = buildEntityCitationIndex(tableItems, entity);
+  const newestBySection = new Map(
+    [...sourceSections].map(([section, rows]) => [
+      section,
+      newestVersionWarningSymbols(rows),
+    ]),
+  );
+  for (const item of tableItems) {
+    const context = { citations, subprogramme: item.subprogramme };
+    const warnings = getMandateWarnings(
+      item.mandate,
+      undefined,
+      newestBySection.get(item.subprogramme)?.has(item.mandate.symbol),
+      context,
+    );
+    for (const replacement of item.replacements) {
+      warnings.push(
+        ...getMandateWarnings(
+          replacementTableMandate(item.mandate, replacement),
+          undefined,
+          undefined,
+          { ...context, sourceSymbol: item.mandate.symbol },
+        ).filter((warning) => warning.id === "duplicate-citation"),
+      );
+    }
+    item.warningIds = warnings.map((warning) => warning.id);
+  }
+  const orderedItems = sortTableItems(tableItems, sort);
+  const visibleItems = orderedItems.filter(
+    (item) =>
+      matchesTableItem(item, filters, sharedEntity) &&
+      (!showRemaining ||
+        (isRequiredSubmission(item) && !hasSubmissionDecision(item))),
   );
   const sectionViews = [...sourceSections]
     .sort(([a], [b]) => compareSubprogrammes(a, b))
     .filter(([, rows]) => rows.length > 0)
-    .map(([subprogramme, mandates]) => ({
+    .map(([subprogramme]) => ({
       subprogramme,
-      mandates,
+      mandates: orderedItems
+        .filter((item) => item.subprogramme === subprogramme)
+        .map((item) => item.mandate),
       visibleMandates: visibleItems
         .filter((item) => item.subprogramme === subprogramme)
         .map((item) => item.mandate),
@@ -518,6 +585,11 @@ export function buildEntityTableView({
       id: sectionAnchor(subprogramme),
     }));
 
+  const facetItems = showRemaining
+    ? tableItems.filter(
+        (item) => isRequiredSubmission(item) && !hasSubmissionDecision(item),
+      )
+    : tableItems;
   const facets = Object.fromEntries(
     (
       [
@@ -533,8 +605,15 @@ export function buildEntityTableView({
       ] as TableFacet[]
     ).map((facet) => [
       facet,
-      tableFacetOptions(tableItems, filters, facet, sharedEntity),
+      tableFacetOptions(facetItems, filters, facet, sharedEntity),
     ]),
   ) as Record<TableFacet, FacetOption[]>;
-  return { tableStates, tableItems, visibleItems, sectionViews, facets };
+  return {
+    tableStates,
+    tableItems,
+    visibleItems,
+    sectionViews,
+    facets,
+    citationIndex: citations,
+  };
 }

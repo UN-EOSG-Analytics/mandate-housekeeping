@@ -37,7 +37,7 @@ export default async function AnalysisPage() {
             <h1 className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
               Decision Analysis
             </h1>
-            <p className="mt-2 text-base text-gray-500">
+            <p className="mt-2 text-base text-foreground">
               Review decisions, with entity submissions as fallback, and their
               projected impact on distinct cited mandates
             </p>

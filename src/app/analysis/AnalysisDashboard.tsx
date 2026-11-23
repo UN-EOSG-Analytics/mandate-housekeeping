@@ -67,12 +67,12 @@ function StatCard({
     <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
       <div className="mb-1 flex items-center justify-between">
         <h3 className="text-base font-medium text-gray-600">{title}</h3>
-        <Icon className="h-5 w-5 text-gray-400" />
+        <Icon className="h-5 w-5 text-foreground" />
       </div>
       <div className="text-4xl font-bold tracking-tight text-gray-900">
         {value}
       </div>
-      {subtitle && <p className="mt-0.5 text-sm text-gray-500">{subtitle}</p>}
+      {subtitle && <p className="mt-0.5 text-sm text-foreground">{subtitle}</p>}
       {trend && trendValue && (
         <div
           className={`mt-1 flex items-center gap-1 text-sm font-medium ${
@@ -80,7 +80,7 @@ function StatCard({
               ? "text-emerald-600"
               : trend === "up"
                 ? "text-red-600"
-                : "text-gray-500"
+                : "text-foreground"
           }`}
         >
           {trend === "down" ? (
@@ -108,7 +108,7 @@ function DecisionBreakdownChart({
 
   if (chartData.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center text-gray-400">
+      <div className="flex h-64 items-center justify-center text-foreground">
         No decisions recorded yet
       </div>
     );
@@ -126,9 +126,17 @@ function DecisionBreakdownChart({
           paddingAngle={2}
           dataKey="value"
           nameKey="name"
-          label={({ name, percent }) =>
-            `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`
-          }
+          label={({ name, percent, x, y, textAnchor }) => (
+            <text
+              x={x}
+              y={y}
+              textAnchor={textAnchor}
+              dominantBaseline="central"
+              fill="var(--foreground)"
+            >
+              {`${name} (${((percent ?? 0) * 100).toFixed(0)}%)`}
+            </text>
+          )}
           labelLine={false}
         >
           {chartData.map((entry, index) => (
@@ -164,7 +172,7 @@ function EntityImpactChart({
 
   if (chartData.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center text-gray-400">
+      <div className="flex h-64 items-center justify-center text-foreground">
         No data available
       </div>
     );
@@ -176,7 +184,10 @@ function EntityImpactChart({
   };
 
   return (
-    <ChartContainer config={impactChartConfig} className="h-64 w-full">
+    <ChartContainer
+      config={impactChartConfig}
+      className="h-64 w-full [&_.recharts-cartesian-axis-tick_text]:fill-foreground"
+    >
       <BarChart
         data={chartData}
         layout="vertical"
@@ -289,12 +300,12 @@ export function AnalysisDashboard({ data }: Props) {
             <p className="text-sm font-semibold text-gray-900">
               Overlapping mandate citations
             </p>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-foreground">
               Entity × entity co-citation heatmap — compare 2026 vs 2027
             </p>
           </div>
         </div>
-        <ArrowRight className="h-4 w-4 text-gray-400 transition-transform group-hover:translate-x-0.5" />
+        <ArrowRight className="h-4 w-4 text-foreground transition-transform group-hover:translate-x-0.5" />
       </Link>
 
       <p className="text-sm text-gray-600">
@@ -360,7 +371,7 @@ export function AnalysisDashboard({ data }: Props) {
         <Card>
           <CardHeader>
             <CardTitle>Decision Breakdown</CardTitle>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-foreground">
               Of all decisions made so far
             </p>
           </CardHeader>
@@ -375,7 +386,7 @@ export function AnalysisDashboard({ data }: Props) {
         <Card>
           <CardHeader>
             <CardTitle>Projected Impact by Entity</CardTitle>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-foreground">
               Top entities by largest relative mandate reduction
             </p>
           </CardHeader>
@@ -389,7 +400,7 @@ export function AnalysisDashboard({ data }: Props) {
       <Card>
         <CardHeader>
           <CardTitle>Entity-Level Analysis</CardTitle>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-foreground">
             Detailed breakdown of decisions and projected impact per entity
           </p>
         </CardHeader>
@@ -466,7 +477,7 @@ export function AnalysisDashboard({ data }: Props) {
                           {entity.entity}
                         </div>
                         {entity.entityLong && (
-                          <div className="max-w-xs truncate text-xs text-gray-500">
+                          <div className="max-w-xs truncate text-xs text-foreground">
                             {entity.entityLong}
                           </div>
                         )}
@@ -486,7 +497,7 @@ export function AnalysisDashboard({ data }: Props) {
                       <td className="px-3 py-3 text-right text-emerald-600 tabular-nums">
                         {entity.addCount > 0 ? entity.addCount : "—"}
                       </td>
-                      <td className="px-3 py-3 text-right text-gray-400 tabular-nums">
+                      <td className="px-3 py-3 text-right text-foreground tabular-nums">
                         {entity.noDecisionCount > 0
                           ? entity.noDecisionCount.toLocaleString()
                           : "—"}
@@ -502,7 +513,7 @@ export function AnalysisDashboard({ data }: Props) {
                                 ? "text-emerald-600"
                                 : changeIsPositive
                                   ? "text-red-600"
-                                  : "text-gray-400"
+                                  : "text-foreground"
                             }`}
                           >
                             {changeIsNegative ? (
@@ -514,7 +525,7 @@ export function AnalysisDashboard({ data }: Props) {
                             {Math.abs(entity.percentageDecrease).toFixed(1)}%)
                           </span>
                         ) : (
-                          <span className="text-gray-400">—</span>
+                          <span className="text-foreground">—</span>
                         )}
                       </td>
                     </tr>
@@ -539,7 +550,7 @@ export function AnalysisDashboard({ data }: Props) {
                   <td className="px-3 py-3 text-right text-emerald-600 tabular-nums">
                     {byEntity.reduce((s, e) => s + e.addCount, 0) || "—"}
                   </td>
-                  <td className="px-3 py-3 text-right text-gray-400 tabular-nums">
+                  <td className="px-3 py-3 text-right text-foreground tabular-nums">
                     {byEntity
                       .reduce((s, e) => s + e.noDecisionCount, 0)
                       .toLocaleString() || "—"}
@@ -565,7 +576,7 @@ export function AnalysisDashboard({ data }: Props) {
                         {Math.abs(overall.percentageDecrease).toFixed(1)}%)
                       </span>
                     ) : (
-                      <span className="text-gray-400">—</span>
+                      <span className="text-foreground">—</span>
                     )}
                   </td>
                 </tr>

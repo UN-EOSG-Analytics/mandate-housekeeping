@@ -3,7 +3,7 @@ export async function FooterFootnote() {
   const version = await getBudgetVersion();
   return (
     <div className="mx-auto mt-8 w-full max-w-7xl px-3 sm:px-4">
-      <p className="pb-6 text-xs text-gray-400">
+      <p className="pb-6 text-xs text-gray-700">
         <sup>*</sup> All current mandate citations have been extracted from the{" "}
         {version === "ppb2027" ? (
           <span>
@@ -14,7 +14,7 @@ export async function FooterFootnote() {
             href="https://www.un.org/en/ga/fifth/80/ppb2026.shtml"
             target="_blank"
             rel="noopener noreferrer"
-            className="underline hover:text-un-blue"
+            className="underline hover:text-un-blue-text-aaa"
           >
             List of documents relating to the proposed programme plan and budget
             for 2026

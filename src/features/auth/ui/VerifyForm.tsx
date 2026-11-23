@@ -123,7 +123,7 @@ export function VerifyForm({ entities }: VerifyFormProps) {
       <div className="flex flex-1 items-center justify-center px-4">
         <div className="w-full max-w-sm">
           <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
-            <p className="text-sm text-gray-500">Verifying...</p>
+            <p className="text-sm text-gray-700">Verifying...</p>
           </div>
         </div>
       </div>
@@ -161,7 +161,7 @@ export function VerifyForm({ entities }: VerifyFormProps) {
             <h1 className="mb-1 text-2xl font-bold text-gray-900">
               Complete Sign In
             </h1>
-            <p className="mb-8 text-sm text-gray-500">
+            <p className="mb-8 text-sm text-gray-700">
               Signing in as <span className="font-medium">{userEmail}</span>
             </p>
             {error && (
@@ -174,7 +174,7 @@ export function VerifyForm({ entities }: VerifyFormProps) {
             <button
               onClick={handleVerify}
               disabled={loading}
-              className="w-full rounded-lg bg-un-blue px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-un-blue/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-lg bg-un-blue-text-aaa px-4 py-2.5 text-sm font-semibold text-white transition-all hover:inset-ring-2 hover:inset-ring-white/70 active:scale-95 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-700 disabled:opacity-100"
             >
               {loading ? "Signing in..." : "Complete sign-in"}
             </button>
@@ -193,12 +193,14 @@ export function VerifyForm({ entities }: VerifyFormProps) {
             Complete Sign In
           </h1>
           {userEmail && (
-            <p className="mb-6 text-sm text-gray-500">
+            <p className="mb-6 text-sm text-gray-700">
               Signing in as <span className="font-medium">{userEmail}</span>
             </p>
           )}
-          <p className="mb-6 text-sm text-gray-500">
-            Please select your organisational entity to continue.
+          <p className="mb-6 text-sm text-gray-700">
+            Choose the entity whose budget submission you work on. You will open
+            its citation workspace after sign-in. You can browse other entities;
+            primary submission edits are limited to your selected entity.
           </p>
 
           <div className="space-y-5">
@@ -215,7 +217,7 @@ export function VerifyForm({ entities }: VerifyFormProps) {
                 placeholder="Enter your organisational entity"
                 value={otherEntity}
                 onChange={(e) => setOtherEntity(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm transition-all placeholder:text-gray-400 focus:border-un-blue focus:ring-2 focus:ring-un-blue/20 focus:outline-none"
+                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm transition-all placeholder:text-gray-600 focus:border-un-blue focus:ring-2 focus:ring-un-blue/20 focus:outline-none"
               />
             )}
 
@@ -235,7 +237,7 @@ export function VerifyForm({ entities }: VerifyFormProps) {
                 (selectedEntity === "Other – Please Specify" &&
                   !otherEntity.trim())
               }
-              className="w-full rounded-lg bg-un-blue px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-un-blue/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-lg bg-un-blue-text-aaa px-4 py-2.5 text-sm font-semibold text-white transition-all hover:inset-ring-2 hover:inset-ring-white/70 active:scale-95 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-700 disabled:opacity-100"
             >
               {loading ? "Signing in..." : "Complete sign-in"}
             </button>

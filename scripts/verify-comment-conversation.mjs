@@ -23,6 +23,20 @@ function load(file, dependencies = {}) {
   return exports;
 }
 const service = load("src/features/mandates/services/comment-conversation.ts");
+const permissions = load("src/features/auth/permissions.ts");
+const visibility = load(
+  "src/features/mandates/services/decision-visibility.ts",
+  {
+    "@/features/auth/permissions": permissions,
+  },
+);
+const tracks = load("src/features/mandates/services/decision-tracks.ts");
+const citationLocations = load(
+  "src/features/mandates/services/citation-locations.ts",
+  {
+    "./decision-tracks": tracks,
+  },
+);
 const decision = (id, time, track, entity = "OCHA", subprogramme = "3") => ({
   id,
   createdAt: `2026-10-20T12:00:0${time}Z`,
@@ -100,7 +114,7 @@ function composerHarness(
   let cursor = 0;
   let effects = [];
   const react = {
-    useContext: () => null,
+    useContext: () => extraProps.context ?? null,
     useState: (initial) => {
       const index = cursor++;
       if (!(index in slots))
@@ -150,28 +164,36 @@ function composerHarness(
       "@/lib/theme": theme,
       "@/lib/utils": utils,
       "@un-eosg/ui/typography": { typography: { eyebrow: "" } },
+      "@un-eosg/ui/components/button": { Button: "button" },
+      "@/features/mandates/services/citation-locations": citationLocations,
       "@/features/mandates/services/comment-conversation": service,
+      "@/features/auth/permissions": permissions,
+      "@/features/mandates/services/decision-visibility": visibility,
+      "@/components/Tooltip": { Tooltip: ({ children }) => children },
       "@/features/mandates/actions/comment-notifications": {
         markCommentsReadAction: markRead,
       },
       "@/hooks/useCommentNotifications": {
         dispatchCommentNotificationsRefresh() {},
       },
-      "@/features/mandates/services/decision-tracks": {
-        getDecisionTracks: () => ({}),
-      },
-      "./DecisionDropdown": {},
+      "@/features/mandates/services/decision-tracks": tracks,
+      "./DecisionDropdown": { DecisionDropdown: "DecisionDropdown" },
       "./ui/popover": {},
       "@/features/mandates/ui/ReasonsModal": reasons,
-      "./ReviewDecisionControl": {},
+      "./ReviewDecisionControl": {
+        ReviewDecisionControl: "ReviewDecisionControl",
+      },
     },
   );
-  const render = () => {
+  const render = (changes = {}) => {
+    extraProps = { ...extraProps, ...changes };
     cursor = 0;
     effects = [];
     return CommentsDecisionPanel({
       symbol: "A/RES/80/111",
       entity: "OCHA",
+      userEntity: "OCHA",
+      isReviewer: false,
       subprogramme: "3",
       comments: [],
       decisions: [],
@@ -202,6 +224,10 @@ function composerHarness(
   };
 }
 const settle = () => new Promise((resolve) => setImmediate(resolve));
+function walk(node) {
+  if (!node || typeof node !== "object") return [];
+  return [node, ...[node.props?.children].flat(Infinity).flatMap(walk)];
+}
 test("failed posting preserves multiline draft for retry; success clears only after confirmation", async () => {
   let resolveSave;
   let calls = 0;
@@ -330,7 +356,7 @@ test("read receipts include only displayed other-author messages, never collapse
       elements.map((e) => e.dataset.commentId),
       ["displayed", "own"],
     );
-    harness.slots[4].current = { querySelectorAll: () => elements };
+    tree.props.ref.current = { querySelectorAll: () => elements };
     const cleanup = harness.effects[2]();
     assert.deepEqual(
       observed.map((e) => e.dataset.commentId),
@@ -367,7 +393,7 @@ test("read receipts include only displayed other-author messages, never collapse
   }
 });
 
-test("composer stays within its current group and retains a draft across collapse", () => {
+test("composer stays visible in its current group when history is collapsed", () => {
   const harness = composerHarness(async () => null);
   let tree = harness.render();
   const group = harness.find(tree, "section");
@@ -375,13 +401,189 @@ test("composer stays within its current group and retains a draft across collaps
   harness
     .find(group, "textarea")
     .props.onChange({ target: { value: "Keep this draft" } });
-  harness.find(group, "button").props.onClick();
+  const historyToggle = (node) =>
+    walk(node).find(
+      (item) =>
+        item.type === "button" &&
+        item.props["aria-controls"]?.endsWith("-history"),
+    );
+  historyToggle(group).props.onClick();
   tree = harness.render();
-  assert.equal(harness.find(tree, "form"), undefined);
-  harness.find(harness.find(tree, "section"), "button").props.onClick();
+  assert.ok(harness.find(tree, "form"));
+  assert.equal(harness.find(tree, "textarea").props.value, "Keep this draft");
+  historyToggle(harness.find(tree, "section")).props.onClick();
   assert.equal(
     harness.find(harness.render(), "textarea").props.value,
     "Keep this draft",
+  );
+});
+
+test("current citation composer precedes history and exposes one loading or saved status", async () => {
+  const message = {
+    ...comment("message", 1),
+    userEmail: "other@un.org",
+    comment: "Earlier question",
+  };
+  const harness = composerHarness(async () => ({ id: "saved" }), {
+    comments: [message],
+    loading: true,
+  });
+  let nodes = walk(harness.render());
+  assert.ok(
+    nodes.findIndex((node) => node.type === "form") <
+      nodes.findIndex((node) => node.type === "article"),
+  );
+  assert.equal(nodes.filter((node) => node.props?.role === "status").length, 1);
+  harness
+    .find(harness.render(), "textarea")
+    .props.onChange({ target: { value: "Response" } });
+  harness
+    .find(harness.render(), "form")
+    .props.onSubmit({ preventDefault() {} });
+  await settle();
+  nodes = walk(harness.render({ loading: false }));
+  assert.equal(nodes.filter((node) => node.props?.role === "status").length, 1);
+  assert.equal(
+    nodes.find((node) => node.props?.role === "status").props.children,
+    "Comment saved",
+  );
+});
+
+test("private and read-only groups never expose a composer or editable submission", () => {
+  const message = {
+    ...comment("private", 1),
+    userEmail: "other@un.org",
+    comment: "Private text",
+  };
+  for (const props of [
+    { readOnly: true },
+    { userEntity: "OTHER", isReviewer: false },
+  ]) {
+    const nodes = walk(
+      composerHarness(async () => null, {
+        comments: [message],
+        ...props,
+      }).render(),
+    );
+    assert.equal(
+      nodes.some((node) => node.type === "form"),
+      false,
+    );
+    assert.equal(
+      nodes.some(
+        (node) => node.type === "DecisionDropdown" && !node.props.disabled,
+      ),
+      false,
+    );
+    if (props.userEntity)
+      assert.equal(
+        nodes.some((node) => node.type === "article"),
+        false,
+      );
+  }
+});
+
+test("a collapsed reviewer card keeps exactly one loading status outside its hidden composer", () => {
+  const harness = composerHarness(async () => null, {
+    isReviewer: true,
+    loading: true,
+  });
+  const group = harness.find(harness.render(), "section");
+  harness.find(group, "button").props.onClick();
+  const nodes = walk(harness.render());
+  assert.equal(
+    nodes.some((node) => node.type === "form"),
+    false,
+  );
+  const statuses = nodes.filter((node) => node.props?.role === "status");
+  assert.equal(statuses.length, 1);
+  assert.equal(
+    statuses[0].props.children,
+    "Loading comments and decision history…",
+  );
+});
+
+test("reviewer locations are current-first and only the current citation can be edited", () => {
+  const context = { entity: "OCHA", canEditSubmission: true, canReview: true };
+  const harness = composerHarness(async () => null, {
+    isReviewer: true,
+    context,
+    onDecision: async () => null,
+    comments: [comment("elsewhere", 1, "UNEP", "1")],
+  });
+  let nodes = walk(harness.render());
+  const groups = nodes.filter((node) => node.type === "section");
+  assert.equal(
+    groups[0].props["data-conversation-key"],
+    service.conversationGroupKey("OCHA", "3"),
+  );
+  const other = groups.find(
+    (node) =>
+      node.props["data-conversation-key"] ===
+      service.conversationGroupKey("UNEP", "1"),
+  );
+  walk(other)
+    .find((node) => node.type === "button" && node.props["aria-controls"])
+    .props.onClick();
+  nodes = walk(harness.render());
+  assert.equal(nodes.filter((node) => node.type === "form").length, 1);
+  assert.equal(
+    nodes.filter(
+      (node) => node.type === "DecisionDropdown" && !node.props.disabled,
+    ).length,
+    1,
+  );
+  assert.equal(
+    nodes.filter(
+      (node) => node.type === "ReviewDecisionControl" && node.props.editable,
+    ).length,
+    1,
+  );
+});
+
+test("inactive Review pane suppresses receipts and one-off composer focus", () => {
+  const harness = composerHarness(async () => null, {
+    active: false,
+    focusComposer: true,
+    userEmail: "reader@un.org",
+  });
+  let focused = 0;
+  let tree = harness.render();
+  tree.props.ref.current = {
+    querySelectorAll: () => {
+      throw new Error("Inactive pane must not observe comments");
+    },
+  };
+  harness.find(tree, "textarea").props.ref.current = {
+    focus: () => focused++,
+    scrollIntoView() {},
+    clientWidth: 0,
+    style: {},
+  };
+  // The receipt and focus effects must both exit before touching the DOM.
+  harness.effects[2]();
+  harness.effects.at(-1)();
+  assert.equal(focused, 0);
+  tree = harness.render({ active: true });
+  harness.effects.at(-1)();
+  assert.equal(focused, 1);
+  harness.render();
+  harness.effects.at(-1)();
+  assert.equal(focused, 1);
+  const targetHarness = composerHarness(async () => null, {
+    active: true,
+    focusComposer: true,
+    targetCommentId: "notification-target",
+  });
+  targetHarness.find(targetHarness.render(), "textarea").props.ref.current = {
+    focus: () => focused++,
+    scrollIntoView() {},
+  };
+  targetHarness.effects.at(-1)();
+  assert.equal(
+    focused,
+    1,
+    "An exact comment target takes precedence over initial composer focus",
   );
 });
 

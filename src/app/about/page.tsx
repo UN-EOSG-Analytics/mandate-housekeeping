@@ -17,6 +17,7 @@ import {
   Users,
 } from "lucide-react";
 import { getCurrentUser } from "@/features/auth/auth";
+import { CitationYear } from "@/components/CitationYear";
 import { Header } from "@/components/core/Header";
 import {
   CURRENT_BUDGET_VERSION,
@@ -70,7 +71,7 @@ function MockEntityCard({
       className={`flex items-center justify-between rounded-lg px-3 py-2 ${highlight ? "bg-un-blue/10 ring-1 ring-un-blue/30" : "bg-gray-100"}`}
     >
       <span className="text-xs font-medium text-gray-700">{name}</span>
-      <span className="text-xs text-gray-400">{count}</span>
+      <span className="text-xs text-foreground">{count}</span>
     </div>
   );
 }
@@ -116,7 +117,7 @@ function MockMandateRow({
         {symbol}
       </span>
       <span className="flex-1 truncate text-gray-600">{title}</span>
-      <span className="text-gray-400">{year}</span>
+      <span className="text-foreground">{year}</span>
       {decision && (
         <MockDecision decision={decision} color={decision.toLowerCase()} />
       )}
@@ -135,7 +136,7 @@ function MockSearchResult({
   return (
     <div className="border-b border-gray-100 px-3 py-2 last:border-0 hover:bg-gray-50">
       <span className="text-xs font-medium text-un-blue">{symbol}</span>
-      <div className="truncate text-[10px] text-gray-500">{title}</div>
+      <div className="truncate text-[10px] text-foreground">{title}</div>
     </div>
   );
 }
@@ -192,7 +193,7 @@ export default async function AboutPage() {
 
         {/* Feature grid */}
         <section id="features" className="mx-auto max-w-6xl px-4 pb-20">
-          <h3 className="mb-8 text-center text-base font-semibold tracking-wider text-gray-400 uppercase">
+          <h3 className="mb-8 text-center text-base font-semibold tracking-wider text-foreground uppercase">
             Platform Features
           </h3>
 
@@ -205,8 +206,8 @@ export default async function AboutPage() {
             >
               <div className="space-y-2">
                 <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
-                  <Search className="h-3.5 w-3.5 text-gray-400" />
-                  <span className="text-xs text-gray-400">
+                  <Search className="h-3.5 w-3.5 text-foreground" />
+                  <span className="text-xs text-foreground">
                     Search entities...
                   </span>
                 </div>
@@ -223,10 +224,10 @@ export default async function AboutPage() {
             <FeatureCard
               icon={FileText}
               title="Mandates at a Glance"
-              description="View all mandates for your entity in the familiar PPB structure. Sort by symbol, title, body, year, or how many other entities share the citation."
+              description="View all mandates for your entity in the familiar PPB structure. Choose a programme section, filter the list, and select View details to inspect a citation."
             >
               <div className="space-y-2">
-                <div className="text-[10px] font-semibold tracking-wider text-gray-400 uppercase">
+                <div className="text-[10px] font-semibold tracking-wider text-foreground uppercase">
                   Subprogramme 1
                 </div>
                 <MockMandateRow
@@ -248,11 +249,11 @@ export default async function AboutPage() {
             <FeatureCard
               icon={Check}
               title="Record Your Housekeeping Actions"
-              description="Record whether each mandate is retained, updated or removed and indicate a reason for your decision for review and validation."
+              description="In the Submission column, select Choose action to retain, remove or update a citation. Each change saves automatically; add a reason when prompted. Use Clear decision to undo a choice."
             >
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">Submission:</span>
+                  <span className="text-xs text-foreground">Submission:</span>
                   <MockDecision decision="Retain" color="retain" />
                 </div>
                 <div className="flex items-center gap-2">
@@ -262,7 +263,7 @@ export default async function AboutPage() {
                   <MockDecision decision="Update" color="update" />
                 </div>
               </div>
-              <div className="mt-3 rounded-lg bg-blue-50/50 p-2 text-[10px] text-gray-500">
+              <div className="mt-3 rounded-lg bg-blue-50/50 p-2 text-[10px] text-foreground">
                 <MessageSquare className="mr-1 mb-0.5 inline h-3 w-3" />
                 Reason: Mandate continues to be relevant for the entity&apos;s
                 work.
@@ -277,8 +278,8 @@ export default async function AboutPage() {
             >
               <div className="space-y-2">
                 <div className="flex items-center gap-2 rounded-lg border-2 border-dashed border-gray-200 px-3 py-2">
-                  <Plus className="h-3.5 w-3.5 text-gray-400" />
-                  <span className="text-xs text-gray-400">
+                  <Plus className="h-3.5 w-3.5 text-foreground" />
+                  <span className="text-xs text-foreground">
                     Add mandate — search by symbol or title...
                   </span>
                 </div>
@@ -308,7 +309,7 @@ export default async function AboutPage() {
                     <Check className="h-3.5 w-3.5" />
                   </div>
                 </div>
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-foreground">
                   Approved by reviewer@un.org
                 </span>
               </div>
@@ -318,7 +319,7 @@ export default async function AboutPage() {
             <FeatureCard
               icon={MessageSquare}
               title="Mandate Coordination"
-              description="Add comments on a mandate to flag issues or support discussion and coordination among entities citing the same mandate."
+              description="Open a document and use the Review tab to explain a choice or ask a question. Comments are visible to members of that entity and authorized reviewers."
             >
               <div className="space-y-2">
                 <div className="flex items-start gap-2 rounded p-2 shadow-sm">
@@ -328,7 +329,7 @@ export default async function AboutPage() {
                       Should we align our decision with DPPA on this shared
                       mandate?
                     </p>
-                    <p className="mt-1 text-[10px] text-gray-400">
+                    <p className="mt-1 text-[10px] text-foreground">
                       focal.point@un.org · Jan 15
                     </p>
                   </div>
@@ -340,27 +341,25 @@ export default async function AboutPage() {
             <FeatureCard
               icon={Layers}
               title="Deep Dive Into Document Details"
-              description="Click a document to open a detailed view with metadata, version history, full document text, and any recorded actions and comments from all entities."
+              description="Select View details to open a citation. Review shows decisions and conversations you can access. Document includes metadata, versions and the available paragraphs. The header identifies the entity, programme and submission cycle."
             >
               <div className="space-y-2">
                 <div className="flex gap-1">
-                  {["Info", "Decisions", "Activity", "Paragraphs"].map(
-                    (tab, i) => (
-                      <span
-                        key={tab}
-                        className={`rounded-t px-2 py-1 text-[10px] font-medium ${i === 0 ? "bg-white text-gray-700" : "text-gray-400"}`}
-                      >
-                        {tab}
-                      </span>
-                    ),
-                  )}
+                  {["Review", "Document"].map((tab, i) => (
+                    <span
+                      key={tab}
+                      className={`rounded-t px-2 py-1 text-[10px] font-medium ${i === 1 ? "bg-white text-gray-700" : "text-foreground"}`}
+                    >
+                      {tab}
+                    </span>
+                  ))}
                 </div>
                 <div className="rounded p-2 text-xs shadow-sm">
-                  <div className="flex items-center justify-between text-gray-500">
+                  <div className="flex items-center justify-between text-foreground">
                     <span>Year</span>
                     <span className="font-medium text-gray-700">2024</span>
                   </div>
-                  <div className="mt-1 flex items-center justify-between text-gray-500">
+                  <div className="mt-1 flex items-center justify-between text-foreground">
                     <span>Issuing body</span>
                     <span className="font-medium text-gray-700">
                       General Assembly
@@ -378,16 +377,14 @@ export default async function AboutPage() {
             >
               <div className="space-y-2 text-xs">
                 <div className="flex gap-1">
-                  {["Info", "Decisions", "Activity", "Paragraphs"].map(
-                    (tab, i) => (
-                      <span
-                        key={tab}
-                        className={`rounded-t px-2 py-1 text-[10px] font-medium ${i === 3 ? "bg-white text-gray-700" : "text-gray-400"}`}
-                      >
-                        {tab}
-                      </span>
-                    ),
-                  )}
+                  {["Review", "Document"].map((tab, i) => (
+                    <span
+                      key={tab}
+                      className={`rounded-t px-2 py-1 text-[10px] font-medium ${i === 1 ? "bg-white text-gray-700" : "text-foreground"}`}
+                    >
+                      {tab}
+                    </span>
+                  ))}
                 </div>
                 <div className="rounded p-2 text-gray-600">
                   <span className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-un-blue text-[8px] text-white">
@@ -397,7 +394,7 @@ export default async function AboutPage() {
                   <strong className="text-gray-900">OIOS</strong> has adequate
                   resources...
                 </div>
-                <button className="flex items-center gap-1 text-[10px] text-gray-400">
+                <button className="flex items-center gap-1 text-[10px] text-foreground">
                   <ChevronDown className="h-3 w-3 -rotate-90" />
                   Show 5 paragraphs not mentioning OIOS
                 </button>
@@ -408,33 +405,12 @@ export default async function AboutPage() {
             <FeatureCard
               icon={FileText}
               title="At-a-Glance Mandate Age"
-              description="Color-coded indicators show a mandate's age, helping you prioritize which citations may need review or updating."
+              description="The colour on the publication year indicates the age of the document. Hover over the year or focus it with the keyboard to see its age."
             >
               <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-gray-600">2024</span>
-                  <span className="rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-600">
-                    &lt;5
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-gray-600">2018</span>
-                  <span className="rounded bg-yellow-100 px-1.5 py-0.5 text-[10px] font-medium text-yellow-600">
-                    &gt;5
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-gray-600">2010</span>
-                  <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium text-orange-600">
-                    &gt;10
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-gray-600">1998</span>
-                  <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-600">
-                    &gt;20
-                  </span>
-                </div>
+                {[2024, 2018, 2010, 1998].map((year) => (
+                  <CitationYear key={year} year={year} />
+                ))}
               </div>
             </FeatureCard>
 
@@ -476,11 +452,11 @@ export default async function AboutPage() {
                   text="Newer version available: A/RES/79/19"
                 />
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="text-gray-500">Current:</span>
+                  <span className="text-foreground">Current:</span>
                   <span className="rounded bg-gray-200 px-1.5 py-0.5 font-medium text-gray-600">
                     A/RES/78/20 (2023)
                   </span>
-                  <ArrowRight className="h-3 w-3 text-gray-400" />
+                  <ArrowRight className="h-3 w-3 text-foreground" />
                   <span className="rounded bg-un-blue/10 px-1.5 py-0.5 font-medium text-un-blue">
                     A/RES/79/19 (2024)
                   </span>
@@ -496,7 +472,7 @@ export default async function AboutPage() {
             >
               <div className="grid grid-cols-2 gap-2 text-[10px]">
                 <div className="space-y-1.5">
-                  <div className="text-center font-medium text-gray-500">
+                  <div className="text-center font-medium text-foreground">
                     A/RES/78/20
                   </div>
                   <div className="rounded p-2 text-gray-600">
@@ -505,7 +481,7 @@ export default async function AboutPage() {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <div className="text-center font-medium text-gray-500">
+                  <div className="text-center font-medium text-foreground">
                     A/RES/79/19
                   </div>
                   <div className="rounded p-2 text-gray-600">
@@ -564,7 +540,7 @@ export default async function AboutPage() {
               description="Sign in with your UN email—we'll send you a secure link. You can also invite colleagues to collaborate on the submission."
             >
               <div className="flex items-center gap-2">
-                <div className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-400">
+                <div className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-foreground">
                   your.name@un.org
                 </div>
                 <button className="rounded-lg bg-un-blue px-3 py-2 text-xs font-medium text-white">
@@ -585,7 +561,7 @@ export default async function AboutPage() {
                   Export
                   <ChevronDown className="h-2.5 w-2.5" />
                 </button>
-                <div className="flex gap-1 text-[10px] text-gray-400">
+                <div className="flex gap-1 text-[10px] text-foreground">
                   <span className="rounded bg-gray-200 px-1.5 py-0.5">CSV</span>
                   <span className="rounded bg-gray-200 px-1.5 py-0.5">
                     Excel
@@ -635,8 +611,8 @@ export default async function AboutPage() {
                   Update Citations
                 </h4>
                 <p className="text-sm text-gray-600">
-                  Record whether each mandate is retained, updated or removed
-                  with a reason.
+                  Select Choose action in the Submission column, then add a
+                  reason. Check the saved confirmation before continuing.
                 </p>
               </div>
             </div>

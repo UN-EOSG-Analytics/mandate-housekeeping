@@ -20,6 +20,14 @@ export interface CitationWarningContext {
   sourceSymbol?: string;
 }
 
+export interface WarningLocation {
+  label: string;
+  detail: string;
+  /** Present only when this notice can identify an actual saved citation. */
+  target?: CitationLocation;
+  isCurrent?: boolean;
+}
+
 export interface MandateWarning {
   id: string;
   message: string;
@@ -30,6 +38,7 @@ export interface MandateWarning {
   suggestedUpdate?: string;
   /** Action type: 'update' (opens search) or 'remove' (direct action) */
   action?: "update" | "remove";
+  actionLabel?: string;
   /** Icon to display for this warning */
   icon?: WarningIconType;
   /** Button color scheme */
@@ -38,7 +47,8 @@ export interface MandateWarning {
   linkedSymbol?: string;
   /** Year of the linked symbol (for diff comparisons) */
   linkedYear?: number;
-  locations?: { label: string; detail: string }[];
+  locations?: WarningLocation[];
+  citationCount?: number;
   advice?: string;
 }
 
@@ -51,6 +61,7 @@ interface WarningDefinition {
   getSuggestedUpdate?: (mandate: Mandate) => string | undefined;
   /** Action type for this warning */
   action?: "update" | "remove";
+  actionLabel?: string;
   /** Icon to display */
   icon?: WarningIconType;
   /** Button color scheme */
@@ -103,9 +114,10 @@ const WARNING_DEFINITIONS: WarningDefinition[] = [
   {
     id: "missing-link",
     message:
-      "This citation is missing a link to the document's fulltext – please consider updating with the correct document symbol or manually add again with the fulltext link included.",
+      "This citation has no link to the document.",
     severity: "warning",
     condition: (mandate) => !mandate.link,
+    actionLabel: "Update with library symbol or manual link",
     getSuggestedUpdate: (mandate) => mandate.symbol,
     action: "update",
     icon: "file",
@@ -143,6 +155,11 @@ function warningLocations(
 ) {
   return locations.map((location) => ({
     label: location.label,
+    target: location,
+    isCurrent:
+      location.subprogramme === context.subprogramme &&
+      citationSymbolKey(location.sourceSymbol) ===
+        citationSymbolKey(context.sourceSymbol ?? ""),
     detail: [
       location.level === "subprogramme"
         ? location.subprogramme === context.subprogramme
@@ -150,7 +167,7 @@ function warningLocations(
           : "Different subprogramme"
         : null,
       location.kind === "replacement"
-        ? `Via update of ${location.sourceSymbol}`
+        ? `Via update of ${location.isAdded ? "added citation " : ""}${location.sourceSymbol}`
         : location.kind === "addition"
           ? "Added citation"
           : "Existing citation",
@@ -164,13 +181,26 @@ function duplicateWarning(
   mandate: Pick<Mandate, "symbol" | "isAdded">,
   context: CitationWarningContext,
 ): MandateWarning | null {
-  const locations = context.citations.get(citationSymbolKey(mandate.symbol)) ?? [];
-  if (!locations.some((location) => ownCitation(location, mandate, context)))
+  if (context.subprogramme === null) return null;
+  const locations = (
+    context.citations.get(citationSymbolKey(mandate.symbol)) ?? []
+  )
+    .filter((location) => location.level !== "background")
+    .sort(
+      (a, b) =>
+        Number(b.level === "programme") - Number(a.level === "programme") ||
+        (a.subprogramme ?? "").localeCompare(b.subprogramme ?? "", undefined, {
+          numeric: true,
+        }) ||
+        a.sourceSymbol.localeCompare(b.sourceSymbol, undefined, {
+          numeric: true,
+        }),
+    );
+  if (
+    !locations.some((location) => ownCitation(location, mandate, context)) ||
+    locations.length < 2
+  )
     return null;
-  const others = locations.filter(
-    (location) => !ownCitation(location, mandate, context),
-  );
-  if (!others.length) return null;
   const atProgrammeLevel = locations.some(
     (location) => location.level === "programme",
   );
@@ -181,13 +211,15 @@ function duplicateWarning(
   );
   return {
     id: "duplicate-citation",
-    message: mandate.isAdded
-      ? "This added resolution is already included in this entity."
-      : "This resolution is cited more than once in this entity.",
+    message: `This document is cited ${locations.length === 2 ? "twice" : `${locations.length} times`} in the legislative mandates.`,
+    citationCount: locations.length,
     severity: "info",
     icon: "info",
     colorScheme: "blue",
-    locations: warningLocations(others, context),
+    locations: warningLocations(locations, {
+      ...context,
+      sourceSymbol: context.sourceSymbol ?? mandate.symbol,
+    }),
     advice:
       atProgrammeLevel && subprogrammes.size
         ? "Consider keeping a single citation at programme level."
@@ -197,7 +229,7 @@ function duplicateWarning(
   };
 }
 
-/** Confirmation is entity-wide, including background and same-section citations. */
+/** Background references are expected; confirm legislative overlap or an actual same-section collision. */
 export function getPendingCitationWarning(
   symbol: string,
   subprogramme: string | null,
@@ -206,7 +238,10 @@ export function getPendingCitationWarning(
 ): MandateWarning | null {
   const context = { citations, subprogramme, sourceSymbol };
   const others = (citations.get(citationSymbolKey(symbol)) ?? []).filter(
-    (location) => !sourceSymbol || !ownCitation(location, { symbol }, context),
+    (location) =>
+      (!sourceSymbol || !ownCitation(location, { symbol }, context)) &&
+      ((subprogramme !== null && location.level !== "background") ||
+        location.subprogramme === subprogramme),
   );
   if (!others.length) return null;
   const levels = [
@@ -292,6 +327,7 @@ export function getMandateWarnings(
       severity: def.severity,
       suggestedUpdate: def.getSuggestedUpdate?.(mandate),
       action: def.action,
+      actionLabel: def.actionLabel,
       icon: def.icon,
       colorScheme: def.colorScheme,
       linkedSymbol: def.getLinkedSymbol?.(mandate),
@@ -337,4 +373,35 @@ export function getWarningColorClass(
     case "info":
       return "text-blue-500";
   }
+}
+
+/** Keep table notes and their shortcut grounded in the same warning rules. */
+export function getWarningSummary(
+  warning: Pick<MandateWarning, "id" | "citationCount">,
+): string {
+  if (warning.id === "duplicate-citation" && warning.citationCount) {
+    return warning.citationCount === 2
+      ? "Cited twice"
+      : `Cited ${warning.citationCount}x`;
+  }
+  const labels: Record<string, string> = {
+    "duplicate-citation": "Also cited elsewhere",
+    "newer-already-cited": "Newer version cited",
+    "newer-available": "Newer version",
+    "no-metadata": "Check symbol",
+    "missing-link": "Missing link",
+  };
+  return labels[warning.id] || "Citation note";
+}
+
+export function newestVersionWarningSymbols(mandates: Mandate[]): Set<string> {
+  const groups = new Map<string, Mandate>();
+  for (const mandate of mandates) {
+    const symbol = mandate.newerVersion?.symbol;
+    if (!symbol) continue;
+    const previous = groups.get(symbol);
+    if (!previous || (mandate.year ?? 0) > (previous.year ?? 0))
+      groups.set(symbol, mandate);
+  }
+  return new Set([...groups.values()].map((mandate) => mandate.symbol));
 }

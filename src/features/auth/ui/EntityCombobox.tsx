@@ -73,7 +73,7 @@ export function EntityCombobox({
           aria-expanded={open}
           className={cn(
             "h-auto w-full justify-between rounded-lg border-gray-300 px-4 py-2.5 text-sm font-normal transition-all hover:bg-transparent",
-            !value && "text-gray-400",
+            !value && "text-gray-700",
             open && "border-un-blue ring-2 ring-un-blue/20",
             className,
           )}
@@ -94,12 +94,12 @@ export function EntityCombobox({
         <Command>
           <CommandInput
             placeholder="Search entity..."
-            className="h-9 border-b border-un-blue/10 focus:ring-0"
+            className="h-9 border-b border-un-blue/10 text-foreground placeholder:text-gray-600 focus:ring-0"
             value={open ? undefined : displayValue}
             onValueChange={() => listRef.current?.scrollTo(0, 0)}
           />
           <CommandList ref={listRef}>
-            <CommandEmpty className="py-6 text-sm text-gray-500">
+            <CommandEmpty className="py-6 text-sm text-gray-700">
               No entity found.
             </CommandEmpty>
             <CommandGroup>
@@ -111,12 +111,12 @@ export function EntityCombobox({
                     onChange(entity.value);
                     setOpen(false);
                   }}
-                  className="aria-selected:bg-un-blue/5 aria-selected:text-un-blue"
+                  className="aria-selected:bg-un-blue/5 aria-selected:text-un-blue-text-aaa"
                 >
                   <div className="flex min-w-0 flex-1 flex-col">
                     <span className="font-medium">{entity.label}</span>
                     {"longName" in entity && entity.longName ? (
-                      <span className="truncate text-xs text-gray-500">
+                      <span className="truncate text-xs text-gray-700">
                         {String(entity.longName)}
                       </span>
                     ) : null}

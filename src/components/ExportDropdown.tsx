@@ -42,7 +42,7 @@ const MODES: { id: ExportDecisionMode; label: string }[] = [
   { id: "reviewed", label: "Reviewed outcome" },
 ];
 
-export function ExportDropdown({ entity, label = "Export Mandates" }: Props) {
+export function ExportDropdown({ entity, label = "Download a copy" }: Props) {
   const [open, setOpen] = useState(false);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);

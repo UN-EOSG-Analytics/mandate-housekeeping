@@ -118,7 +118,7 @@ export function ClearAllDecisionsDialog({
               autoCorrect="off"
               autoCapitalize="off"
               spellCheck={false}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-400 focus:border-red-500 focus:ring-1 focus:ring-red-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-600 focus:border-red-500 focus:ring-1 focus:ring-red-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-600"
             />
           </div>
 
@@ -133,14 +133,14 @@ export function ClearAllDecisionsDialog({
           <button
             onClick={handleClose}
             disabled={isClearing}
-            className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-50"
+            className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:bg-gray-200 disabled:text-gray-700"
           >
             Cancel
           </button>
           <button
             onClick={handleConfirm}
             disabled={!isConfirmEnabled || isClearing}
-            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-700"
           >
             {isClearing ? "Clearing..." : "Clear All Decisions"}
           </button>

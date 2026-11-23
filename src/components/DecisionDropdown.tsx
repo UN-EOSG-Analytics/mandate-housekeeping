@@ -45,6 +45,7 @@ interface DecisionDropdownProps {
   otherReason?: string | null;
   onReasonChange?: DecisionReasonChangeHandler;
   symbol?: string;
+  trackLabel?: "Submission" | "Reviewer";
   // External control of reason popup
   showReasonPopup?: boolean;
   onReasonPopupClose?: () => void;
@@ -73,6 +74,7 @@ export function DecisionDropdown({
   otherReason,
   onReasonChange,
   symbol,
+  trackLabel = "Submission",
   showReasonPopup: externalShowReasonPopup,
   onReasonPopupClose,
 }: DecisionDropdownProps) {
@@ -86,6 +88,10 @@ export function DecisionDropdown({
   );
   const reasonSavingRef = React.useRef(false);
   const [saveError, setSaveError] = React.useState<string | null>(null);
+  const [savedMessage, setSavedMessage] = React.useState<string | null>(null);
+  const [retryDecision, setRetryDecision] = React.useState<
+    Decision | "" | null
+  >(null);
   const savingRef = React.useRef(false);
   const disabled = disabledProp || saving || savingReason;
   const [internalShowReasonPopup, setInternalShowReasonPopup] =
@@ -95,6 +101,12 @@ export function DecisionDropdown({
   const decisionTooltipTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const reasonTooltipTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!savedMessage) return;
+    const timer = setTimeout(() => setSavedMessage(null), 6000);
+    return () => clearTimeout(timer);
+  }, [savedMessage]);
 
   // Show popup if either internal or external says to show it
   // (external is used for "update" flow, internal for "retain"/"remove")
@@ -131,6 +143,8 @@ export function DecisionDropdown({
     if (disabled || savingRef.current || reasonSavingRef.current) return;
     setIsOpen(false);
     setSaveError(null);
+    setSavedMessage(null);
+    setRetryDecision(null);
 
     if (value === "update" && onUpdateClick) {
       onUpdateClick();
@@ -153,10 +167,16 @@ export function DecisionDropdown({
       if (!saved) {
         setShowReasonPopup(false);
         setSaveError("Could not save the decision. Please try again.");
+        setRetryDecision(value);
+      } else {
+        setSavedMessage(
+          value && value !== "cancel" ? "Decision saved" : "Decision cleared",
+        );
       }
     } catch {
       setShowReasonPopup(false);
       setSaveError("Could not save the decision. Please try again.");
+      setRetryDecision(value);
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -169,25 +189,30 @@ export function DecisionDropdown({
   ) => {
     const pending = initialSaveRef.current;
     if (!onReasonChange || reasonSavingRef.current || (!pending && disabled))
-      return;
+      return false;
     reasonSavingRef.current = true;
     setSavingReason(true);
     setSaveError(null);
+    setSavedMessage(null);
     try {
       const saved = pending ? await pending : undefined;
       if (pending && !saved) {
         setSaveError(
           "The decision was not saved, so its reason could not be saved.",
         );
-        return;
+        return false;
       }
       if (
         !(await onReasonChange(newReason, newOtherReason, saved ?? undefined))
       ) {
         setSaveError("Could not save the reason. Please try again.");
+        return false;
       }
+      setSavedMessage("Decision and reason saved");
+      return true;
     } catch {
       setSaveError("Could not save the reason. Please try again.");
+      return false;
     } finally {
       reasonSavingRef.current = false;
       setSavingReason(false);
@@ -199,17 +224,45 @@ export function DecisionDropdown({
   const displayLabel =
     decision && decision !== "cancel"
       ? decision.charAt(0).toUpperCase() + decision.slice(1)
-      : "—";
+      : disabledProp
+        ? "No decision"
+        : "Choose action";
 
   // For "add" decisions, only show the cancel option
-  const options: { value: Decision | ""; label: string }[] =
+  const options: {
+    value: Decision | "";
+    label: string;
+    description: string;
+  }[] =
     decision === "add"
-      ? [{ value: "", label: "—" }]
+      ? [
+          {
+            value: "",
+            label: "Clear decision",
+            description: "Undo this addition.",
+          },
+        ]
       : [
-          { value: "", label: "—" },
-          { value: "retain", label: "Retain" },
-          { value: "remove", label: "Remove" },
-          { value: "update", label: "Update" },
+          {
+            value: "retain",
+            label: "Retain",
+            description: "Keep this citation in this section.",
+          },
+          {
+            value: "remove",
+            label: "Remove",
+            description: "Remove this citation from this section.",
+          },
+          {
+            value: "update",
+            label: "Update",
+            description: "Choose another document to replace this citation.",
+          },
+          {
+            value: "",
+            label: "Clear decision",
+            description: "Undo the decision for this citation in this section.",
+          },
         ];
 
   // Show indicator if reason is set
@@ -227,16 +280,11 @@ export function DecisionDropdown({
         ref={containerRef}
         tabIndex={-1}
         aria-busy={saving || savingReason}
-        className="relative flex items-center gap-0.5"
+        className="relative flex flex-wrap items-center gap-0.5"
       >
         {(saving || savingReason) && (
           <span role="status" className="sr-only">
             Saving…
-          </span>
-        )}
-        {saveError && (
-          <span role="alert" className="text-xs text-red-700">
-            {saveError}
           </span>
         )}
         {/* Main decision dropdown button */}
@@ -248,7 +296,7 @@ export function DecisionDropdown({
             <PopoverTrigger asChild>
               <DropdownMenuTrigger asChild disabled={disabled || locked}>
                 <button
-                  aria-label={`Submission decision for ${symbol || "document"}: ${displayLabel}`}
+                  aria-label={`${trackLabel} decision for ${symbol || "document"}: ${displayLabel}`}
                   onClick={(event) => event.preventDefault()}
                   onMouseEnter={() => {
                     if (decisionTooltipTimeoutRef.current)
@@ -262,7 +310,7 @@ export function DecisionDropdown({
                     );
                   }}
                   disabled={disabled}
-                  className={`flex w-21 items-center justify-between gap-1 rounded border px-2 font-medium transition-colors focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 ${sizeClasses} ${colors.bg} ${colors.border} ${colors.text} ${
+                  className={`flex min-w-21 items-center justify-between gap-1 rounded border px-2 font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 ${sizeClasses} ${colors.bg} ${colors.border} ${colors.text} ${
                     disabled
                       ? "cursor-default"
                       : locked
@@ -317,9 +365,9 @@ export function DecisionDropdown({
         ) : (
           <DropdownMenuTrigger asChild disabled={disabled || locked}>
             <button
-              aria-label={`Submission decision for ${symbol || "document"}: ${displayLabel}`}
+              aria-label={`${trackLabel} decision for ${symbol || "document"}: ${displayLabel}`}
               disabled={disabled || locked}
-              className={`flex w-21 items-center justify-between gap-1 rounded border px-2 font-medium transition-colors focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 ${sizeClasses} ${colors.bg} ${colors.border} ${colors.text} ${
+              className={`flex min-w-21 items-center justify-between gap-1 rounded border px-2 font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 ${sizeClasses} ${colors.bg} ${colors.border} ${colors.text} ${
                 disabled
                   ? "cursor-default"
                   : locked
@@ -360,7 +408,7 @@ export function DecisionDropdown({
                 className={`group/reason flex h-6 items-center justify-center rounded border transition-all ${
                   hasReason
                     ? `w-6 ${colors.bg} ${colors.border} ${colors.text} ${colors.hover}`
-                    : "w-6 border-dashed border-gray-300 bg-white text-gray-400 hover:border-gray-400 hover:bg-gray-50"
+                    : "w-6 border-dashed border-gray-300 bg-white text-gray-600 hover:border-gray-400 hover:bg-gray-50"
                 }`}
               >
                 {hasReason ? (
@@ -394,7 +442,7 @@ export function DecisionDropdown({
               onClick={(e) => e.stopPropagation()}
             >
               <div className="border-b border-gray-200 bg-gray-50 px-3 py-2">
-                <h4 className="text-xs font-medium tracking-wide text-gray-500 uppercase">
+                <h4 className="text-xs font-medium tracking-wide text-gray-600 uppercase">
                   Reason
                 </h4>
               </div>
@@ -413,7 +461,7 @@ export function DecisionDropdown({
                         {renderLabelWithBold(reasonLabel)}
                       </p>
                     ) : (
-                      <p className="text-sm text-muted-foreground italic">
+                      <p className="text-sm text-gray-600 italic">
                         No reason provided
                       </p>
                     )}
@@ -426,7 +474,7 @@ export function DecisionDropdown({
 
         <DropdownMenuContent
           align="start"
-          className="z-[100] min-w-21"
+          className="z-[100] w-72"
           onCloseAutoFocus={(event) => {
             // A selected decision opens a dialog; let that dialog own focus.
             if (initialSaveRef.current || showReasonPopup)
@@ -437,8 +485,13 @@ export function DecisionDropdown({
             <DropdownMenuItem
               key={option.value || "empty"}
               onSelect={() => handleSelect(option.value)}
+              disabled={!option.value && (!decision || decision === "cancel")}
+              className="flex flex-col items-start gap-0.5 py-2 data-[disabled]:text-gray-600 data-[disabled]:opacity-100"
             >
-              {option.label}
+              <span className="font-medium">{option.label}</span>
+              <span className="text-xs text-gray-600">
+                {option.description}
+              </span>
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>
@@ -450,11 +503,12 @@ export function DecisionDropdown({
             reason={initialReasonDecision ? null : (reason ?? null)}
             otherReason={initialReasonDecision ? null : (otherReason ?? null)}
             onChange={handleReasonChange}
+            saving={savingReason}
+            error={saveError}
             onClose={() => setShowReasonPopup(false)}
             isOpen={
-              showReasonPopup &&
-              (!!initialReasonDecision || !disabled) &&
-              !savingReason
+              !!showReasonPopup &&
+              (!!initialReasonDecision || !disabled || savingReason)
             }
             symbol={symbol}
             onRestoreFocus={() => {
@@ -468,6 +522,30 @@ export function DecisionDropdown({
             }}
           />
         )}
+        {saveError && !showReasonPopup && (
+          <span role="alert" className="basis-full text-xs text-red-700">
+            {saveError}{" "}
+            {retryDecision !== null && !disabledProp && (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => void handleSelect(retryDecision)}
+                className="underline underline-offset-2"
+              >
+                Retry
+              </button>
+            )}
+          </span>
+        )}
+        {savedMessage &&
+          !showReasonPopup &&
+          !saveError &&
+          !saving &&
+          !savingReason && (
+            <span role="status" className="basis-full text-xs text-emerald-700">
+              {savedMessage}
+            </span>
+          )}
       </div>
     </DropdownMenu>
   );

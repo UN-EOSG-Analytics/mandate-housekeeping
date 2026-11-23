@@ -13,7 +13,7 @@ export default async function VerifyPage() {
         <Suspense
           fallback={
             <div className="flex flex-1 items-center justify-center px-4">
-              <p className="text-sm text-gray-500">Loading...</p>
+              <p className="text-sm text-foreground">Loading...</p>
             </div>
           }
         >

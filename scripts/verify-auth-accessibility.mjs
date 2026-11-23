@@ -190,6 +190,7 @@ test("heatmap exposes named grid cells, roving keyboard focus, and Enter/Space d
       DEFAULT_GREW_COLOR: "#fff",
     },
     "@/features/mandates/heatmap/heatmap-svg": {},
+    "@/components/Tooltip": { Tooltip: "Tooltip" },
   });
   const matrix = {
     entities: entities.map((e) => e.code),
@@ -247,9 +248,19 @@ test("tooltip describes interactive children on focus and dismisses with Escape"
     "src/components/Tooltip.tsx",
     {
       react: h.react,
+      "react-dom": { createPortal: (node) => node },
+      "@radix-ui/react-slot": { Slot: "slot" },
+      "@/lib/utils": { cn: (...classes) => classes.filter(Boolean).join(" ") },
       "@/lib/theme": { POPUP_STYLES: { tooltipSize: "max-w-xs" } },
     },
-    { window: { innerWidth: 1000 }, document: { activeElement: null } },
+    {
+      window: {
+        innerWidth: 1000,
+        addEventListener() {},
+        removeEventListener() {},
+      },
+      document: { activeElement: null, body: {} },
+    },
   );
   const props = {
     content: "More detail",
@@ -257,12 +268,26 @@ test("tooltip describes interactive children on focus and dismisses with Escape"
   };
   const render = () => h.render(() => Tooltip(props));
   let tree = render();
+  const trigger = () =>
+    find(
+      tree,
+      (node) =>
+        node.type === "span" && typeof node.props.onFocus === "function",
+    );
   assert.equal(
-    tree.props.tabIndex,
+    trigger().props.tabIndex,
     undefined,
     "avoid an extra tab stop around an interactive child",
   );
-  tree.props.onFocus();
+  trigger().props.ref({
+    getBoundingClientRect: () => ({
+      top: 100,
+      bottom: 120,
+      left: 100,
+      width: 40,
+    }),
+  });
+  trigger().props.onFocus({ defaultPrevented: false });
   tree = render();
   const tooltip = find(tree, (node) => node.props.role === "tooltip");
   assert.ok(tooltip);
@@ -271,7 +296,7 @@ test("tooltip describes interactive children on focus and dismisses with Escape"
     tooltip.props.id,
   );
   let stopped = false;
-  tree.props.onKeyDown({
+  trigger().props.onKeyDown({
     key: "Escape",
     stopPropagation() {
       stopped = true;

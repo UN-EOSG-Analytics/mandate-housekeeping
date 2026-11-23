@@ -1,5 +1,6 @@
 "use client";
 
+import type { CitationLocation } from "@/features/mandates/services/citation-locations";
 import { createContext, useContext, useRef, useState } from "react";
 import { Copy, MoreHorizontal, AlertCircle, Loader2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
@@ -17,12 +18,15 @@ import {
 import { DecisionDropdown } from "./DecisionDropdown";
 import { DocumentSearchInput } from "@/features/mandates/ui/DocumentSearchInput";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Tooltip } from "@/components/Tooltip";
 
 export const DecisionTracksContext = createContext<{
   entity: string;
   canEditSubmission: boolean;
   canReview: boolean;
   onSaved: (event: MandateDecision) => void;
+  canDropCitation?: (location: CitationLocation) => boolean;
+  onDropCitation?: (location: CitationLocation) => Promise<boolean>;
   confirmCitation?: (
     symbol: string,
     subprogramme: string | null,
@@ -275,7 +279,7 @@ export function ReviewDecisionControl({
             type="button"
             disabled={busy || reviewStale}
             onClick={() => setShowEditMetadata(true)}
-            className="text-left text-xs text-un-blue-text underline underline-offset-2 disabled:opacity-60"
+            className="text-left text-xs text-un-blue-text underline underline-offset-2 disabled:text-gray-600"
           >
             Edit review document details
           </button>
@@ -293,14 +297,15 @@ export function ReviewDecisionControl({
       onClick={(e) => e.stopPropagation()}
     >
       {busy && (
-        <span
-          role="status"
-          className="inline-flex items-center gap-1 text-xs text-foreground"
-          title={compact ? "Saving review…" : undefined}
-        >
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          <span className={compact ? "sr-only" : undefined}>Saving…</span>
-        </span>
+        <Tooltip asChild content={compact ? "Saving review…" : undefined}>
+          <span
+            role="status"
+            className="inline-flex items-center gap-1 text-xs text-foreground"
+          >
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <span className={compact ? "sr-only" : undefined}>Saving…</span>
+          </span>
+        </Tooltip>
       )}
       {(!review || review.decision === "cancel") && (!compact || !canEdit) ? (
         <span className="text-xs whitespace-nowrap text-foreground">
@@ -320,6 +325,7 @@ export function ReviewDecisionControl({
           onReasonChange={canEdit ? reason : undefined}
           onUpdateClick={() => setShowReplacement(true)}
           symbol={symbol}
+          trackLabel="Reviewer"
           showReasonPopup={showReason}
           onReasonPopupClose={() => setShowReason(false)}
         />
@@ -330,69 +336,79 @@ export function ReviewDecisionControl({
         </span>
       )}
       {reviewStale && (!compact || !canEdit) && (
-        <span
-          className="text-xs text-amber-800"
-          title={compact ? "Submission changed — review needed" : undefined}
+        <Tooltip
+          asChild
+          content={compact ? "Submission changed — review needed" : undefined}
         >
-          {compact ? (
-            <>
-              <AlertCircle className="h-3.5 w-3.5" />
-              <span className="sr-only">
-                Submission changed — review needed
-              </span>
-            </>
-          ) : (
-            "Submission changed — review needed"
-          )}
-        </span>
+          <span className="text-xs text-amber-800">
+            {compact ? (
+              <>
+                <AlertCircle className="h-3.5 w-3.5" />
+                <span className="sr-only">
+                  Submission changed — review needed
+                </span>
+              </>
+            ) : (
+              "Submission changed — review needed"
+            )}
+          </span>
+        </Tooltip>
       )}
       {canEdit &&
         submission &&
         submission.decision !== "cancel" &&
         !hasReview && (
-          <button
-            type="button"
-            disabled={busy}
-            title={compact ? "Copy submission decision" : undefined}
-            aria-label="Copy submission decision"
-            className={
-              compact
-                ? "flex h-6 w-6 shrink-0 items-center justify-center rounded text-un-blue-text hover:bg-un-blue-surface disabled:opacity-60"
-                : "text-left text-xs text-un-blue-text underline underline-offset-2 disabled:opacity-60"
-            }
-            onClick={agreeWithSubmission}
+          <Tooltip
+            asChild
+            content={compact ? "Copy submission decision" : undefined}
           >
-            {compact ? (
-              <Copy className="h-3.5 w-3.5" />
-            ) : busy ? (
-              "Saving…"
-            ) : (
-              "Copy submission decision"
-            )}
-          </button>
+            <button
+              type="button"
+              disabled={busy}
+              aria-label="Copy submission decision"
+              className={
+                compact
+                  ? "flex h-6 w-6 shrink-0 items-center justify-center rounded text-un-blue-text hover:bg-un-blue-surface disabled:text-gray-600"
+                  : "text-left text-xs text-un-blue-text underline underline-offset-2 disabled:text-gray-600"
+              }
+              onClick={agreeWithSubmission}
+            >
+              {compact ? (
+                <Copy className="h-3.5 w-3.5" />
+              ) : busy ? (
+                "Saving…"
+              ) : (
+                "Copy submission decision"
+              )}
+            </button>
+          </Tooltip>
         )}
       {compact
         ? canEdit &&
           hasMoreActions && (
             <Popover>
               <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  disabled={busy}
-                  aria-label="More review actions"
-                  title={
+                <Tooltip
+                  asChild
+                  content={
                     reviewStale
                       ? "Submission changed — review needed"
                       : "More review actions"
                   }
-                  className="flex h-6 w-5 shrink-0 items-center justify-center rounded text-foreground hover:bg-secondary"
                 >
-                  {reviewStale ? (
-                    <AlertCircle className="h-3.5 w-3.5 text-amber-800" />
-                  ) : (
-                    <MoreHorizontal className="h-3.5 w-3.5" />
-                  )}
-                </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    aria-label="More review actions"
+                    className="flex h-6 w-5 shrink-0 items-center justify-center rounded text-foreground hover:bg-secondary"
+                  >
+                    {reviewStale ? (
+                      <AlertCircle className="h-3.5 w-3.5 text-amber-800" />
+                    ) : (
+                      <MoreHorizontal className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </Tooltip>
               </PopoverTrigger>
               <PopoverContent
                 align="end"
@@ -430,20 +446,18 @@ export function ReviewDecisionControl({
         </DialogContent>
       </Dialog>
       {error && (
-        <span
-          role="alert"
-          title={compact ? error : undefined}
-          className="text-xs text-red-700"
-        >
-          {compact ? (
-            <>
-              <AlertCircle className="h-4 w-4" />
-              <span className="sr-only">{error}</span>
-            </>
-          ) : (
-            error
-          )}
-        </span>
+        <Tooltip asChild content={compact ? error : undefined}>
+          <span role="alert" className="text-xs text-red-700">
+            {compact ? (
+              <>
+                <AlertCircle className="h-4 w-4" />
+                <span className="sr-only">{error}</span>
+              </>
+            ) : (
+              error
+            )}
+          </span>
+        </Tooltip>
       )}
       <Dialog open={showReplacement} onOpenChange={setShowReplacement}>
         <DialogContent className="sm:max-w-2xl">

@@ -8,10 +8,13 @@ import { Building2, ChevronRight, Layers, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { typography } from "@un-eosg/ui/typography";
+import { Button } from "@un-eosg/ui/components/button";
+import { Chip } from "@un-eosg/ui/components/chip";
 import { cn } from "@/lib/utils";
 import { ExportDropdown } from "./ExportDropdown";
 import { SubmissionCycleDropdown } from "@/features/mandates/ui/SubmissionCycleDropdown";
-import type { BudgetVersion } from "@/lib/db/budget-version";
+import { SUBMISSION_CYCLES, type BudgetVersion } from "@/lib/db/budget-version";
+import { Tooltip } from "@/components/Tooltip";
 
 interface Props {
   parts: PartOverviewSummary[];
@@ -22,41 +25,60 @@ interface Props {
 function EntityCard({
   entityData,
   highlight,
+  workspaceYear,
 }: {
   entityData: EntityOverviewSummary;
   highlight?: boolean;
+  workspaceYear?: number;
 }) {
   const mandateCount = entityData.mandateCount;
 
   return (
-    <Link
-      href={`/entity/${encodeURIComponent(entityData.entity)}`}
-      className={`group flex items-center justify-between gap-2 rounded-lg border px-3 py-2.5 transition-colors hover:bg-un-blue-surface focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 ${
-        highlight
-          ? "border-un-blue-text/30 bg-un-blue-surface"
-          : "border-border bg-gray-50"
-      }`}
-      title={entityData.entityLong || entityData.entity}
-    >
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-medium text-foreground">
-            {entityData.entity}
-          </span>
-          <span className="shrink-0 text-xs text-foreground tabular-nums">
-            {mandateCount}
-          </span>
-        </div>
-        {entityData.entityLong && (
-          <div className="truncate text-xs text-foreground">
-            {entityData.entityLong}
-          </div>
+    <Tooltip asChild content={entityData.entityLong || entityData.entity}>
+      <Link
+        href={`/entity/${encodeURIComponent(entityData.entity)}`}
+        className={cn(
+          "group flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors hover:bg-un-blue-surface focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2",
+          highlight
+            ? "border-un-blue-text/30 bg-un-blue-surface"
+            : "border-border bg-gray-50",
         )}
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <ChevronRight className="h-4 w-4 text-un-blue-text" />
-      </div>
-    </Link>
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                typography.body,
+                "truncate font-medium text-foreground",
+              )}
+            >
+              {entityData.entity}
+            </span>
+            <span
+              className={cn(
+                typography.label,
+                "shrink-0 text-foreground tabular-nums",
+              )}
+            >
+              {mandateCount} citation{mandateCount !== 1 ? "s" : ""}
+            </span>
+          </div>
+          {entityData.entityLong && (
+            <div className={cn(typography.caption, "truncate text-foreground")}>
+              {entityData.entityLong}
+            </div>
+          )}
+          {workspaceYear && (
+            <p className={cn(typography.label, "mt-2 text-un-blue-text-aaa")}>
+              Open PPB {workspaceYear} workspace
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <ChevronRight className="h-4 w-4 text-un-blue-text-aaa" />
+        </div>
+      </Link>
+    </Tooltip>
   );
 }
 
@@ -124,61 +146,74 @@ export function EntityOverview({ parts, userEntity, budgetVersion }: Props) {
   };
 
   return (
-    <div className="min-w-full space-y-6">
+    <div className="min-w-0 space-y-6">
       {/* My Entity card - shown for non-reviewer users */}
       {myEntityData && !searchQuery && (
-        <div className="mb-8">
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-un-blue-text">
-            <Building2 className="h-4 w-4" />
-            My Entity
+        <div>
+          <div
+            className={cn(
+              typography.body,
+              "mb-2 flex items-center gap-2 font-medium text-un-blue-text-aaa",
+            )}
+          >
+            <Building2 className="h-4 w-4" aria-hidden="true" />
+            Your entity
           </div>
-          <div className="max-w-xs">
-            <EntityCard entityData={myEntityData} highlight />
+          <div className="max-w-lg">
+            <EntityCard
+              entityData={myEntityData}
+              highlight
+              workspaceYear={SUBMISSION_CYCLES[budgetVersion].year}
+            />
           </div>
         </div>
       )}
 
       {/* Search box and controls */}
-      <div className="flex w-full flex-wrap items-start justify-between gap-4">
-        <div className="flex max-w-full flex-wrap items-start gap-3">
+      <div className="flex w-full flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+        <div className="flex max-w-full flex-wrap items-center gap-3">
           <div className="w-80 max-w-full">
             <div className="relative">
               <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
+                aria-label="Search entities"
                 placeholder="Search entities..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 py-2 pr-4 pl-10 text-sm focus:border-un-blue focus:ring-1 focus:ring-un-blue focus:outline-none"
+                className="w-full rounded-md border border-input bg-white py-2 pr-9 pl-10 text-sm focus:border-un-blue focus:ring-1 focus:ring-un-blue focus:outline-none"
               />
               {searchQuery && (
-                <button
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
                   onClick={() => setSearchQuery("")}
-                  className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  aria-label="Clear entity search"
+                  className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground"
                 >
                   <X className="h-4 w-4" />
-                </button>
+                </Button>
               )}
             </div>
             {searchQuery && (
-              <div className="mt-2 text-xs text-gray-500">
+              <div className={cn(typography.caption, "mt-2")}>
                 Found {totalMatchingEntities} entit
                 {totalMatchingEntities !== 1 ? "ies" : "y"}
               </div>
             )}
           </div>
-          <button
-            onClick={() => setShowSections(!showSections)}
-            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-              showSections
-                ? "bg-un-blue-text text-white"
-                : "bg-secondary text-foreground hover:bg-un-blue-surface"
-            }`}
-            title="Group entities by budget section"
-          >
-            <Layers className="h-4 w-4" />
-            View Sections
-          </button>
+          <Tooltip asChild content={"Group entities by budget section"}>
+            <Chip
+              density="comfortable"
+              tone={showSections ? "selected" : "neutral"}
+              onClick={() => setShowSections(!showSections)}
+              aria-pressed={showSections}
+            >
+              <Layers className="h-3 w-3 self-center" aria-hidden="true" />
+              View sections
+            </Chip>
+          </Tooltip>
         </div>
         <div className="ms-auto flex max-w-full flex-wrap items-center justify-end gap-3">
           <SubmissionCycleDropdown

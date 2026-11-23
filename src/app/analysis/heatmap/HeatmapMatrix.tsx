@@ -27,6 +27,7 @@ import {
   DEFAULT_GREW_COLOR,
 } from "@/features/mandates/heatmap/color-scale";
 import { buildHeatmapSvg } from "@/features/mandates/heatmap/heatmap-svg";
+import { Tooltip } from "@/components/Tooltip";
 
 const DEFAULT_COLORS: Record<string, string> = {
   cross: CROSS_SECTION_COLOR,
@@ -333,7 +334,7 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
           ))}
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-gray-500">Entities:</span>
+          <span className="text-xs text-foreground">Entities:</span>
           {entityPresets.map((p) => (
             <button
               key={p.id}
@@ -361,7 +362,7 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
         </a>
       </div>
 
-      <p className="mb-3 max-w-3xl text-sm text-gray-500">
+      <p className="mb-3 max-w-3xl text-sm text-foreground">
         {layer.description}
       </p>
 
@@ -398,10 +399,14 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
               universe.some((e) => e.section === s),
             ).map((s) => (
               <div key={s}>
-                <p
-                  className="mb-1 text-[11px] font-semibold"
-                  style={{ color: s === "other" ? crossColor : colorFor(s) }}
-                >
+                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-foreground">
+                  <span
+                    aria-hidden="true"
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{
+                      backgroundColor: s === "other" ? crossColor : colorFor(s),
+                    }}
+                  />
                   {SECTION_META[s].label}
                 </p>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3 md:grid-cols-4">
@@ -413,28 +418,31 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
                         <label
                           key={e.code}
                           className={`flex cursor-pointer items-center gap-1.5 text-xs ${
-                            has2027 ? "text-gray-700" : "text-gray-400"
+                            has2027 ? "text-gray-700" : "text-foreground"
                           }`}
-                          title={
-                            has2027 ? e.code : `${e.code} — no 2027 data yet`
-                          }
                         >
-                          <input
-                            type="checkbox"
-                            checked={selectedEntities.has(e.code)}
-                            onChange={() =>
-                              setSelectedEntities((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(e.code)) next.delete(e.code);
-                                else next.add(e.code);
-                                return next;
-                              })
+                          <Tooltip
+                            content={
+                              has2027 ? e.code : `${e.code} — no 2027 data yet`
                             }
-                            className="h-3.5 w-3.5 shrink-0"
-                          />
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedEntities.has(e.code)}
+                              onChange={() =>
+                                setSelectedEntities((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(e.code)) next.delete(e.code);
+                                  else next.add(e.code);
+                                  return next;
+                                })
+                              }
+                              className="block h-3.5 w-3.5 shrink-0"
+                            />
+                          </Tooltip>
                           <span className="truncate">{e.label}</span>
                           {!has2027 && (
-                            <span className="shrink-0 text-[9px] text-gray-300">
+                            <span className="shrink-0 text-[9px] text-foreground">
                               no 27
                             </span>
                           )}
@@ -461,7 +469,7 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
               : `${hover.value} shared mandate${hover.value === 1 ? "" : "s"}`}
           </span>
         ) : (
-          <span className="text-gray-400">
+          <span className="text-foreground">
             Hover or focus a cell for details
           </span>
         )}
@@ -495,8 +503,8 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
                       (e.g. Humanitarian → two lines); short un-wrappable ones
                       (H/R, Legal) overflow centred into empty space. */}
                     <span
-                      className="absolute bottom-1 left-0 w-full text-center text-[11px] leading-[1.05] font-semibold"
-                      style={{ color: bc, hyphens: "manual" }}
+                      className="absolute bottom-1 left-0 w-full text-center text-[11px] leading-[1.05] font-semibold text-foreground"
+                      style={{ hyphens: "manual" }}
                     >
                       {SECTION_META[b.section].label}
                     </span>
@@ -521,7 +529,7 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
               <div role="row" className="flex items-end">
                 <div
                   role="columnheader"
-                  className="flex items-end justify-start pr-1 text-[10px] font-semibold text-gray-500"
+                  className="flex items-end justify-start pr-1 text-[10px] font-semibold text-foreground"
                   style={{ width: LABEL_W, height: COLHEAD_H }}
                 >
                   Cross-citation
@@ -554,19 +562,21 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
               {/* Rows */}
               {entities.map((rowE, rowIndex) => (
                 <div key={rowE.code} role="row" className="flex items-center">
-                  <div
-                    role="rowheader"
-                    className="truncate px-1 text-right text-[10px] leading-4.5 text-gray-700"
-                    style={{
-                      width: LABEL_W,
-                      height: CELL,
-                      backgroundColor: tintFor(rowE.section),
-                      borderBottom: "1px solid rgba(255,255,255,0.7)",
-                    }}
-                    title={rowE.code}
-                  >
-                    {rowE.label}
-                  </div>
+                  <Tooltip content={rowE.code}>
+                    <div
+                      role="rowheader"
+                      tabIndex={-1}
+                      className="truncate px-1 text-right text-[10px] leading-4.5 text-gray-700"
+                      style={{
+                        width: LABEL_W,
+                        height: CELL,
+                        backgroundColor: tintFor(rowE.section),
+                        borderBottom: "1px solid rgba(255,255,255,0.7)",
+                      }}
+                    >
+                      {rowE.label}
+                    </div>
+                  </Tooltip>
                   {entities.map((colE, colIndex) => {
                     const isDiagonal = rowE.code === colE.code;
                     const value = isDiagonal
@@ -581,99 +591,102 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
                         (selected.a.code === colE.code &&
                           selected.b.code === rowE.code));
                     return (
-                      <div
+                      <Tooltip
                         key={colE.code}
-                        role="gridcell"
-                        data-row={rowIndex}
-                        data-col={colIndex}
-                        aria-selected={isSelected}
-                        aria-label={
-                          isDiagonal
-                            ? `${rowE.label}: same entity`
-                            : `${rowE.label} and ${colE.label}: ${value} ${isDiff ? "change in shared mandates" : "shared mandates"}. Show mandates`
-                        }
-                        tabIndex={
-                          focusedCell === `${rowE.code}:${colE.code}` ||
-                          (!focusedCellVisible &&
-                            rowIndex === 0 &&
-                            colIndex === (entities.length > 1 ? 1 : 0))
-                            ? 0
-                            : -1
-                        }
-                        className="focus-visible:z-10 focus-visible:!outline-2 focus-visible:!outline-offset-1 focus-visible:!outline-un-blue"
-                        onFocus={() => {
-                          setFocusedCell(`${rowE.code}:${colE.code}`);
-                          setHover({ a: rowE, b: colE, value });
-                        }}
-                        onKeyDown={(event) => {
-                          if (
-                            (event.key === "Enter" || event.key === " ") &&
-                            !isDiagonal
-                          ) {
-                            event.preventDefault();
-                            selectPair(rowE, colE);
-                            return;
-                          }
-                          let nextRow = rowIndex;
-                          let nextCol = colIndex;
-                          switch (event.key) {
-                            case "ArrowDown":
-                              nextRow += 1;
-                              break;
-                            case "ArrowUp":
-                              nextRow -= 1;
-                              break;
-                            case "ArrowRight":
-                              nextCol += 1;
-                              break;
-                            case "ArrowLeft":
-                              nextCol -= 1;
-                              break;
-                            case "Home":
-                              nextCol = 0;
-                              break;
-                            case "End":
-                              nextCol = entities.length - 1;
-                              break;
-                            default:
-                              return;
-                          }
-                          event.preventDefault();
-                          nextRow = Math.max(
-                            0,
-                            Math.min(entities.length - 1, nextRow),
-                          );
-                          nextCol = Math.max(
-                            0,
-                            Math.min(entities.length - 1, nextCol),
-                          );
-                          gridRef.current
-                            ?.querySelector<HTMLElement>(
-                              `[data-row="${nextRow}"][data-col="${nextCol}"]`,
-                            )
-                            ?.focus();
-                        }}
-                        onMouseEnter={() =>
-                          !isDiagonal && setHover({ a: rowE, b: colE, value })
-                        }
-                        onClick={() => !isDiagonal && selectPair(rowE, colE)}
-                        title={
+                        content={
                           isDiagonal
                             ? rowE.label
                             : `${rowE.label} ↔ ${colE.label}: ${value}`
                         }
-                        style={{
-                          width: CELL,
-                          height: CELL,
-                          backgroundColor:
-                            bg ?? (isDiagonal ? "#f9fafb" : "#fff"),
-                          outline: isSelected
-                            ? "2px solid #111827"
-                            : "0.5px solid rgba(0,0,0,0.04)",
-                          outlineOffset: isSelected ? "-1px" : undefined,
-                          cursor: isDiagonal ? "default" : "pointer",
-                        }}
-                      />
+                      >
+                        <div
+                          role="gridcell"
+                          data-row={rowIndex}
+                          data-col={colIndex}
+                          aria-selected={isSelected}
+                          aria-label={
+                            isDiagonal
+                              ? `${rowE.label}: same entity`
+                              : `${rowE.label} and ${colE.label}: ${value} ${isDiff ? "change in shared mandates" : "shared mandates"}. Show mandates`
+                          }
+                          tabIndex={
+                            focusedCell === `${rowE.code}:${colE.code}` ||
+                            (!focusedCellVisible &&
+                              rowIndex === 0 &&
+                              colIndex === (entities.length > 1 ? 1 : 0))
+                              ? 0
+                              : -1
+                          }
+                          className="focus-visible:z-10 focus-visible:!outline-2 focus-visible:!outline-offset-1 focus-visible:!outline-un-blue"
+                          onFocus={() => {
+                            setFocusedCell(`${rowE.code}:${colE.code}`);
+                            setHover({ a: rowE, b: colE, value });
+                          }}
+                          onKeyDown={(event) => {
+                            if (
+                              (event.key === "Enter" || event.key === " ") &&
+                              !isDiagonal
+                            ) {
+                              event.preventDefault();
+                              selectPair(rowE, colE);
+                              return;
+                            }
+                            let nextRow = rowIndex;
+                            let nextCol = colIndex;
+                            switch (event.key) {
+                              case "ArrowDown":
+                                nextRow += 1;
+                                break;
+                              case "ArrowUp":
+                                nextRow -= 1;
+                                break;
+                              case "ArrowRight":
+                                nextCol += 1;
+                                break;
+                              case "ArrowLeft":
+                                nextCol -= 1;
+                                break;
+                              case "Home":
+                                nextCol = 0;
+                                break;
+                              case "End":
+                                nextCol = entities.length - 1;
+                                break;
+                              default:
+                                return;
+                            }
+                            event.preventDefault();
+                            nextRow = Math.max(
+                              0,
+                              Math.min(entities.length - 1, nextRow),
+                            );
+                            nextCol = Math.max(
+                              0,
+                              Math.min(entities.length - 1, nextCol),
+                            );
+                            gridRef.current
+                              ?.querySelector<HTMLElement>(
+                                `[data-row="${nextRow}"][data-col="${nextCol}"]`,
+                              )
+                              ?.focus();
+                          }}
+                          onMouseEnter={() =>
+                            !isDiagonal && setHover({ a: rowE, b: colE, value })
+                          }
+                          onClick={() => !isDiagonal && selectPair(rowE, colE)}
+                          style={{
+                            width: CELL,
+                            height: CELL,
+                            backgroundColor:
+                              bg ?? (isDiagonal ? "#f9fafb" : "#fff"),
+                            outline: isSelected
+                              ? "2px solid #111827"
+                              : "0.5px solid rgba(0,0,0,0.04)",
+                            outlineOffset: isSelected ? "-1px" : undefined,
+                            cursor: isDiagonal ? "default" : "pointer",
+                          }}
+                        />
+                      </Tooltip>
                     );
                   })}
                 </div>
@@ -696,7 +709,7 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
         {legendItems.map((it) => (
           <LegendSwatch key={it.label} color={it.color} label={it.label} />
         ))}
-        <span className="text-gray-400">
+        <span className="text-foreground">
           Intensity ={" "}
           {isDiff ? "magnitude of change" : "number of shared mandates"}
         </span>
@@ -709,7 +722,7 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
         </summary>
         <div className="space-y-4 border-t border-gray-100 p-4">
           <div>
-            <p className="mb-2 text-xs font-semibold text-gray-500">
+            <p className="mb-2 text-xs font-semibold text-foreground">
               Section colours
             </p>
             <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
@@ -729,7 +742,7 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
           </div>
 
           <div>
-            <p className="mb-2 text-xs font-semibold text-gray-500">
+            <p className="mb-2 text-xs font-semibold text-foreground">
               Difference layers (Δ)
             </p>
             <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
@@ -748,7 +761,7 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
 
           <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
             <label className="flex items-center gap-2 text-xs text-gray-600">
-              <span className="font-semibold text-gray-500">
+              <span className="font-semibold text-foreground">
                 Intensity (gamma)
               </span>
               <input
@@ -762,11 +775,11 @@ export function HeatmapMatrix({ layers }: HeatmapPayload) {
               <span className="w-8 font-mono text-[11px]">
                 {gamma.toFixed(2)}
               </span>
-              <span className="text-gray-400">lower = more saturated</span>
+              <span className="text-foreground">lower = more saturated</span>
             </label>
 
             <div className="flex items-center gap-2 text-xs text-gray-600">
-              <span className="font-semibold text-gray-500">Scale</span>
+              <span className="font-semibold text-foreground">Scale</span>
               {(["section", "global"] as const).map((m) => (
                 <label
                   key={m}
@@ -818,7 +831,7 @@ function DetailPanel({
   return (
     <aside className="sticky top-4 w-96 shrink-0 self-start rounded-lg border border-gray-200 bg-white">
       {!selected ? (
-        <div className="p-4 text-sm text-gray-400">
+        <div className="p-4 text-sm text-foreground">
           Click any cell to list the mandates cross-cited by the two entities.
         </div>
       ) : (
@@ -826,11 +839,11 @@ function DetailPanel({
           <div className="flex items-start justify-between gap-2 border-b border-gray-100 p-3">
             <div>
               <p className="text-sm font-semibold text-gray-900">
-                {selected.a.label} <span className="text-gray-400">↔</span>{" "}
+                {selected.a.label} <span className="text-foreground">↔</span>{" "}
                 {selected.b.label}
               </p>
               {!loading && (
-                <p className="mt-0.5 text-xs text-gray-500">
+                <p className="mt-0.5 text-xs text-foreground">
                   {mandates.length} cross-cited · {n2026} in 2026 · {n2027} in
                   2027
                 </p>
@@ -839,16 +852,16 @@ function DetailPanel({
             <button
               onClick={onClose}
               aria-label="Close"
-              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+              className="rounded p-1 text-foreground hover:bg-gray-100 hover:text-gray-700"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
           <div className="max-h-[70vh] scrollbar-thin overflow-y-auto p-2">
             {loading ? (
-              <p className="p-2 text-sm text-gray-400">Loading…</p>
+              <p className="p-2 text-sm text-foreground">Loading…</p>
             ) : mandates.length === 0 ? (
-              <p className="p-2 text-sm text-gray-400">No shared mandates.</p>
+              <p className="p-2 text-sm text-foreground">No shared mandates.</p>
             ) : (
               <ul className="space-y-0.5">
                 {mandates.map((m) => (
@@ -880,14 +893,16 @@ function MandateItem({ m }: { m: SharedMandate }) {
         ) : (
           <span className="text-xs font-medium text-gray-900">{m.symbol}</span>
         )}
-        {m.year && <span className="text-[10px] text-gray-400">{m.year}</span>}
+        {m.year && (
+          <span className="text-[10px] text-foreground">{m.year}</span>
+        )}
         <span className="ml-auto flex gap-1">
           {m.in2026 && <VersionPill label="26" color="#009edb" />}
           {m.in2027 && <VersionPill label="27" color="#6c5b7b" />}
         </span>
       </div>
       {m.title && (
-        <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-gray-500">
+        <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-foreground">
           {m.title}
         </p>
       )}
