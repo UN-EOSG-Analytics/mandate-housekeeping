@@ -198,10 +198,6 @@ export function ReasonPopup({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <p className="px-4 pt-3 pb-2 text-sm text-gray-600">
-          The decision saves automatically. Choose a reason to save it too, or
-          close to add one later.
-        </p>
         {saving && (
           <p role="status" className="px-4 py-2 text-sm text-un-blue-text">
             Saving…
