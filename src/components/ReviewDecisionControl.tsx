@@ -16,7 +16,10 @@ import {
   type ManualEntryData,
 } from "@/features/mandates/ui/ManualDocumentForm";
 import { DecisionDropdown } from "./DecisionDropdown";
-import { DocumentSearchInput } from "@/features/mandates/ui/DocumentSearchInput";
+import {
+  DocumentSearchInput,
+  type CitationMetadata,
+} from "@/features/mandates/ui/DocumentSearchInput";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Tooltip } from "@/components/Tooltip";
 
@@ -38,6 +41,7 @@ export const DecisionTracksContext = createContext<{
 export function ReviewDecisionControl({
   entity,
   symbol,
+  citationMetadata,
   subprogramme,
   submission,
   review: persistedReview,
@@ -47,6 +51,7 @@ export function ReviewDecisionControl({
 }: {
   entity: string;
   symbol: string;
+  citationMetadata?: CitationMetadata;
   subprogramme: string | null;
   submission: MandateDecision | null;
   review: MandateDecision | null;
@@ -438,8 +443,6 @@ export function ReviewDecisionControl({
               initialBody={review.manualMetadata?.body ?? ""}
               initialYear={review.manualMetadata?.year?.toString() ?? ""}
               initialLink={review.manualMetadata?.link ?? ""}
-              originalSymbol={review.newSymbol ?? symbol}
-              originalTitle={review.manualMetadata?.title ?? undefined}
               submitLabel={busy ? "Saving…" : "Save details"}
             />
           )}
@@ -487,6 +490,7 @@ export function ReviewDecisionControl({
             onCancel={() => setShowReplacement(false)}
             submitLabel="Use replacement"
             formTitle="Enter replacement manually"
+            manualUpdate={{ ...citationMetadata, symbol }}
           />
         </DialogContent>
       </Dialog>

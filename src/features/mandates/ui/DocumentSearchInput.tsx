@@ -11,8 +11,14 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { Tooltip } from "@/components/Tooltip";
+import type { Mandate } from "@/types";
 
 type SearchResult = DocumentSearchResult;
+export type CitationMetadata = Partial<
+  Pick<Mandate, "title" | "body" | "year" | "link">
+>;
+export type CitationForManualUpdate = CitationMetadata &
+  Pick<Mandate, "symbol">;
 
 interface Props {
   onSelect: (symbol: string) => void;
@@ -23,8 +29,7 @@ interface Props {
   formTitle?: string;
   compact?: boolean;
   initialQuery?: string;
-  originalTitle?: string;
-  originalSymbol?: string;
+  manualUpdate?: CitationForManualUpdate;
 }
 
 export function DocumentSearchInput({
@@ -36,8 +41,7 @@ export function DocumentSearchInput({
   formTitle,
   compact,
   initialQuery,
-  originalTitle,
-  originalSymbol,
+  manualUpdate,
 }: Props) {
   const [query, setQuery] = useState(initialQuery || "");
   const [open, setOpen] = useState(false);
@@ -152,12 +156,14 @@ export function DocumentSearchInput({
           setShowManualForm(false);
           onCancel?.();
         }}
-        initialSymbol={query}
+        initialSymbol={manualUpdate?.symbol ?? query}
+        initialTitle={manualUpdate?.title ?? ""}
+        initialBody={manualUpdate?.body ?? ""}
+        initialYear={manualUpdate?.year?.toString() ?? ""}
+        initialLink={manualUpdate?.link ?? ""}
         submitLabel={submitLabel}
         formTitle={formTitle}
         compact={compact}
-        originalTitle={originalTitle}
-        originalSymbol={originalSymbol}
       />
     );
   }
@@ -334,7 +340,7 @@ export function DocumentSearchInput({
               }`}
             >
               <span className="text-un-blue-text-aaa">+ Add manually...</span>
-              {query && (
+              {!manualUpdate && query && (
                 <span className="ml-1 text-gray-600">
                   &ldquo;{query}&rdquo;
                 </span>

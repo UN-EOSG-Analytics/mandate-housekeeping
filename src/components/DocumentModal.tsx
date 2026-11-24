@@ -22,7 +22,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { DocumentSearchInput } from "@/features/mandates/ui/DocumentSearchInput";
+import {
+  DocumentSearchInput,
+  type CitationForManualUpdate,
+} from "@/features/mandates/ui/DocumentSearchInput";
 import type { ManualEntryData } from "@/features/mandates/ui/ManualDocumentForm";
 import { citationSection } from "@/features/mandates/services/citation-locations";
 import { DecisionTracksContext } from "./ReviewDecisionControl";
@@ -78,7 +81,7 @@ interface Props {
   readOnly?: boolean;
   symbol: string;
   /** Original citation whose decisions/conversation apply to a displayed replacement. */
-  sourceSymbol?: string;
+  sourceCitation?: CitationForManualUpdate;
   subprogramme: string | null;
   link: string | null;
   title?: string;
@@ -910,7 +913,7 @@ export function DocumentSymbol({
   subprogramme,
   readOnly = false,
   symbol,
-  sourceSymbol,
+  sourceCitation,
   link,
   title,
   year,
@@ -942,7 +945,9 @@ export function DocumentSymbol({
   const trackContext = useContext(DecisionTracksContext);
   const budgetVersion = budgetVersionProp ?? conversationContext.budgetVersion;
   const currentUserEmail = userEmail ?? conversationContext.userEmail;
-  const citationSymbol = sourceSymbol ?? symbol;
+  const sourceSymbol = sourceCitation?.symbol;
+  const citation = sourceCitation ?? { symbol, title, body, year, link };
+  const citationSymbol = citation.symbol;
   const onDecision = readOnly ? undefined : onDecisionProp;
   const onReasonChange = readOnly ? undefined : onReasonChangeProp;
   const onComment = conversationContext.canComment ? onCommentProp : undefined;
@@ -1354,6 +1359,7 @@ export function DocumentSymbol({
               <CommentsDecisionPanel
                 key={`${budgetVersion}:${citationSymbol}:${entity}:${subprogramme || ""}`}
                 symbol={citationSymbol}
+                citationMetadata={citation}
                 entityLongMap={entityLongMap}
                 active={open && activeTab === "review"}
                 focusComposer={
@@ -1780,8 +1786,7 @@ export function DocumentSymbol({
                 }
                 onCancel={() => setReplacementSearch(null)}
                 initialQuery={replacementSearch?.prefill}
-                originalSymbol={citationSymbol}
-                originalTitle={sourceSymbol ? undefined : title}
+                manualUpdate={citation}
                 placeholder="Search for replacement document..."
                 submitLabel="Update"
                 formTitle="Enter replacement document manually"

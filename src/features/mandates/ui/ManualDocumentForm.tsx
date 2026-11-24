@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeftFromLine, Info, X } from "lucide-react";
+import { Info, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MAX_YEAR, MIN_YEAR } from "@/lib/constants";
 import { Tooltip } from "../../../components/Tooltip";
@@ -27,8 +27,6 @@ interface Props {
   submitLabel?: string;
   formTitle?: string;
   compact?: boolean;
-  originalTitle?: string;
-  originalSymbol?: string;
   hideDescription?: boolean;
 }
 
@@ -44,8 +42,6 @@ export function ManualDocumentForm({
   submitLabel = "Add",
   formTitle = "Add document manually",
   compact = false,
-  originalTitle,
-  originalSymbol,
   hideDescription = false,
 }: Props) {
   const [manualData, setManualData] = useState<ManualEntryData>({
@@ -147,37 +143,18 @@ export function ManualDocumentForm({
               <Info className="ml-1 inline h-3.5 w-3.5 cursor-help text-gray-600" />
             </Tooltip>
           </label>
-          <div className="relative">
-            <input
-              type="text"
-              value={manualData.symbol}
-              onChange={(e) => {
-                setManualData((d) => ({ ...d, symbol: e.target.value }));
-              }}
-              className={`w-full rounded-lg border px-3 py-2 text-sm text-foreground transition-colors placeholder:text-gray-600 focus:ring-2 focus:ring-un-blue/20 focus:outline-none ${
-                symbolExists
-                  ? "border-un-blue bg-un-blue/5"
-                  : "border-gray-200 bg-white hover:border-gray-300"
-              } ${originalSymbol ? "pr-40" : ""}`}
-            />
-            {originalSymbol && (
-              <Tooltip
-                asChild
-                content={"Use symbol from document being replaced"}
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    setManualData((d) => ({ ...d, symbol: originalSymbol }))
-                  }
-                  className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1 rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-900"
-                >
-                  <ArrowLeftFromLine className="h-3 w-3" />
-                  Copy symbol from above
-                </button>
-              </Tooltip>
-            )}
-          </div>
+          <input
+            type="text"
+            value={manualData.symbol}
+            onChange={(e) => {
+              setManualData((d) => ({ ...d, symbol: e.target.value }));
+            }}
+            className={`w-full rounded-lg border px-3 py-2 text-sm text-foreground transition-colors placeholder:text-gray-600 focus:ring-2 focus:ring-un-blue/20 focus:outline-none ${
+              symbolExists
+                ? "border-un-blue bg-un-blue/5"
+                : "border-gray-200 bg-white hover:border-gray-300"
+            }`}
+          />
           {checkingSymbol && (
             <p className="mt-1 text-xs text-gray-600">Checking symbol...</p>
           )}
@@ -215,35 +192,14 @@ export function ManualDocumentForm({
               <Info className="ml-1 inline h-3.5 w-3.5 cursor-help text-gray-600" />
             </Tooltip>
           </label>
-          <div className="relative">
-            <input
-              type="text"
-              value={manualData.title}
-              onChange={(e) =>
-                setManualData((d) => ({ ...d, title: e.target.value }))
-              }
-              className={`w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-foreground transition-colors placeholder:text-gray-600 hover:border-gray-300 focus:ring-2 focus:ring-un-blue/20 focus:outline-none ${
-                originalTitle ? "pr-40" : ""
-              }`}
-            />
-            {originalTitle && (
-              <Tooltip
-                asChild
-                content={"Use title from document being replaced"}
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    setManualData((d) => ({ ...d, title: originalTitle }))
-                  }
-                  className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1 rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-900"
-                >
-                  <ArrowLeftFromLine className="h-3 w-3" />
-                  Copy title from above
-                </button>
-              </Tooltip>
-            )}
-          </div>
+          <input
+            type="text"
+            value={manualData.title}
+            onChange={(e) =>
+              setManualData((d) => ({ ...d, title: e.target.value }))
+            }
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-foreground transition-colors placeholder:text-gray-600 hover:border-gray-300 focus:ring-2 focus:ring-un-blue/20 focus:outline-none"
+          />
         </div>
         <div className="relative">
           <label className="mb-1.5 block text-xs font-medium text-gray-700">

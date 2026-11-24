@@ -33,6 +33,7 @@ import { getVisibleDecisions } from "@/features/mandates/services/decision-visib
 import { getEntityPermissions } from "@/features/auth/permissions";
 import { Button } from "@un-eosg/ui/components/button";
 import { citationSection } from "@/features/mandates/services/citation-locations";
+import type { CitationMetadata } from "@/features/mandates/ui/DocumentSearchInput";
 import { DecisionDropdown } from "./DecisionDropdown";
 import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
 import {
@@ -127,6 +128,7 @@ function DecisionLine({ decision }: { decision: MandateDecision }) {
 
 export function CommentsDecisionPanel({
   symbol,
+  citationMetadata,
   entityLongMap,
   focusComposer = false,
   active = true,
@@ -154,6 +156,7 @@ export function CommentsDecisionPanel({
   targetCommentId,
 }: {
   symbol: string;
+  citationMetadata?: CitationMetadata;
   entityLongMap?: Record<string, string>;
   focusComposer?: boolean;
   active?: boolean;
@@ -575,6 +578,7 @@ export function CommentsDecisionPanel({
                   <ReviewDecisionControl
                     entity={group.entity}
                     symbol={symbol}
+                    citationMetadata={citationMetadata}
                     subprogramme={group.subprogramme}
                     submission={submission ?? null}
                     review={review ?? null}

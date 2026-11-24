@@ -790,6 +790,7 @@ function MandateRowContent({
                 compact
                 entity={mandate.entity || trackContext?.entity || ""}
                 symbol={mandate.symbol}
+                citationMetadata={mandate}
                 subprogramme={subprogramme}
                 submission={state?.decision ?? null}
                 review={state?.reviewDecision ?? null}
@@ -1081,8 +1082,7 @@ function MandateRow({
                 formTitle="Enter replacement document manually"
                 compact
                 initialQuery={updatePrefillSymbol || suggestedUpdateSymbol}
-                originalTitle={mandate.title}
-                originalSymbol={mandate.symbol}
+                manualUpdate={mandate}
               />
             </div>
           )}
@@ -1183,7 +1183,7 @@ function MandateRow({
               readOnly={readOnly}
               subprogramme={subprogramme}
               symbol={newMandate.symbol}
-              sourceSymbol={mandate.symbol}
+              sourceCitation={mandate}
               isFoundational={citationIndex
                 ?.get(citationSymbolKey(newMandate.symbol))
                 ?.some((location) => location.level === "background")}
