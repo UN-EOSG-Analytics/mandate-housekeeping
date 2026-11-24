@@ -8,6 +8,7 @@ import {
   checkEntityForTokenAction,
   verifyMagicTokenAction,
 } from "@/features/auth/actions";
+import { MY_SUBMISSION_PATH } from "@/features/auth/navigation";
 
 interface VerifyFormProps {
   entities: EntityOption[];
@@ -92,7 +93,7 @@ export function VerifyForm({ entities }: VerifyFormProps) {
         setError(result.error);
         return;
       }
-      router.push("/");
+      router.push(MY_SUBMISSION_PATH);
     } catch {
       setError(
         "Could not complete sign-in. Try again; if the link has expired, request a new one.",

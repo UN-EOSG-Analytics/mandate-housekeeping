@@ -2,7 +2,9 @@ import { getBudgetVersion } from "@/lib/db/review-cycle";
 import { CURRENT_BUDGET_VERSION } from "@/lib/db/budget-version";
 import Link from "next/link";
 import { SiteHeader } from "@un-eosg/ui/components/site-header";
+import { HeaderHeight } from "./HeaderHeight";
 import { UserMenu } from "./UserMenu";
+import { PrimaryNavigation } from "./PrimaryNavigation";
 import { CommentNotifications } from "@/components/CommentNotifications";
 import type { EntityOption } from "@/features/mandates/services/data-service";
 
@@ -38,20 +40,19 @@ export async function Header({
       homeLabel={SITE_TITLE}
       showMobileMenu={false}
       transparency="none"
-      className="relative top-auto py-4 [&_.text-wordmark>span]:font-light"
+      className="sticky top-0 z-40 py-4 [&_.text-wordmark>span]:font-light"
       containerClassName={`${widthClass} flex-wrap px-3 sm:px-4`}
     >
+      <HeaderHeight />
       <div className="flex flex-wrap items-center justify-end gap-4">
+        {user && (
+          <PrimaryNavigation
+            entity={user.entity}
+            isReviewer={!!user.isReviewer}
+          />
+        )}
         {!hideAbout && (
           <>
-            {user?.isReviewer && (
-              <Link
-                href="/analysis"
-                className="text-sm font-medium text-foreground transition-colors hover:text-un-blue-text focus-visible:rounded focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2"
-              >
-                Analysis
-              </Link>
-            )}
             <Link
               href="/about"
               className="text-sm font-medium text-foreground transition-colors hover:text-un-blue-text focus-visible:rounded focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2"

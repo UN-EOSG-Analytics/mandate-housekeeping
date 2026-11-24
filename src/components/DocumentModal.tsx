@@ -1472,170 +1472,138 @@ export function DocumentSymbol({
               </dl>
             </section>
 
-            {/* Newer Versions */}
-            {!versionsLoading &&
-              (() => {
-                // Find current document index
-                const currentIndex = documentVersions.findIndex(
-                  (v) => v.symbol === symbol,
-                );
-                // Only show versions newer than current (after current index in the sorted list)
-                const newerVersions =
-                  currentIndex >= 0
-                    ? documentVersions.slice(currentIndex + 1)
-                    : [];
+            {!versionsLoading && documentVersions.length > 0 && (
+              <div className="rounded-xl bg-white p-4 shadow-sm">
+                <h3 className={cn(typography.eyebrow, "mb-3")}>
+                  Later documents in this series ({documentVersions.length})
+                </h3>
+                {/* Header row */}
+                <div className="overflow-x-auto">
+                  <div className="grid min-w-[26rem] grid-cols-[auto_1fr_auto_auto_auto_auto] items-center gap-x-3 gap-y-2 text-xs">
+                    <span className="font-medium text-gray-600">Year</span>
+                    <span className="font-medium text-gray-600">Symbol</span>
+                    <span className="text-center font-medium text-gray-600">
+                      vs Original
+                    </span>
+                    <span className="text-center font-medium text-gray-600">
+                      vs row above
+                    </span>
+                    <span className="font-medium text-gray-600">PDF</span>
+                    <span className="font-medium text-gray-600">Action</span>
 
-                if (newerVersions.length > 0) {
-                  return (
-                    <div className="rounded-xl bg-white p-4 shadow-sm">
-                      <h3 className={cn(typography.eyebrow, "mb-3")}>
-                        Newer Versions ({newerVersions.length})
-                      </h3>
-                      {/* Header row */}
-                      <div className="overflow-x-auto">
-                        <div className="grid min-w-[26rem] grid-cols-[auto_1fr_auto_auto_auto_auto] items-center gap-x-3 gap-y-2 text-xs">
-                          <span className="font-medium text-gray-600">
-                            Year
-                          </span>
-                          <span className="font-medium text-gray-600">
-                            Symbol
-                          </span>
-                          <span className="text-center font-medium text-gray-600">
-                            vs Original
-                          </span>
-                          <span className="text-center font-medium text-gray-600">
-                            vs Previous
-                          </span>
-                          <span className="font-medium text-gray-600">PDF</span>
-                          <span className="font-medium text-gray-600">
-                            Action
+                    {documentVersions.map((version, idx) => {
+                      const previousSymbol =
+                        idx === 0 ? symbol : documentVersions[idx - 1].symbol;
+                      return (
+                        <React.Fragment key={version.symbol}>
+                          {/* Year */}
+                          <span className="text-sm text-foreground">
+                            {version.year}
                           </span>
 
-                          {newerVersions.map((version, idx) => {
-                            // Previous version is either the one before in newerVersions, or the current document
-                            const previousSymbol =
+                          {/* Symbol */}
+                          <span className="truncate text-sm font-medium text-foreground">
+                            {version.symbol}
+                          </span>
+
+                          {/* Compare with Original */}
+                          <Tooltip
+                            asChild
+                            content={`Compare ${version.symbol} with ${symbol} in a new tab`}
+                          >
+                            <a
+                              href={getDocumentComparisonUrl(
+                                symbol,
+                                version.symbol,
+                              )}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${UN_BLUE.badge}`}
+                              aria-label={`Compare ${version.symbol} with ${symbol} in a new tab`}
+                            >
+                              <ArrowLeftRight className="h-3 w-3" />
+                            </a>
+                          </Tooltip>
+
+                          {/* Compare with Previous */}
+                          <Tooltip
+                            asChild
+                            content={
                               idx === 0
-                                ? symbol
-                                : newerVersions[idx - 1].symbol;
-                            return (
-                              <React.Fragment key={version.symbol}>
-                                {/* Year */}
-                                <span className="text-sm text-foreground">
-                                  {version.year}
-                                </span>
-
-                                {/* Symbol */}
-                                <span className="truncate text-sm font-medium text-foreground">
-                                  {version.symbol}
-                                </span>
-
-                                {/* Compare with Original */}
-                                <Tooltip
-                                  asChild
-                                  content={`Compare ${version.symbol} with ${symbol} in a new tab`}
-                                >
-                                  <a
-                                    href={getDocumentComparisonUrl(
-                                      symbol,
+                                ? "Same as original"
+                                : `Compare ${version.symbol} with ${previousSymbol} in a new tab`
+                            }
+                          >
+                            <a
+                              href={
+                                idx === 0
+                                  ? undefined
+                                  : getDocumentComparisonUrl(
+                                      previousSymbol,
                                       version.symbol,
-                                    )}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className={`inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${UN_BLUE.badge}`}
-                                    aria-label={`Compare ${version.symbol} with ${symbol} in a new tab`}
-                                  >
-                                    <ArrowLeftRight className="h-3 w-3" />
-                                  </a>
-                                </Tooltip>
+                                    )
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-disabled={idx === 0}
+                              tabIndex={idx === 0 ? -1 : undefined}
+                              className={`inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
+                                idx === 0
+                                  ? "cursor-not-allowed bg-gray-100 text-gray-600"
+                                  : UN_BLUE.badge
+                              }`}
+                              aria-label={
+                                idx === 0
+                                  ? "Same as original"
+                                  : `Compare ${version.symbol} with ${previousSymbol} in a new tab`
+                              }
+                            >
+                              <ArrowLeftRight className="h-3 w-3" />
+                            </a>
+                          </Tooltip>
 
-                                {/* Compare with Previous */}
-                                <Tooltip
-                                  asChild
-                                  content={
-                                    idx === 0
-                                      ? "Same as original"
-                                      : `Compare ${version.symbol} with ${previousSymbol} in a new tab`
-                                  }
-                                >
-                                  <a
-                                    href={
-                                      idx === 0
-                                        ? undefined
-                                        : getDocumentComparisonUrl(
-                                            previousSymbol,
-                                            version.symbol,
-                                          )
-                                    }
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    aria-disabled={idx === 0}
-                                    tabIndex={idx === 0 ? -1 : undefined}
-                                    className={`inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
-                                      idx === 0
-                                        ? "cursor-not-allowed bg-gray-100 text-gray-600"
-                                        : UN_BLUE.badge
-                                    }`}
-                                    aria-label={
-                                      idx === 0
-                                        ? "Same as original"
-                                        : `Compare ${version.symbol} with ${previousSymbol} in a new tab`
-                                    }
-                                  >
-                                    <ArrowLeftRight className="h-3 w-3" />
-                                  </a>
-                                </Tooltip>
+                          {/* View PDF */}
+                          <Tooltip
+                            asChild
+                            content={"View PDF in ODS in a new tab"}
+                          >
+                            <a
+                              href={`https://docs.un.org/en/${version.symbol}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center justify-center rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-200"
+                              aria-label={"View PDF in ODS in a new tab"}
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </Tooltip>
 
-                                {/* View PDF */}
-                                <Tooltip
-                                  asChild
-                                  content={"View PDF in ODS in a new tab"}
-                                >
-                                  <a
-                                    href={`https://docs.un.org/en/${version.symbol}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center justify-center rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-200"
-                                    aria-label={"View PDF in ODS in a new tab"}
-                                  >
-                                    <ExternalLink className="h-3 w-3" />
-                                  </a>
-                                </Tooltip>
-
-                                {/* Update To */}
-                                {trackContext?.canEditSubmission &&
-                                onUpdateClick ? (
-                                  <Tooltip
-                                    asChild
-                                    content={
-                                      "Update the mandate citation to this newer version"
-                                    }
-                                  >
-                                    <button
-                                      onClick={() => {
-                                        onUpdateClick(version.symbol);
-                                      }}
-                                      className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
-                                    >
-                                      <ArrowRight className="h-3 w-3" />
-                                      Update
-                                    </button>
-                                  </Tooltip>
-                                ) : (
-                                  <span className="text-xs text-gray-600">
-                                    —
-                                  </span>
-                                )}
-                              </React.Fragment>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                return null;
-              })()}
+                          {/* Update To */}
+                          {trackContext?.canEditSubmission && onUpdateClick ? (
+                            <Tooltip
+                              asChild
+                              content={"Use this document for the citation"}
+                            >
+                              <button
+                                onClick={() => {
+                                  onUpdateClick(version.symbol);
+                                }}
+                                className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
+                              >
+                                <ArrowRight className="h-3 w-3" />
+                                Update
+                              </button>
+                            </Tooltip>
+                          ) : (
+                            <span className="text-xs text-gray-600">—</span>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
             <section className="space-y-4">
               <h3 className={typography.eyebrow}>Document text</h3>
 

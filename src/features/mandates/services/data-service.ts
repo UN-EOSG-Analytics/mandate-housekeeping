@@ -16,6 +16,7 @@ import type {
   NewerVersion,
 } from "@/types";
 import { BUDGET_PARTS_META } from "@/lib/constants";
+import { createBudgetPartResolver } from "./budget-parts";
 import { fetchDocumentMetadata } from "./documents/metadata";
 import { fetchNewerVersions } from "./documents/newer-versions";
 
@@ -270,11 +271,7 @@ export function transformPPBData(
   budgetPartsMeta: BudgetPartMeta[],
   newerVersions?: Map<string, NewerVersion>,
 ): PartData[] {
-  // Build lookup from key (database budget_part value) to meta
-  const metaByKey: Record<string, BudgetPartMeta> = {};
-  for (const meta of budgetPartsMeta) {
-    metaByKey[meta.key.toLowerCase()] = meta;
-  }
+  const resolvePart = createBudgetPartResolver(budgetPartsMeta);
 
   const structure: Record<
     string,
@@ -320,7 +317,7 @@ export function transformPPBData(
     }
 
     for (const ci of rec.citation_info) {
-      const budgetPart = ci.budget_part || "Other";
+      const { key: budgetPart, meta } = resolvePart(ci.budget_part);
       const entity = ci.entity;
       const entityLong = ci.entity_long;
       const partInDoc = ci.part_in_document;
@@ -340,7 +337,7 @@ export function transformPPBData(
         citationLocations: rec.citation_info.filter(
           (location) =>
             location.entity === entity &&
-            location.budget_part === ci.budget_part &&
+            resolvePart(location.budget_part).key === budgetPart &&
             isBackgroundPart(location.part_in_document) === isBackground &&
             (location["sub-programme"] || location.component || null) ===
               subprog,
@@ -370,8 +367,6 @@ export function transformPPBData(
           ? newerVersions?.get(rec.document_symbol)
           : undefined,
       };
-
-      const meta = metaByKey[budgetPart.toLowerCase()] || null;
 
       if (!structure[budgetPart]) {
         structure[budgetPart] = { meta, entities: {} };

@@ -142,16 +142,23 @@
   }
 }
 
-/* Keep unavailable controls distinguishable without fading their labels. */
+/* Keep unavailable controls legible, while saved decision badges retain their meaning. */
 :is(button, input, select, textarea):disabled,
+:is([role="option"], [role^="menuitem"]):is(
+  [aria-disabled="true"],
+  [data-disabled]:not([data-disabled="false"])
+) {
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+:is(button, input, select, textarea):disabled:not([data-decision]),
 :is([role="option"], [role^="menuitem"]):is(
   [aria-disabled="true"],
   [data-disabled]:not([data-disabled="false"])
 ) {
   color: var(--muted-foreground);
   background-color: var(--muted);
-  opacity: 1;
-  cursor: not-allowed;
 }
 
 /* Reserve scrollbar space without creating a second scroll container on body.
@@ -160,6 +167,7 @@
 html {
   overflow-y: scroll;
   scrollbar-gutter: stable;
+  scroll-padding-top: var(--site-header-height, 0px);
 }
 
 /* Keep a visible keyboard focus fallback, including controls without a ring. */

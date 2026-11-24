@@ -5,6 +5,7 @@
 
 import type { Mandate, NewerVersion, NewerVersionInfo } from "@/types";
 import type { WarningIconType } from "@/components/WarningIcon";
+import { safeNewerVersion } from "./documents/series-identity";
 
 import {
   citationSection,
@@ -84,15 +85,16 @@ export function findNewestCitedVersion(
 ): NewerVersionInfo | null {
   if (!newerVersion?.allNewer || !citedSymbols) return null;
 
+  const citedKeys = new Set([...citedSymbols].map(citationSymbolKey));
   const citedVersions = newerVersion.allNewer.filter((v) =>
-    citedSymbols.has(v.symbol),
+    citedKeys.has(citationSymbolKey(v.symbol)),
   );
 
   if (citedVersions.length === 0) return null;
 
-  return citedVersions.reduce((newest, v) =>
-    v.year > newest.year ? v : newest,
-  );
+  const latestYear = Math.max(...citedVersions.map((version) => version.year));
+  const latest = citedVersions.filter((version) => version.year === latestYear);
+  return latest.length === 1 ? latest[0] : null;
 }
 
 /**
@@ -113,8 +115,7 @@ const WARNING_DEFINITIONS: WarningDefinition[] = [
   },
   {
     id: "missing-link",
-    message:
-      "This citation has no link to the document.",
+    message: "This citation has no link to the document.",
     severity: "warning",
     condition: (mandate) => !mandate.link,
     actionLabel: "Update with library symbol or manual link",
@@ -125,7 +126,8 @@ const WARNING_DEFINITIONS: WarningDefinition[] = [
   },
   {
     id: "newer-available",
-    message: "Newer version available from",
+    message:
+      "The same issuing body published a later document in this series in",
     severity: "info",
     condition: (mandate) => !!mandate.newerVersion,
     getSuggestedUpdate: (mandate) => mandate.newerVersion?.symbol,
@@ -279,6 +281,10 @@ export function getMandateWarnings(
   isNewestWithNewerVersion?: boolean,
   context?: CitationWarningContext,
 ): MandateWarning[] {
+  mandate = {
+    ...mandate,
+    newerVersion: safeNewerVersion(mandate.symbol, mandate.newerVersion),
+  };
   const citedSymbols = context
     ? new Set(
         (mandate.newerVersion?.allNewer ?? [])
@@ -302,8 +308,9 @@ export function getMandateWarnings(
       : [];
     warnings.push({
       id: "newer-already-cited",
-      message: "Newer version from",
-      messageSuffix: "already cited:",
+      message: "Your entity already cites a later document in this series from",
+      advice:
+        "Compare the documents to decide whether both citations are needed.",
       severity: "warning",
       linkedSymbol: citedNewer.symbol,
       linkedYear: citedNewer.year,
@@ -340,6 +347,10 @@ export function getMandateWarnings(
  * Check if a mandate has any warnings
  */
 export function hasWarnings(mandate: Mandate): boolean {
+  mandate = {
+    ...mandate,
+    newerVersion: safeNewerVersion(mandate.symbol, mandate.newerVersion),
+  };
   return WARNING_DEFINITIONS.some((def) => def.condition(mandate));
 }
 
@@ -386,8 +397,8 @@ export function getWarningSummary(
   }
   const labels: Record<string, string> = {
     "duplicate-citation": "Also cited elsewhere",
-    "newer-already-cited": "Newer version cited",
-    "newer-available": "Newer version",
+    "newer-already-cited": "Later document cited",
+    "newer-available": "Possible update",
     "no-metadata": "Check symbol",
     "missing-link": "Missing link",
   };
@@ -397,11 +408,15 @@ export function getWarningSummary(
 export function newestVersionWarningSymbols(mandates: Mandate[]): Set<string> {
   const groups = new Map<string, Mandate>();
   for (const mandate of mandates) {
-    const symbol = mandate.newerVersion?.symbol;
+    const symbol = safeNewerVersion(
+      mandate.symbol,
+      mandate.newerVersion,
+    )?.symbol;
     if (!symbol) continue;
-    const previous = groups.get(symbol);
+    const key = citationSymbolKey(symbol);
+    const previous = groups.get(key);
     if (!previous || (mandate.year ?? 0) > (previous.year ?? 0))
-      groups.set(symbol, mandate);
+      groups.set(key, mandate);
   }
   return new Set([...groups.values()].map((mandate) => mandate.symbol));
 }

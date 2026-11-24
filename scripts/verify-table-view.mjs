@@ -25,6 +25,9 @@ const locations = load("src/features/mandates/services/citation-locations.ts", {
 });
 const warnings = load("src/features/mandates/services/mandate-warnings.ts", {
   "./citation-locations": locations,
+  "./documents/series-identity": load(
+    "src/features/mandates/services/documents/series-identity.ts",
+  ),
 });
 const view = load("src/features/mandates/services/table-view.ts", {
   "./decision-tracks": tracks,

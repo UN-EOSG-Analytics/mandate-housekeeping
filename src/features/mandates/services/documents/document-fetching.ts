@@ -1,6 +1,6 @@
 "use server";
 
-import { fetchAllVersions, type DocumentVersion } from "./document-versions";
+import { fetchLaterVersions, type DocumentVersion } from "./document-versions";
 import { fetchDocumentMetadata, type DocumentMetadata } from "./metadata";
 import { searchDocuments } from "./search";
 
@@ -13,7 +13,7 @@ export async function getDocumentVersionsAction(
   symbol: string,
 ): Promise<ActionResult<DocumentVersion[]>> {
   try {
-    const versions = await fetchAllVersions(symbol);
+    const versions = await fetchLaterVersions(symbol);
     return { success: true, data: versions };
   } catch (error) {
     console.error("Error fetching document versions:", error);

@@ -28,16 +28,18 @@ export const BUDGET_PARTS_META: BudgetPartMeta[] = [
     label: "International justice and law",
   },
   {
-    key: "International cooperation and development",
+    key: "International cooperation for development",
     numeral: "IV",
     order: 4,
-    label: "International cooperation and development",
+    label: "International cooperation for development",
+    aliases: ["International cooperation and development"],
   },
   {
-    key: "Regional cooperation and development",
+    key: "Regional cooperation for development",
     numeral: "V",
     order: 5,
-    label: "Regional cooperation and development",
+    label: "Regional cooperation for development",
+    aliases: ["Regional cooperation and development"],
   },
   {
     key: "Human rights and humanitarian affairs",

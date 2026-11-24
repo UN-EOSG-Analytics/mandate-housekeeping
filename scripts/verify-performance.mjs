@@ -434,16 +434,18 @@ test("overview only fetches summaries with explicit cycle scoping and cycle cach
       "@/lib/db/budget-version": {
         versionPredicateSqlFor: (_, version) => `cycle = '${version}'`,
       },
-      "@/lib/constants": {
-        BUDGET_PARTS_META: [
-          {
-            key: "Political affairs",
-            label: "Political affairs",
-            numeral: "II",
-            order: 2,
-          },
-        ],
-      },
+      "./budget-parts": load("src/features/mandates/services/budget-parts.ts", {
+        "@/lib/constants": {
+          BUDGET_PARTS_META: [
+            {
+              key: "Political affairs",
+              label: "Political affairs",
+              numeral: "II",
+              order: 2,
+            },
+          ],
+        },
+      }),
     },
   );
   const parts = await fetchOverviewSummary("ppb2027");

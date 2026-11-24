@@ -418,7 +418,7 @@ export default async function AboutPage() {
             <FeatureCard
               icon={Sparkles}
               title="Issue Detection and Rectification"
-              description="The platform detects potential issues: missing metadata, unavailable PDF links, or newer versions already cited and suggests a recommended action to rectify a potential issue."
+              description="Review hints highlight missing metadata, unavailable PDF links and citations to later documents in the same series."
             >
               <div className="space-y-2">
                 <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-2 py-1.5">
@@ -434,7 +434,7 @@ export default async function AboutPage() {
                     ×
                   </span>
                   <span className="text-xs text-red-700">
-                    Newer version already cited
+                    Later document cited
                   </span>
                 </div>
               </div>
@@ -443,13 +443,13 @@ export default async function AboutPage() {
             {/* 11. Never Miss an Updated Resolution */}
             <FeatureCard
               icon={Sparkles}
-              title="Never Miss an Updated Mandate"
-              description="Newer mandate citations are identified automatically. Smart alerts allow you to update to the latest version, where appropriate."
+              title="Review possible citation updates"
+              description="When the library lists a later document in the same series from the same issuing body, compare the documents to decide which to cite."
             >
               <div className="space-y-2">
                 <MockWarning
                   icon="↑"
-                  text="Newer version available: A/RES/79/19"
+                  text="Possible update: A/RES/79/19"
                 />
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-foreground">Current:</span>

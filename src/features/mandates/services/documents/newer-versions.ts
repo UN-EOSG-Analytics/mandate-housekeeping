@@ -12,22 +12,25 @@ export async function fetchNewerVersions(
     newerOnly: true,
     runQuery,
   });
-  const result = new Map<string, NewerVersion>();
+  const grouped = new Map<string, typeof rows>();
   for (const row of rows) {
-    if (row.year <= row.currentYear) continue;
-    const existing = result.get(row.currentSymbol);
-    const allNewer = existing?.allNewer ?? [];
-    if (!allNewer.some((d) => d.symbol === row.symbol))
-      allNewer.push({ symbol: row.symbol, year: row.year });
-    // Ambiguous latest-year candidates still require an explicit reviewer choice.
-    if (!existing || row.year > existing.year)
-      result.set(row.currentSymbol, {
-        symbol: row.symbol,
-        title: cleanTitle(row.title),
-        year: row.year,
-        body: row.body,
-        allNewer,
-      });
+    const group = grouped.get(row.currentSymbol) ?? [];
+    group.push(row);
+    grouped.set(row.currentSymbol, group);
+  }
+  const result = new Map<string, NewerVersion>();
+  for (const [symbol, candidates] of grouped) {
+    const latestYear = Math.max(...candidates.map((row) => row.year));
+    const latest = candidates.filter((row) => row.year === latestYear);
+    // The details list keeps all candidates; a note must identify one clear target.
+    if (latest.length !== 1) continue;
+    result.set(symbol, {
+      symbol: latest[0].symbol,
+      title: cleanTitle(latest[0].title),
+      year: latestYear,
+      body: latest[0].body,
+      allNewer: candidates.map(({ symbol, year }) => ({ symbol, year })),
+    });
   }
   return result;
 }

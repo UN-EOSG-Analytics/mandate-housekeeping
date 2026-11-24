@@ -132,6 +132,8 @@ export function DecisionDropdown({
         )
       : null;
 
+  const coloredDecision =
+    decision && decision !== "cancel" ? decision : undefined;
   const colors =
     decision && decision in DECISION_COLORS
       ? DECISION_COLORS[decision as keyof typeof DECISION_COLORS]
@@ -140,7 +142,8 @@ export function DecisionDropdown({
     size === "sm" ? `h-6 ${typography.label}` : `h-6 ${typography.label}`;
 
   const handleSelect = async (value: Decision | "") => {
-    if (disabled || savingRef.current || reasonSavingRef.current) return;
+    if (disabled || locked || savingRef.current || reasonSavingRef.current)
+      return;
     setIsOpen(false);
     setSaveError(null);
     setSavedMessage(null);
@@ -309,7 +312,8 @@ export function DecisionDropdown({
                       150,
                     );
                   }}
-                  disabled={disabled}
+                  disabled={disabled || locked}
+                  data-decision={coloredDecision}
                   className={`flex min-w-21 items-center justify-between gap-1 rounded border px-2 font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 ${sizeClasses} ${colors.bg} ${colors.border} ${colors.text} ${
                     disabled
                       ? "cursor-default"
@@ -367,6 +371,7 @@ export function DecisionDropdown({
             <button
               aria-label={`${trackLabel} decision for ${symbol || "document"}: ${displayLabel}`}
               disabled={disabled || locked}
+              data-decision={coloredDecision}
               className={`flex min-w-21 items-center justify-between gap-1 rounded border px-2 font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-un-blue focus-visible:ring-offset-2 ${sizeClasses} ${colors.bg} ${colors.border} ${colors.text} ${
                 disabled
                   ? "cursor-default"
@@ -389,6 +394,7 @@ export function DecisionDropdown({
             <PopoverTrigger asChild>
               <button
                 disabled={disabled}
+                data-decision={hasReason ? coloredDecision : undefined}
                 aria-label={`Edit reason for ${symbol || "document"}`}
                 onClick={(e) => {
                   e.stopPropagation();

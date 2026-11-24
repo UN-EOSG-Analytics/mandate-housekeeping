@@ -829,7 +829,7 @@ function DetailPanel({
   const n2027 = mandates.filter((m) => m.in2027).length;
 
   return (
-    <aside className="sticky top-4 w-96 shrink-0 self-start rounded-lg border border-gray-200 bg-white">
+    <aside className="sticky top-[calc(var(--site-header-height,0px)+1rem)] w-96 shrink-0 self-start rounded-lg border border-gray-200 bg-white">
       {!selected ? (
         <div className="p-4 text-sm text-foreground">
           Click any cell to list the mandates cross-cited by the two entities.

@@ -547,9 +547,13 @@ export function SubprogrammeContents({
     const update = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        const stickyOffset = window.matchMedia("(min-width: 1024px)").matches
-          ? 40
-          : 8;
+        const headerHeight =
+          parseFloat(
+            getComputedStyle(document.documentElement).scrollPaddingTop,
+          ) || 0;
+        const stickyOffset =
+          headerHeight +
+          (window.matchMedia("(min-width: 1024px)").matches ? 40 : 8);
         const candidates = sections
           .filter((section) => section.count > 0)
           .map((section) => ({

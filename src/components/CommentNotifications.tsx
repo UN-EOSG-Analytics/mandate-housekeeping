@@ -71,23 +71,32 @@ export function CommentNotifications({
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-[min(26rem,calc(100vw-2rem))] p-0 text-foreground"
+        sideOffset={8}
+        collisionPadding={12}
+        className="flex max-h-[min(38rem,var(--radix-popover-content-available-height))] w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl p-0 text-foreground shadow-lg"
         aria-label="Recent comment notifications"
       >
-        <div className="flex items-start justify-between gap-3 border-b p-4">
-          <div>
-            <h2 className="text-sm font-semibold">Comments</h2>
-            <p className="mt-1 text-xs">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b bg-muted/50 px-4 py-3.5">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <h2 className="text-base font-semibold">Comments</h2>
+              {unread > 0 && (
+                <span className="rounded-full bg-un-blue-surface px-2 py-0.5 text-xs font-semibold text-un-blue-text-aaa">
+                  {unread} unread
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-xs font-medium text-gray-700">
               {SUBMISSION_CYCLES[budgetVersion].label}
-              {unread > 0 && ` · ${unread} unread`}
             </p>
-            <p className="mt-1 text-xs text-gray-700">
-              Your entity and conversations you have participated in.
+            <p className="mt-1.5 text-xs leading-relaxed text-gray-700">
+              Comments on your entity’s citations and threads you’ve joined.
             </p>
           </div>
           <Button
-            variant="ghost"
+            variant="outline"
             size="icon-sm"
+            className="shrink-0 bg-background"
             onClick={() => void refresh()}
             disabled={loading}
             aria-label="Refresh comment notifications"
@@ -110,7 +119,7 @@ export function CommentNotifications({
             Could not refresh comments. Please try again.
           </p>
         )}
-        <div className="max-h-[min(32rem,65vh)] overflow-y-auto">
+        <div className="min-h-0 overflow-y-auto overscroll-contain">
           {!summary && loading ? (
             <p role="status" className="p-4 text-sm">
               Loading comments…
@@ -134,35 +143,48 @@ export function CommentNotifications({
                         type="submit"
                         disabled={opening}
                         className={cn(
-                          "block w-full px-4 py-3 text-left transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-un-blue disabled:cursor-wait",
-                          !message.isRead && "bg-un-blue-surface",
+                          "block w-full cursor-pointer border-s-2 py-3.5 ps-3.5 pe-4 text-start transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-un-blue disabled:cursor-wait",
+                          message.isRead
+                            ? "border-transparent hover:bg-secondary"
+                            : "border-un-blue-text bg-un-blue-surface hover:bg-un-blue-tint-50",
                         )}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <DocumentSymbol>
                             {message.documentSymbol}
                           </DocumentSymbol>
-                          <span className="shrink-0 text-xs">
-                            {!message.isRead && (
+                          {!message.isRead && (
+                            <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-un-blue-text-aaa">
                               <span
                                 aria-hidden="true"
-                                className="me-1.5 inline-block h-2 w-2 rounded-full bg-un-blue-text"
+                                className="size-1.5 rounded-full bg-current"
                               />
-                            )}
-                            {message.isRead ? "Read" : "Unread"}
-                          </span>
+                              Unread
+                            </span>
+                          )}
                         </div>
-                        <p className="mt-2 truncate text-xs font-medium">
-                          {message.userEmail}
-                        </p>
-                        <p className="mt-1 line-clamp-2 text-sm break-words whitespace-pre-wrap">
+                        <p
+                          className={cn(
+                            "mt-2 line-clamp-2 text-sm leading-5 wrap-anywhere whitespace-pre-wrap",
+                            !message.isRead && "font-medium",
+                          )}
+                        >
                           {message.comment}
                         </p>
-                        <p className="mt-2 text-xs">
-                          {message.entity}
+                        <p className="mt-2 text-xs leading-relaxed wrap-anywhere text-gray-700">
+                          <span className="font-medium text-foreground">
+                            {message.entity}
+                          </span>
                           {message.subprogramme && ` · ${message.subprogramme}`}
-                          {" · "}
-                          <time dateTime={message.createdAt}>
+                        </p>
+                        <div className="mt-0.5 flex items-baseline justify-between gap-3 text-xs leading-relaxed text-gray-700">
+                          <span className="min-w-0 truncate">
+                            {message.userEmail}
+                          </span>
+                          <time
+                            className="shrink-0"
+                            dateTime={message.createdAt}
+                          >
                             {new Date(message.createdAt).toLocaleString(
                               undefined,
                               {
@@ -173,7 +195,7 @@ export function CommentNotifications({
                               },
                             )}
                           </time>
-                        </p>
+                        </div>
                       </button>
                     </form>
                   </li>
@@ -183,7 +205,7 @@ export function CommentNotifications({
           )}
         </div>
         {summary && summary.notifications.length >= 100 && (
-          <p className="border-t px-4 py-2 text-xs">
+          <p className="shrink-0 border-t bg-muted/50 px-4 py-2 text-xs text-gray-700">
             Showing the latest 100 messages.
           </p>
         )}

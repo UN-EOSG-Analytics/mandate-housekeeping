@@ -114,6 +114,7 @@ test("verification can recover after both token-check and sign-in network failur
       useRouter: () => ({ push: (path) => routes.push(path) }),
     },
     "@/features/auth/ui/EntityCombobox": { EntityCombobox() {} },
+    "@/features/auth/navigation": { MY_SUBMISSION_PATH: "/my-submission" },
     "@/features/auth/actions": {
       checkEntityForTokenAction() {
         const d = deferred();
@@ -151,7 +152,7 @@ test("verification can recover after both token-check and sign-in network failur
   completion = find(tree, (n) => n.type === "button").props.onClick();
   signIns[1].resolve({ success: true });
   await completion;
-  assert.deepEqual(routes, ["/"]);
+  assert.deepEqual(routes, ["/my-submission"]);
 });
 
 test("heatmap exposes named grid cells, roving keyboard focus, and Enter/Space drilldown", async () => {
@@ -307,4 +308,96 @@ test("tooltip describes interactive children on focus and dismisses with Escape"
     find(render(), (node) => node.props.role === "tooltip"),
     undefined,
   );
+});
+
+test("sign-in destination follows reviewer access rather than selected entity", () => {
+  const navigation = load("src/features/auth/navigation.ts", {});
+  assert.equal(
+    navigation.getSignInDestination({ isReviewer: true, entity: "DESA" }),
+    "/",
+  );
+  assert.equal(
+    navigation.getSignInDestination({ isReviewer: false, entity: null }),
+    "/my-submission",
+  );
+});
+
+test("primary navigation handles trailing slashes, encoded entities and reviewer context", () => {
+  const navigation = load("src/features/auth/navigation.ts", {});
+  let pathname = "/entity/Entity%20%2F%20Office/";
+  const Link = () => null;
+  const { PrimaryNavigation } = load(
+    "src/components/core/PrimaryNavigation.tsx",
+    {
+      "next/link": { default: Link },
+      "next/navigation": { usePathname: () => pathname },
+      "@/features/auth/navigation": navigation,
+      "@/lib/utils": { cn: (...classes) => classes.filter(Boolean).join(" ") },
+    },
+  );
+  const props = { entity: "Entity / Office", isReviewer: false };
+  let items = PrimaryNavigation(props).props.children;
+  assert.deepEqual(
+    items.map((item) => item.props.children),
+    ["Overview", "My submission"],
+  );
+  assert.equal(items[1].props["aria-current"], "page");
+  assert.equal(items[0].props["aria-current"], undefined);
+  pathname = "/my-submission/";
+  items = PrimaryNavigation({ ...props, entity: null }).props.children;
+  assert.equal(items[1].props["aria-current"], "page");
+  items = PrimaryNavigation({ ...props, isReviewer: true }).props.children;
+  assert.deepEqual(
+    items.map((item) => item.props.children),
+    ["Overview", "Analysis"],
+  );
+  pathname = "/entity/DESA/";
+  items = PrimaryNavigation({ ...props, isReviewer: true }).props.children;
+  assert.equal(items[0].props["aria-current"], "page");
+});
+
+test("My submission resolves known entities and handles missing workspaces without a 404", async () => {
+  let user = { entity: "Entity / Office", isReviewer: false };
+  let reads = 0;
+  const MissingSubmission = () => null;
+  const { default: MySubmissionPage } = load("src/app/my-submission/page.tsx", {
+    "next/navigation": {
+      redirect: (path) => {
+        throw new Error(`redirect:${path}`);
+      },
+    },
+    "@/features/auth/auth": { getCurrentUser: async () => user },
+    "@/features/mandates/services/data-service": {
+      fetchEntities: async () => {
+        reads++;
+        return [{ entity: "Entity / Office", entity_long: null }];
+      },
+    },
+    "@/components/core/Header": { Header() {} },
+    "@/features/auth/ui/MissingSubmission": { MissingSubmission },
+    "@/features/mandates/ui/SubmissionCycleControl": {
+      SubmissionCycleControl() {},
+    },
+  });
+  await assert.rejects(MySubmissionPage(), {
+    message: "redirect:/entity/Entity%20%2F%20Office",
+  });
+  user = { entity: null, isReviewer: false };
+  let tree = await MySubmissionPage();
+  assert.equal(
+    find(tree, (node) => node.type === MissingSubmission).props.entity,
+    null,
+  );
+  user = { entity: "Unavailable", isReviewer: false };
+  tree = await MySubmissionPage();
+  assert.equal(
+    find(tree, (node) => node.type === MissingSubmission).props.entity,
+    "Unavailable",
+  );
+  const previousReads = reads;
+  user = { entity: "Entity / Office", isReviewer: true };
+  await assert.rejects(MySubmissionPage(), { message: "redirect:/" });
+  assert.equal(reads, previousReads);
+  user = null;
+  await assert.rejects(MySubmissionPage(), { message: "redirect:/login" });
 });

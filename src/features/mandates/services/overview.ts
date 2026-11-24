@@ -4,7 +4,7 @@ import {
   versionPredicateSqlFor,
   type BudgetVersion,
 } from "@/lib/db/budget-version";
-import { BUDGET_PARTS_META } from "@/lib/constants";
+import { budgetPartAliases, resolveBudgetPart } from "./budget-parts";
 import type { PartOverviewSummary } from "@/types/overview";
 
 interface OverviewRow {
@@ -21,7 +21,12 @@ export const fetchOverviewSummary = unstable_cache(
   async (version: BudgetVersion): Promise<PartOverviewSummary[]> => {
     const rows = await query<OverviewRow>(
       `WITH citations AS MATERIALIZED (
-        SELECT c.id, c.entity, c.budget_part, c.ppb_full_document_symbol,
+        SELECT c.id, c.entity,
+          COALESCE(
+            $1::jsonb ->> lower(btrim(regexp_replace(normalize(c.budget_part, NFKC), '\\s+', ' ', 'g'))),
+            NULLIF(btrim(c.budget_part), ''), 'Other'
+          ) AS budget_part,
+          c.ppb_full_document_symbol,
           c.part_in_document, c.sub_programme, c.component, c.section, c.section_title
         FROM ppb2026.source_document_citations c
         WHERE ${versionPredicateSqlFor("c", version)} AND c.entity IS NOT NULL AND c.entity <> ''
@@ -45,15 +50,13 @@ export const fetchOverviewSummary = unstable_cache(
       JOIN labels l USING (entity, budget_part)
       LEFT JOIN systemchart.entities e ON e.entity = c.entity
       ORDER BY c.entity`,
-      [],
+      [JSON.stringify(budgetPartAliases())],
       version,
     );
     const parts = new Map<string, PartOverviewSummary>();
     for (const row of rows) {
-      const meta = BUDGET_PARTS_META.find(
-        (part) => part.key.toLowerCase() === row.budget_part.toLowerCase(),
-      );
-      let part = parts.get(row.budget_part);
+      const { key, meta } = resolveBudgetPart(row.budget_part);
+      let part = parts.get(key);
       if (!part) {
         part = {
           part: meta?.label ?? row.budget_part,
@@ -61,7 +64,7 @@ export const fetchOverviewSummary = unstable_cache(
           order: meta?.order ?? 999,
           entities: [],
         };
-        parts.set(row.budget_part, part);
+        parts.set(key, part);
       }
       part.entities.push({
         entity: row.entity,
@@ -80,6 +83,6 @@ export const fetchOverviewSummary = unstable_cache(
         ),
       }));
   },
-  ["entity-overview-summary"],
+  ["entity-overview-summary-budget-parts-v2"],
   { revalidate: 60 },
 );

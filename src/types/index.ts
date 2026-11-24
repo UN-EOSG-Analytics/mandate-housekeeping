@@ -160,10 +160,11 @@ export interface EntityData {
 }
 
 export interface BudgetPartMeta {
-  key: string; // matches database budget_part value
+  key: string; // canonical budget-part title
   numeral: string;
   order: number;
-  label: string; // display label with "PART X -" prefix
+  label: string; // display title; the UI adds the part numeral
+  aliases?: readonly string[]; // accepted historical source titles
 }
 
 export interface PartData {

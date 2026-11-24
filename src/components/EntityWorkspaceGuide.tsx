@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ViewDetailsLabel } from "./ViewDetailsLabel";
 import { CircleHelp, X } from "lucide-react";
@@ -15,7 +15,6 @@ interface Props {
   cycleReadOnly?: boolean;
 }
 
-const GUIDE_STORAGE_KEY = "mandates-workspace-guidance-v1";
 interface TourStep {
   target: string;
   title: string;
@@ -213,7 +212,6 @@ export function EntityWorkspaceGuide({
   canEditSubmission,
   cycleReadOnly = false,
 }: Props) {
-  const [showGuidance, setShowGuidance] = useState(false);
   const [steps, setSteps] = useState<TourStep[]>([]);
   const [stepIndex, setStepIndex] = useState(0);
   const helpButtonRef = useRef<HTMLButtonElement>(null);
@@ -227,17 +225,6 @@ export function EntityWorkspaceGuide({
   const tourDescriptionId = useId();
   const spotlightMaskId = `workspace-tour-${useId().replaceAll(":", "")}`;
   const step = steps[stepIndex];
-
-  useEffect(() => {
-    let dismissed = false;
-    try {
-      dismissed = localStorage.getItem(GUIDE_STORAGE_KEY) === "dismissed";
-    } catch {
-      // Guidance remains usable when browser storage is unavailable.
-    }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setShowGuidance(!dismissed);
-  }, []);
 
   useLayoutEffect(() => {
     if (!step) return;
@@ -261,7 +248,11 @@ export function EntityWorkspaceGuide({
       const stickyTable =
         window.matchMedia("(min-width: 1024px)").matches &&
         target.closest('[role="table"]');
-      const desiredTop = stickyTable ? 128 : 24;
+      const headerHeight =
+        parseFloat(
+          getComputedStyle(document.documentElement).scrollPaddingTop,
+        ) || 0;
+      const desiredTop = headerHeight + (stickyTable ? 128 : 24);
       window.scrollBy({
         top: target.getBoundingClientRect().top - desiredTop,
         behavior: "instant",
@@ -381,51 +372,25 @@ export function EntityWorkspaceGuide({
     setSteps(available);
   }
 
-  function dismissGuidance() {
-    setShowGuidance(false);
-    try {
-      localStorage.setItem(GUIDE_STORAGE_KEY, "dismissed");
-    } catch {
-      // Dismissal still works for this visit without browser storage.
-    }
-    helpButtonRef.current?.focus();
-  }
-
   return (
     <section
       aria-labelledby={guidanceTitleId}
       className="space-y-2 rounded-lg border border-un-blue-tint bg-un-blue-tint-50 p-4"
     >
-      <div className="flex items-start justify-between gap-3">
-        <h2 id={guidanceTitleId} className={typography.subTitle}>
-          How to review
-        </h2>
-        {showGuidance && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            onClick={dismissGuidance}
-            aria-label="Dismiss workspace guidance"
-            className="text-foreground"
-          >
-            <X aria-hidden="true" />
-          </Button>
-        )}
-      </div>
+      <h2 id={guidanceTitleId} className={typography.subTitle}>
+        How to review
+      </h2>
       <p className={cn(typography.body, "text-foreground")}>
         Use the <ViewDetailsLabel /> button at the right of a row to inspect its
         document and citation details.
       </p>
-      {showGuidance && (
-        <p className={cn(typography.body, "mt-1 text-foreground")}>
-          {canEditSubmission
-            ? "These citations come from the previous budget. Choose an action for each citation in each section where it appears. Your decisions save automatically."
-            : cycleReadOnly
-              ? `Submissions for PPB ${SUBMISSION_CYCLES[budgetVersion].year} are read-only. Browse citations and export saved decisions for reference. Select the active cycle to continue housekeeping.`
-              : "Entity members edit their own submissions; reviewers record their review in a separate track. Inspect each citation in its programme location."}
-        </p>
-      )}
+      <p className={cn(typography.body, "mt-1 text-foreground")}>
+        {canEditSubmission
+          ? "These citations come from the previous budget. Choose an action for each citation in each section where it appears. Your decisions save automatically."
+          : cycleReadOnly
+            ? `Submissions for PPB ${SUBMISSION_CYCLES[budgetVersion].year} are read-only. Browse citations and export saved decisions for reference. Select the active cycle to continue housekeeping.`
+            : "Entity members edit their own submissions; reviewers record their review in a separate track. Inspect each citation in its programme location."}
+      </p>
       <Button
         ref={helpButtonRef}
         type="button"

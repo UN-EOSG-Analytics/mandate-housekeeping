@@ -24,6 +24,7 @@ const locations = load(root + "citation-locations.ts", {
 });
 const warnings = load(root + "mandate-warnings.ts", {
   "./citation-locations": locations,
+  "./documents/series-identity": load(root + "documents/series-identity.ts"),
 });
 const view = load(root + "table-view.ts", {
   "./decision-tracks": tracks,
@@ -443,7 +444,10 @@ test("repeated source records are one citation and missing links offer a library
     "missing-link",
   );
   assert.equal(warning.action, "update");
-  assert.equal(warning.actionLabel, "Update with library symbol or manual link");
+  assert.equal(
+    warning.actionLabel,
+    "Update with library symbol or manual link",
+  );
   assert.equal(warning.suggestedUpdate, next);
 });
 
@@ -516,5 +520,54 @@ test("updated and retained additions keep source identity and cancellation conse
   assert.match(
     locations.getCitationDropDescription(baseline),
     /removes the entire entry/,
+  );
+});
+
+test("automatic later-document notes reject cross-issuer and tied-target payloads", () => {
+  const crossIssuer = withNewer(item("A/RES/76/300"), [
+    { symbol: "A/HRC/RES/52/23", year: 2023 },
+  ]);
+  assert.equal(check(crossIssuer, [crossIssuer], "newer-available"), undefined);
+  assert.equal(
+    check(
+      crossIssuer,
+      [crossIssuer, item("A/HRC/RES/52/23")],
+      "newer-already-cited",
+    ),
+    undefined,
+  );
+  const tied = withNewer(item(old), [
+    { symbol: "A/RES/79/1", year: 2025 },
+    { symbol: "A/RES/79/2", year: 2025 },
+  ]);
+  assert.equal(check(tied, [tied], "newer-available"), undefined);
+  assert.equal(
+    warnings.newestVersionWarningSymbols([crossIssuer.mandate, tied.mandate])
+      .size,
+    0,
+  );
+});
+
+test("already-cited notes normalize aliases and avoid an arbitrary tied cited target", () => {
+  const version = {
+    symbol: "A/RES/80/1",
+    year: 2026,
+    allNewer: [
+      { symbol: "A/RES/79/1", year: 2025 },
+      { symbol: "A/RES/79/2", year: 2025 },
+      { symbol: "A/RES/80/1", year: 2026 },
+    ],
+  };
+  assert.equal(
+    warnings.findNewestCitedVersion(version, new Set([" A / RES / 79 / 1 "]))
+      ?.symbol,
+    "A/RES/79/1",
+  );
+  assert.equal(
+    warnings.findNewestCitedVersion(
+      version,
+      new Set(["A/RES/79/1", "A/RES/79/2"]),
+    ),
+    null,
   );
 });

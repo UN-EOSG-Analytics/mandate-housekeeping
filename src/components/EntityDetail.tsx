@@ -1578,7 +1578,7 @@ function MandateSection({
       <CitationTableRow
         spanAll
         hidden={!visibleMandates.length && !canAddCitation}
-        className="lg:sticky lg:top-10 lg:z-10"
+        className="lg:sticky lg:top-[calc(var(--site-header-height,0px)+2.5rem)] lg:z-10"
       >
         <div className="flex h-10 items-center gap-2 border-y border-foreground/15 bg-secondary px-3 text-sm">
           <h3 className="truncate font-semibold text-foreground">{title}</h3>
@@ -1651,7 +1651,7 @@ function MandateSection({
               hidden={
                 !group.citations.some((m) => visibleSymbols.has(m.symbol))
               }
-              className="lg:sticky lg:top-20 lg:z-9"
+              className="lg:sticky lg:top-[calc(var(--site-header-height,0px)+5rem)] lg:z-9"
             >
               <h4 className="flex min-h-8 items-center border-b border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground">
                 {group.label}
@@ -3496,7 +3496,7 @@ export function EntityDetail({
               >
                 <div
                   role="rowgroup"
-                  className="rounded-t-lg border-b border-foreground/20 bg-muted lg:sticky lg:top-0 lg:z-20"
+                  className="rounded-t-lg border-b border-foreground/20 bg-muted lg:sticky lg:top-[var(--site-header-height,0px)] lg:z-20"
                 >
                   <ColumnHeaders controls={tableControls} />
                 </div>
